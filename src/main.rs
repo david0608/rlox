@@ -1,7 +1,8 @@
+mod token;
+mod scanner;
+
 use std::io::{self, Write};
 use std::error;
-
-mod scan;
 
 type Result = std::result::Result<(), Box<dyn error::Error>>;
 

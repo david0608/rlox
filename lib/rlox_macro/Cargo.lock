@@ -21,13 +21,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlox"
-version = "0.1.0"
-dependencies = [
- "rlox_macro",
-]
-
-[[package]]
 name = "rlox_macro"
 version = "0.1.0"
 dependencies = [
