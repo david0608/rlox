@@ -1,7 +1,6 @@
 use std::fmt;
 use std::str::FromStr;
 use crate::token::*;
-use crate::token::Token;
 
 enum Error<'a> {
     UnexpectedCharacter(usize, &'a str),
@@ -22,7 +21,7 @@ pub struct Scanner<'a> {
     line: usize,
     start: usize,
     current: usize,
-    tokens: Vec<TokenEnum<'a>>,
+    tokens: Vec<Token<'a>>,
     errors: Vec<Error<'a>>,
 }
 
@@ -136,28 +135,8 @@ impl Scanner<'_> {
         self.start = self.current;
     }
 
-    fn simple_token<T: SimpleToken>(&mut self) {
-        self.tokens.push(T::new_enum(self.line));
-    }
-
-    fn single_char_token<T: SimpleToken>(&mut self) {
-        self.advance();
-        self.simple_token::<T>();
-    }
-
-    fn single_or_double_char_token<S, D>(&mut self, c: &str)
-        where
-        S: SimpleToken,
-        D: SimpleToken
-    {
-        self.advance();
-        if self.peek_check_equal(c) {
-            self.advance();
-            self.simple_token::<D>();
-        }
-        else {
-            self.simple_token::<S>();
-        }
+    fn simple_token(&mut self, e: SimpleToken) {
+        self.tokens.push(Token::new_simple(e, self.line));
     }
 
     fn slash_token_or_comment(&mut self) {
@@ -174,7 +153,7 @@ impl Scanner<'_> {
             }
         }
         else {
-            self.simple_token::<SlashToken>();
+            self.simple_token(SimpleToken::Slash);
         }
     }
 
@@ -186,8 +165,9 @@ impl Scanner<'_> {
                 if c == "\"" {
                     self.advance();
                     self.tokens.push(
-                        StringToken::new_enum(
+                        Token::new_string(
                             &self.src[self.start..self.current],
+                            &self.src[self.start+1..self.current-1],
                             line,
                         )
                     );
@@ -217,7 +197,7 @@ impl Scanner<'_> {
         if !self.peek_check_equal(".") {
             let nstr = &self.src[self.start..self.current];
             self.tokens.push(
-                NumberToken::new_enum(
+                Token::new_number(
                     nstr,
                     f64::from_str(nstr).unwrap(),
                     self.line,
@@ -235,7 +215,7 @@ impl Scanner<'_> {
 
         let nstr = &self.src[self.start..self.current];
         self.tokens.push(
-            NumberToken::new_enum(
+            Token::new_number(
                 nstr,
                 f64::from_str(nstr).unwrap(),
                 self.line,
@@ -251,23 +231,23 @@ impl Scanner<'_> {
 
         let lexeme = &self.src[self.start..self.current];
         match lexeme {
-            "if" => self.simple_token::<IfToken>(),
-            "else" => self.simple_token::<ElseToken>(),
-            "for" => self.simple_token::<ForToken>(),
-            "while" => self.simple_token::<WhileToken>(),
-            "var" => self.simple_token::<VarToken>(),
-            "fun" => self.simple_token::<FunToken>(),
-            "return" => self.simple_token::<ReturnToken>(),
-            "class" => self.simple_token::<ClassToken>(),
-            "super" => self.simple_token::<SuperToken>(),
-            "this" => self.simple_token::<ThisToken>(),
-            "print" => self.simple_token::<PrintToken>(),
-            "and" => self.simple_token::<AndToken>(),
-            "or" => self.simple_token::<OrToken>(),
-            "true" => self.simple_token::<TrueToken>(),
-            "false" => self.simple_token::<FalseToken>(),
-            "nil" => self.simple_token::<NilToken>(),
-            _ => self.tokens.push(IdentToken::new_enum(lexeme, self.line)),
+            "if" => self.simple_token(SimpleToken::If),
+            "else" => self.simple_token(SimpleToken::Else),
+            "for" => self.simple_token(SimpleToken::For),
+            "while" => self.simple_token(SimpleToken::While),
+            "var" => self.simple_token(SimpleToken::Var),
+            "fun" => self.simple_token(SimpleToken::Fun),
+            "return" => self.simple_token(SimpleToken::Return),
+            "class" => self.simple_token(SimpleToken::Class),
+            "super" => self.simple_token(SimpleToken::Super),
+            "this" => self.simple_token(SimpleToken::This),
+            "print" => self.simple_token(SimpleToken::Print),
+            "and" => self.simple_token(SimpleToken::And),
+            "or" => self.simple_token(SimpleToken::Or),
+            "true" => self.simple_token(SimpleToken::True),
+            "false" => self.simple_token(SimpleToken::False),
+            "nil" => self.simple_token(SimpleToken::Nil),
+            _ => self.tokens.push(Token::new_ident(lexeme, self.line)),
         }
     }
 
@@ -279,20 +259,86 @@ impl Scanner<'_> {
 
             if let Some(c) = s.peek() {
                 match c {
-                    "(" => s.single_char_token::<LeftParenToken>(),
-                    ")" => s.single_char_token::<RightParenToken>(),
-                    "{" => s.single_char_token::<LeftBraceToken>(),
-                    "}" => s.single_char_token::<RightBraceToken>(),
-                    "," => s.single_char_token::<CommaToken>(),
-                    "." => s.single_char_token::<DotToken>(),
-                    "-" => s.single_char_token::<MinusToken>(),
-                    "+" => s.single_char_token::<PlusToken>(),
-                    "*" => s.single_char_token::<StarToken>(),
-                    ";" => s.single_char_token::<SemicolonToken>(),
-                    "!" => s.single_or_double_char_token::<BangToken, BangEqualToken>("="),
-                    "=" => s.single_or_double_char_token::<EqualToken, EqualEqualToken>("="),
-                    ">" => s.single_or_double_char_token::<GreaterToken, GreaterEqualToken>("="),
-                    "<" => s.single_or_double_char_token::<LessToken, LessEqualToken>("="),
+                    "(" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::LeftParen);
+                    }
+                    ")" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::RightParen);
+                    }
+                    "{" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::LeftBrace);
+                    }
+                    "}" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::RightBrace);
+                    }
+                    "," => {
+                        s.advance();
+                        s.simple_token(SimpleToken::Comma);
+                    }
+                    "." => {
+                        s.advance();
+                        s.simple_token(SimpleToken::Dot);
+                    }
+                    "-" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::Minus);
+                    }
+                    "+" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::Plus);
+                    }
+                    "*" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::Star);
+                    }
+                    ";" => {
+                        s.advance();
+                        s.simple_token(SimpleToken::Semicolon);
+                    }
+                    "!" => {
+                        s.advance();
+                        if s.peek_check_equal("=") {
+                            s.advance();
+                            s.simple_token(SimpleToken::BangEqual);
+                        }
+                        else {
+                            s.simple_token(SimpleToken::Bang);
+                        }
+                    }
+                    "=" => {
+                        s.advance();
+                        if s.peek_check_equal("=") {
+                            s.advance();
+                            s.simple_token(SimpleToken::EqualEqual);
+                        }
+                        else {
+                            s.simple_token(SimpleToken::Equal);
+                        }
+                    }
+                    ">" => {
+                        s.advance();
+                        if s.peek_check_equal("=") {
+                            s.advance();
+                            s.simple_token(SimpleToken::GreaterEqual);
+                        }
+                        else {
+                            s.simple_token(SimpleToken::Greater);
+                        }
+                    }
+                    "<" => {
+                        s.advance();
+                        if s.peek_check_equal("=") {
+                            s.advance();
+                            s.simple_token(SimpleToken::LessEqual);
+                        }
+                        else {
+                            s.simple_token(SimpleToken::Less);
+                        }
+                    }
                     "/" => s.slash_token_or_comment(),
                     "\"" => s.string_token(),
                     _ => {
@@ -313,7 +359,7 @@ impl Scanner<'_> {
             break;
         }
 
-        s.simple_token::<EofToken>();
+        s.simple_token(SimpleToken::Eof);
 
         return s;
     }
@@ -519,60 +565,17 @@ mod tests {
     #[test]
     fn test_simple_token() {
         let mut s = Scanner::new("(123)");
-        s.simple_token::<LeftParenToken>();
+        s.simple_token(SimpleToken::LeftParen);
         assert_eq!(s.start, 0);
         assert_eq!(s.current, 0);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::LeftParenToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "(");
-        }
-        else {
-            panic!("Should be LeftParenToken.");
-        }
-    }
-
-    #[test]
-    fn test_single_char_token() {
-        let mut s = Scanner::new("(123)");
-        s.single_char_token::<LeftParenToken>();
-        assert_eq!(s.current, 1);
-        assert_eq!(s.tokens.len(), 1);
-        assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::LeftParenToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "(");
-        }
-        else {
-            panic!("Should be LeftParenToken.")
-        }
-    }
-
-    #[test]
-    fn test_single_or_double_char_token() {
-        let mut s = Scanner::new("=!=");
-        s.single_or_double_char_token::<EqualToken, BangEqualToken>("=");
-        assert_eq!(s.current, 1);
-        assert_eq!(s.tokens.len(), 1);
-        assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::EqualToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "=");
-        }
-        else {
-            panic!("Should be EqualToken.");
-        }
-        s.single_or_double_char_token::<EqualToken, BangEqualToken>("=");
-        assert_eq!(s.current, 3);
-        assert_eq!(s.tokens.len(), 2);
-        assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::BangEqualToken(t) = &s.tokens[1] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "!=");
-        }
-        else {
-            panic!("Should be EqualToken.");
+        let t = &s.tokens[0];
+        assert_eq!(t.line(), 1);
+        assert_eq!(t.lexeme(), "(");
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::LeftParen) => { }
+            _ => panic!("Should be LeftParenToken.")
         }
     }
 
@@ -585,12 +588,12 @@ mod tests {
         assert_eq!(s.current, 2);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::SlashToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "/");
-        }
-        else {
-            panic!("Should be SlashToken.");
+        let t = &s.tokens[0];
+        assert_eq!(t.line(), 1);
+        assert_eq!(t.lexeme(), "/");
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::Slash) => { }
+            _ => panic!("Should be SlashToken.")
         }
         s.advance();
         s.init();
@@ -607,10 +610,11 @@ mod tests {
         assert_eq!(s.current, 6);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::StringToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "\"test\"");
-            assert_eq!(t.literal(), "test");
+        let t = &s.tokens[0];
+        assert_eq!(t.line(), 1);
+        assert_eq!(t.lexeme(), "\"test\"");
+        if let TokenType::String(st) = t.token_type() {
+            assert_eq!(st.literal(), "test");
         }
         else {
             panic!("Should be StringToken.");
@@ -635,10 +639,11 @@ mod tests {
         assert_eq!(s.current, 3);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::NumberToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "123");
-            assert_eq!(t.literal(), 123.0);
+        let t = &s.tokens[0];
+        assert_eq!(t.line(), 1);
+        assert_eq!(t.lexeme(), "123");
+        if let TokenType::Number(nt) = t.token_type() {
+            assert_eq!(nt.literal(), 123.0);
         }
         else {
             panic!("Should be NumberToken.");
@@ -649,10 +654,11 @@ mod tests {
         assert_eq!(s.current, 10);
         assert_eq!(s.tokens.len(), 2);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::NumberToken(t) = &s.tokens[1] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "10.01");
-            assert_eq!(t.literal(), 10.01);
+        let t = &s.tokens[1];
+        assert_eq!(t.line(), 1);
+        assert_eq!(t.lexeme(), "10.01");
+        if let TokenType::Number(nt) = t.token_type() {
+            assert_eq!(nt.literal(), 10.01);
         }
         else {
             panic!("Should be NumberToken.");
@@ -668,19 +674,19 @@ mod tests {
         assert_eq!(s.current, 8);
         assert_eq!(s.tokens.len(), 2);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::IfToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
-            assert_eq!(t.lexeme(), "if");
+        let t = &s.tokens[0];
+        assert_eq!(t.line(), 1);
+        assert_eq!(t.lexeme(), "if");
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::If) => { }
+            _ => panic!("Should be IfToken.")
         }
-        else {
-            panic!("Should be IfToken.");
-        }
-        if let TokenEnum::ElseToken(t) = &s.tokens[1] {
-            assert_eq!(t.line(), 2);
-            assert_eq!(t.lexeme(), "else");
-        }
-        else {
-            panic!("Should be ElseToken.");
+        let t = &s.tokens[1];
+        assert_eq!(t.line(), 2);
+        assert_eq!(t.lexeme(), "else");
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::Else) => { }
+            _ => panic!("Should be ElseToken.")
         }
     }
 
@@ -693,59 +699,59 @@ mod tests {
         );
         assert_eq!(s.tokens.len(), 9);
         assert_eq!(s.errors.len(), 0);
-        if let TokenEnum::FunToken(t) = &s.tokens[0] {
-            assert_eq!(t.line(), 1);
+        let t = &s.tokens[0];
+        assert_eq!(t.line(), 1);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::Fun) => { }
+            _ => panic!("Should be Fun.")
         }
-        else {
-            panic!("Should be FunToken");
+        let t = &s.tokens[1];
+        assert_eq!(t.line(), 1);
+        match t.token_type() {
+            TokenType::Ident(_) => { }
+            _ => panic!("Should be Ident.")
         }
-        if let TokenEnum::IdentToken(t) = &s.tokens[1] {
-            assert_eq!(t.line(), 1);
+        let t = &s.tokens[2];
+        assert_eq!(t.line(), 1);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::LeftParen) => { }
+            _ => panic!("Should be LeftParen.")
         }
-        else {
-            panic!("Should be IdentToken");
+        let t = &s.tokens[3];
+        assert_eq!(t.line(), 1);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::RightParen) => { }
+            _ => panic!("Should be RightParen.")
         }
-        if let TokenEnum::LeftParenToken(t) = &s.tokens[2] {
-            assert_eq!(t.line(), 1);
+        let t = &s.tokens[4];
+        assert_eq!(t.line(), 1);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::LeftBrace) => { }
+            _ => panic!("Should be LeftBrace.")
         }
-        else {
-            panic!("Should be LeftParenToken");
+        let t = &s.tokens[5];
+        assert_eq!(t.line(), 2);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::Print) => { }
+            _ => panic!("Should be Print.")
         }
-        if let TokenEnum::RightParenToken(t) = &s.tokens[3] {
-            assert_eq!(t.line(), 1);
+        let t = &s.tokens[6];
+        assert_eq!(t.line(), 2);
+        match t.token_type() {
+            TokenType::String(_) => { }
+            _ => panic!("Should be String.")
         }
-        else {
-            panic!("Should be RightParenToken");
+        let t = &s.tokens[7];
+        assert_eq!(t.line(), 3);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::RightBrace) => { }
+            _ => panic!("Should be RightBrace.")
         }
-        if let TokenEnum::LeftBraceToken(t) = &s.tokens[4] {
-            assert_eq!(t.line(), 1);
-        }
-        else {
-            panic!("Should be LeftBraceToken");
-        }
-        if let TokenEnum::PrintToken(t) = &s.tokens[5] {
-            assert_eq!(t.line(), 2);
-        }
-        else {
-            panic!("Should be PrintToken");
-        }
-        if let TokenEnum::StringToken(t) = &s.tokens[6] {
-            assert_eq!(t.line(), 2);
-        }
-        else {
-            panic!("Should be StringToken");
-        }
-        if let TokenEnum::RightBraceToken(t) = &s.tokens[7] {
-            assert_eq!(t.line(), 3);
-        }
-        else {
-            panic!("Should be RightBraceToken");
-        }
-        if let TokenEnum::EofToken(t) = &s.tokens[8] {
-            assert_eq!(t.line(), 3);
-        }
-        else {
-            panic!("Should be EofToken");
+        let t = &s.tokens[8];
+        assert_eq!(t.line(), 3);
+        match t.token_type() {
+            TokenType::Simple(SimpleToken::Eof) => { }
+            _ => panic!("Should be Eof.")
         }
     }
 
