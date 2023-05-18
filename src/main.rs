@@ -1,6 +1,6 @@
 mod token;
 mod scanner;
-// mod expr;
+mod expr;
 mod visit;
 
 use std::io::{self, Write};
