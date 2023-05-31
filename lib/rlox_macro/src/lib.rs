@@ -3,7 +3,6 @@ use quote::quote;
 use syn::{
     parse_macro_input,
     Ident,
-    Expr,
     Token,
     parse::{
         Parse,
@@ -13,56 +12,73 @@ use syn::{
 };
 
 // Example:
-//  impl_simple_token! { #name, #lexeme }
-struct DeclareSimpleToken {
+//  declare_unary_create_method! { #name, #variant }
+struct DeclareUnaryCreateMethod {
     name: Ident,
-    lexeme: Expr,
+    variant: Ident,
 }
 
-impl Parse for DeclareSimpleToken {
+impl Parse for DeclareUnaryCreateMethod {
     fn parse(input: ParseStream) -> Result<Self> {
         let name: Ident = input.parse()?;
         input.parse::<Token![,]>()?;
-        let lexeme: Expr = input.parse()?;
-        Ok(DeclareSimpleToken {
-            name,
-            lexeme,
-        })
+        let variant: Ident = input.parse()?;
+        Ok(
+            DeclareUnaryCreateMethod {
+                name,
+                variant,
+            }
+        )
     }
 }
 
 #[proc_macro]
-pub fn declare_simple_token(input: TokenStream) -> TokenStream {
-    let DeclareSimpleToken {
+pub fn declare_unary_create_method(input: TokenStream) -> TokenStream {
+    let DeclareUnaryCreateMethod {
         name,
-        lexeme,
-    } = parse_macro_input!(input as DeclareSimpleToken);
+        variant,
+    } = parse_macro_input!(input as DeclareUnaryCreateMethod);
 
     let expanded = quote! {
-        pub struct #name {
-            line: usize,
+        pub fn #name(r: Expression<'a>) -> UnaryExpression<'a> {
+            UnaryExpression::#variant(r)
         }
+    };
 
-        impl SimpleToken for #name {
-            fn new(line: usize) -> #name {
-                #name {
-                    line,
-                }
-            }
+    TokenStream::from(expanded)
+}
 
-            fn new_enum(line: usize) -> TokenEnum<'static> {
-                TokenEnum::#name(Self::new(line))
-            }
-        }
+// Example:
+//  declare_binary_create_method! { #name, #variant }
+struct DeclareBinaryCreateMethod {
+    name: Ident,
+    variant: Ident,
+}
 
-        impl Token for #name {
-            fn lexeme(&self) -> &str {
-                #lexeme
+impl Parse for DeclareBinaryCreateMethod {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name: Ident = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let variant: Ident = input.parse()?;
+        Ok(
+            DeclareBinaryCreateMethod {
+                name,
+                variant,
             }
+        )
+    }
+}
 
-            fn line(&self) -> usize {
-                self.line
-            }
+#[proc_macro]
+pub fn declare_binary_create_method(input: TokenStream) -> TokenStream {
+    let DeclareBinaryCreateMethod {
+        name,
+        variant,
+    } = parse_macro_input!(input as DeclareBinaryCreateMethod);
+
+    let expanded = quote! {
+        pub fn #name(l: Expression<'a>, r: Expression<'b>) -> BinaryExpression<'a, 'b> {
+            BinaryExpression::#variant(l, r)
         }
     };
 

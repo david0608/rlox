@@ -1,6 +1,9 @@
 use std::fmt;
 use std::str::FromStr;
-use crate::token::*;
+use crate::token::{
+    Token,
+    SimpleToken,
+};
 
 enum Error<'a> {
     UnexpectedCharacter(usize, &'a str),
@@ -25,7 +28,7 @@ pub struct Scanner<'a> {
     errors: Vec<Error<'a>>,
 }
 
-impl Scanner<'_> {
+impl<'a, 'b> Scanner<'b> {
     pub fn new(src: &str) -> Scanner {
         Scanner {
             src,
@@ -35,6 +38,10 @@ impl Scanner<'_> {
             tokens: Vec::new(),
             errors: Vec::new(),
         }
+    }
+
+    pub fn tokens(&'a self) -> &'a Vec<Token<'b>> {
+        &self.tokens
     }
 
     fn advance(&mut self) {
@@ -110,11 +117,10 @@ impl Scanner<'_> {
     fn init(&mut self) {
         loop {
             if let Some(c) = self.peek() {
-                if (
-                    c == " "
+                if c == " "
                     || c == "\r"
                     || c == "\t"
-                ) {
+                {
                     self.advance();
                     continue;
                 }
@@ -394,7 +400,17 @@ fn is_alphanumeric(c: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::token::{
+        TokenType,
+        SimpleToken,
+    };
+    use super::{
+        Scanner,
+        Error,
+        is_digit,
+        is_alpha,
+        is_alphanumeric,
+    };
 
     #[test]
     fn test_scanner_new() {

@@ -1,7 +1,8 @@
 mod token;
-mod scanner;
 mod expr;
 mod visit;
+mod scanner;
+mod parser;
 
 use std::io::{self, Write};
 use std::error;
