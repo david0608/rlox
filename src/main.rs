@@ -1,13 +1,12 @@
+use std::io::Write;
+
 mod token;
 mod expr;
-mod visit;
 mod scanner;
 mod parser;
+mod visit;
 
-use std::io::{self, Write};
-use std::error;
-
-type Result = std::result::Result<(), Box<dyn error::Error>>;
+type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
 // fn run_file(path: &str) -> Result {
 //
@@ -15,8 +14,8 @@ type Result = std::result::Result<(), Box<dyn error::Error>>;
 
 fn run_prompt() -> Result {
     let mut buf = String::new();
-    let input = io::stdin();
-    let mut output = io::stdout().lock();
+    let input = std::io::stdin();
+    let mut output = std::io::stdout().lock();
 
     loop {
         output.write(b"> ")?;

@@ -1,4 +1,3 @@
-use std::fmt;
 use crate::token::{
     Token,
     TokenType,
@@ -6,9 +5,9 @@ use crate::token::{
     RIGHT_PAREN_LEXEME,
 };
 use crate::expr::{
+    Expression,
     UnaryExpression,
     BinaryExpression,
-    Expression,
     LiteralExpression,
     GroupingExpression,
 };
@@ -20,15 +19,15 @@ use crate::{
 };
 
 #[derive(Debug)]
-enum Error<'a> {
+pub enum Error<'a> {
     UnexpectedEnd,
     UnexpectedToken(&'a str, usize),
     ExpectTokenMismatch(&'a str, &'a str, usize),
     ExpectTokenNotFound(&'a str),
 }
 
-impl fmt::Display for Error<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Error<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::UnexpectedEnd => write!(f, "Unexpected end of source."),
             Error::UnexpectedToken(t, l) => write!(f, "line {}: Unexpected token: {}.", l, t),
@@ -43,11 +42,11 @@ pub struct Parser<'a, 'b> {
     current: usize,
 }
 
-impl<'a, 'b, 'c> Parser<'b, 'c>
+impl<'a, 'b> Parser<'a, 'b>
     where
-    'b: 'c
+    'a: 'b
 {
-    pub fn new(tokens: &'b Vec<Token<'c>>) -> Parser<'b, 'c> {
+    pub fn new(tokens: &'a Vec<Token<'b>>) -> Parser<'a, 'b> {
         Parser {
             tokens,
             current: 0,
@@ -62,7 +61,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         self.current >= self.tokens.len()
     }
 
-    fn peek(&'a self) -> Option<&'b Token<'c>> {
+    fn peek<'s>(&'s self) -> Option<&'a Token<'b>> {
         if self.is_end() {
             None
         }
@@ -71,7 +70,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         }
     }
 
-    fn consume_right_paren(&'a mut self) -> Result<(), Error<'c>> {
+    fn consume_right_paren<'s>(&'s mut self) -> Result<(), Error<'b>> {
         if let Some(t) = self.peek() {
             match t.token_type() {
                 TokenType::Simple(SimpleToken::RightParen) => {
@@ -86,7 +85,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         }
     }
 
-    fn synchronize(&mut self) {
+    pub fn synchronize(&mut self) {
         loop {
             if let Some(t) = self.peek() {
                 match t.token_type() {
@@ -116,11 +115,11 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         }
     }
 
-    fn expression(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    pub fn expression<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         self.equality()
     }
 
-    fn equality(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    fn equality<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         let mut e = self.comparison()?;
         loop {
             if let Some(t) = self.peek() {
@@ -153,7 +152,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         Ok(e)
     }
 
-    fn comparison(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    fn comparison<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         let mut e = self.term()?;
         loop {
             if let Some(t) = self.peek() {
@@ -204,7 +203,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         Ok(e)
     }
 
-    fn term(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    fn term<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         let mut e = self.factor()?;
         loop {
             if let Some(t) = self.peek() {
@@ -237,7 +236,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         Ok(e)
     }
 
-    fn factor(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    fn factor<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         let mut e = self.unary()?;
         loop {
             if let Some(t) = self.peek() {
@@ -270,7 +269,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         Ok(e)
     }
 
-    fn unary(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    fn unary<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         if let Some(t) = self.peek() {
             match t.token_type() {
                 TokenType::Simple(SimpleToken::Bang) => {
@@ -295,7 +294,7 @@ impl<'a, 'b, 'c> Parser<'b, 'c>
         }
     }
 
-    fn primary(&'a mut self) -> Result<Expression<'c>, Error<'c>> {
+    fn primary<'s>(&'s mut self) -> Result<Expression<'b>, Error<'b>> {
         if let Some(t) = self.peek() {
             match t.token_type() {
                 TokenType::Number(nt) => {
