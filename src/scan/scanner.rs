@@ -61,7 +61,7 @@ impl<'a> Scanner<'a> {
         self.current + 1 >= self.src.len()
     }
 
-    fn peek(&self) -> Option<&str> {
+    fn peek(&self) -> Option<&'a str> {
         if self.is_end() {
             None
         }
@@ -254,6 +254,11 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    fn unexpected_character(&mut self) {
+        self.errors.push(Error::UnexpectedCharacter(self.line, self.peek().unwrap()));
+        self.advance();
+    }
+
     pub fn scan(src: &str) -> ScannerOutput {
         let mut s = Scanner::new(src);
 
@@ -352,7 +357,7 @@ impl<'a> Scanner<'a> {
                             s.ident_or_keyword_token();
                         }
                         else {
-                            unreachable!();
+                            s.unexpected_character();
                         }
                     }
                 }
