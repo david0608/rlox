@@ -1,10 +1,10 @@
 use std::str::FromStr;
-use crate::token::{
+use super::token::{
     Token,
     SimpleToken,
 };
 
-enum Error<'a> {
+pub enum Error<'a> {
     UnexpectedCharacter(usize, &'a str),
     UnclosedString(usize),
 }
@@ -18,6 +18,8 @@ impl std::fmt::Display for Error<'_> {
     }
 }
 
+pub type ScannerOutput<'a> = (Vec<Token<'a>>, Vec<Error<'a>>);
+
 pub struct Scanner<'a> {
     src: &'a str,
     line: usize,
@@ -27,7 +29,7 @@ pub struct Scanner<'a> {
     errors: Vec<Error<'a>>,
 }
 
-impl<'a, 'b> Scanner<'b> {
+impl<'a> Scanner<'a> {
     pub fn new(src: &str) -> Scanner {
         Scanner {
             src,
@@ -37,10 +39,6 @@ impl<'a, 'b> Scanner<'b> {
             tokens: Vec::new(),
             errors: Vec::new(),
         }
-    }
-
-    pub fn tokens(&'a self) -> &'a Vec<Token<'b>> {
-        &self.tokens
     }
 
     fn advance(&mut self) {
@@ -256,7 +254,7 @@ impl<'a, 'b> Scanner<'b> {
         }
     }
 
-    pub fn scan(src: &str) -> Scanner {
+    pub fn scan(src: &str) -> ScannerOutput {
         let mut s = Scanner::new(src);
 
         loop {
@@ -366,7 +364,7 @@ impl<'a, 'b> Scanner<'b> {
 
         s.simple_token(SimpleToken::Eof);
 
-        return s;
+        return (s.tokens, s.errors);
     }
 }
 
@@ -399,7 +397,7 @@ fn is_alphanumeric(c: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::token::{
+    use crate::scan::token::{
         TokenType,
         SimpleToken,
     };
@@ -707,62 +705,62 @@ mod tests {
 
     #[test]
     fn test_scan() {
-        let s = Scanner::scan(
+        let (tokens, errors) = Scanner::scan(
             "fun hello() {
                 print \"Hello world!\"
             }"
         );
-        assert_eq!(s.tokens.len(), 9);
-        assert_eq!(s.errors.len(), 0);
-        let t = &s.tokens[0];
+        assert_eq!(tokens.len(), 9);
+        assert_eq!(errors.len(), 0);
+        let t = &tokens[0];
         assert_eq!(t.line(), 1);
         match t.token_type() {
             TokenType::Simple(SimpleToken::Fun) => { }
             _ => panic!("Should be Fun.")
         }
-        let t = &s.tokens[1];
+        let t = &tokens[1];
         assert_eq!(t.line(), 1);
         match t.token_type() {
             TokenType::Ident(_) => { }
             _ => panic!("Should be Ident.")
         }
-        let t = &s.tokens[2];
+        let t = &tokens[2];
         assert_eq!(t.line(), 1);
         match t.token_type() {
             TokenType::Simple(SimpleToken::LeftParen) => { }
             _ => panic!("Should be LeftParen.")
         }
-        let t = &s.tokens[3];
+        let t = &tokens[3];
         assert_eq!(t.line(), 1);
         match t.token_type() {
             TokenType::Simple(SimpleToken::RightParen) => { }
             _ => panic!("Should be RightParen.")
         }
-        let t = &s.tokens[4];
+        let t = &tokens[4];
         assert_eq!(t.line(), 1);
         match t.token_type() {
             TokenType::Simple(SimpleToken::LeftBrace) => { }
             _ => panic!("Should be LeftBrace.")
         }
-        let t = &s.tokens[5];
+        let t = &tokens[5];
         assert_eq!(t.line(), 2);
         match t.token_type() {
             TokenType::Simple(SimpleToken::Print) => { }
             _ => panic!("Should be Print.")
         }
-        let t = &s.tokens[6];
+        let t = &tokens[6];
         assert_eq!(t.line(), 2);
         match t.token_type() {
             TokenType::String(_) => { }
             _ => panic!("Should be String.")
         }
-        let t = &s.tokens[7];
+        let t = &tokens[7];
         assert_eq!(t.line(), 3);
         match t.token_type() {
             TokenType::Simple(SimpleToken::RightBrace) => { }
             _ => panic!("Should be RightBrace.")
         }
-        let t = &s.tokens[8];
+        let t = &tokens[8];
         assert_eq!(t.line(), 3);
         match t.token_type() {
             TokenType::Simple(SimpleToken::Eof) => { }

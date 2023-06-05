@@ -1,10 +1,10 @@
-use crate::token::{
+use crate::scan::{
     Token,
     TokenType,
     SimpleToken,
     RIGHT_PAREN_LEXEME,
 };
-use crate::expr::{
+use super::expr::{
     Expression,
     UnaryExpression,
     BinaryExpression,
@@ -334,242 +334,60 @@ impl<'a, 'b> Parser<'a, 'b>
 
 #[cfg(test)]
 mod tests {
-    use crate::scanner::Scanner;
+    use crate::scan::Scannable;
     use super::{
         Parser,
         Error,
     };
 
-    #[test]
-    fn test_number() {
-        let s = Scanner::scan("1.23");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "1.23");
-    }
-
-    #[test]
-    fn test_string() {
-        let s = Scanner::scan("\"hello\"");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "\"hello\"");
-    }
-
-    #[test]
-    fn test_true() {
-        let s = Scanner::scan("true");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "true");
-    }
-
-    #[test]
-    fn test_false() {
-        let s = Scanner::scan("false");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "false");
-    }
-
-    #[test]
-    fn test_nil() {
-        let s = Scanner::scan("nil");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "nil");
-    }
-
-    #[test]
-    fn test_grouping() {
-        let s = Scanner::scan("(1 + 1)");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(group (+ 1 1))");
-    }
-
-    #[test]
-    fn test_not() {
-        let s = Scanner::scan("!1");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(! 1)");
-    }
-
-    #[test]
-    fn test_not_not() {
-        let s = Scanner::scan("!!1");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(! (! 1))");
-    }
-
-    #[test]
-    fn test_negative() {
-        let s = Scanner::scan("-1");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(- 1)");
-    }
-
-    #[test]
-    fn test_negative_negative() {
-        let s = Scanner::scan("--1");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(- (- 1))");
-    }
-
-    #[test]
-    fn test_minus_grouping() {
-        let s = Scanner::scan("-(1 + 2)");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(- (group (+ 1 2)))");
-    }
-
-    #[test]
-    fn test_multiply() {
-        let s = Scanner::scan("1 * 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(* 1 2)");
-    }
-
-    #[test]
-    fn test_divide() {
-        let s = Scanner::scan("1 / 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(/ 1 2)");
-    }
-
-    #[test]
-    fn test_multiply_divide() {
-        let s = Scanner::scan("1 * 2 / 3");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(/ (* 1 2) 3)");
-    }
-
-    #[test]
-    fn test_multiply_negative() {
-        let s = Scanner::scan("1 * -2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(* 1 (- 2))");
-    }
-
-    #[test]
-    fn test_plus() {
-        let s = Scanner::scan("1 + 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(+ 1 2)");
-    }
-
-    #[test]
-    fn test_plus_plus() {
-        let s = Scanner::scan("1 + 2 + 3");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(+ (+ 1 2) 3)");
-    }
-
-    #[test]
-    fn test_minus() {
-        let s = Scanner::scan("1 - 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(- 1 2)");
-    }
-
-    #[test]
-    fn test_minus_minus() {
-        let s = Scanner::scan("1 - 2 - 3");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(- (- 1 2) 3)");
-    }
-
-    #[test]
-    fn test_plus_multiply() {
-        let s = Scanner::scan("1 + 2 * 3");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(+ 1 (* 2 3))");
-    }
-
-    #[test]
-    fn test_less() {
-        let s = Scanner::scan("1 < 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(< 1 2)");
-    }
-
-    #[test]
-    fn test_lessequal() {
-        let s = Scanner::scan("1 <= 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(<= 1 2)");
-    }
-
-    #[test]
-    fn test_greater() {
-        let s = Scanner::scan("1 > 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(> 1 2)");
-    }
-
-    #[test]
-    fn test_greaterequal() {
-        let s = Scanner::scan("1 >= 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(>= 1 2)");
-    }
-
-    #[test]
-    fn test_greater_add() {
-        let s = Scanner::scan("1 > 2 + 3");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(> 1 (+ 2 3))");
-    }
-
-    #[test]
-    fn test_greater_add_greater() {
-        let s = Scanner::scan("1 > 2 + 3 > 4");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(> (> 1 (+ 2 3)) 4)");
-    }
-
-    #[test]
-    fn test_add_greater_add() {
-        let s = Scanner::scan("1 + 2 > 3 + 4");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(> (+ 1 2) (+ 3 4))");
-    }
-
-    #[test]
-    fn test_equal() {
-        let s = Scanner::scan("1 == 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(== 1 2)");
-    }
-
-    #[test]
-    fn test_notequal() {
-        let s = Scanner::scan("1 != 2");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(!= 1 2)");
-    }
-
-    #[test]
-    fn test_equal_add() {
-        let s = Scanner::scan("1 == 2 + 3");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(== 1 (+ 2 3))");
-    }
-
-    #[test]
-    fn test_add_equal_add() {
-        let s = Scanner::scan("1 + 2 == 3 + 4");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(== (+ 1 2) (+ 3 4))");
-    }
-
-    #[test]
-    fn test_equal_add_equal() {
-        let s = Scanner::scan("1 == 2 + 3 == 4");
-        let mut p = Parser::new(s.tokens());
-        assert_eq!(p.expression().unwrap().print(), "(== (== 1 (+ 2 3)) 4)");
+    fn test_expression() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("1.23", "1.23"),
+            ("\"hello\"", "\"hello\""),
+            ("true", "true"),
+            ("false", "false"),
+            ("nill", "nil"),
+            ("(1 + 1)", "(group (! 1 1))"),
+            ("!1", "(! 1)"),
+            ("!!1", "(! (! 1))"),
+            ("-1", "(- 1)"),
+            ("--1", "(- (- 1))"),
+            ("-(1 + 2)", "(- (group (+ 1 2)))"),
+            ("1 * 2", "(* 1 2)"),
+            ("1 / 2", "(/ 1 2)"),
+            ("1 * 2 / 3", "(/ (* 1 2) 3)"),
+            ("1 * -2", "(* 1 (- 2))"),
+            ("1 + 2", "(+ 1 2)"),
+            ("1 + 2 + 3", "(+ (+ 1 2) 3)"),
+            ("1 - 2", "(- 1 2)"),
+            ("1 - 2 - 3", "(- (- 1 2) 3)"),
+            ("1 + 2 * 3", "(+ 1 (* 2 3))"),
+            ("1 < 2", "(< 1 2)"),
+            ("1 <= 2", "(<= 1 2)"),
+            ("1 > 2", "(> 1 2)"),
+            ("1 >= 2", "(>= 1 2)"),
+            ("1 > 2 + 3", "(> 1 (+ 2 3))"),
+            ("1 > 2 + 3 > 4", "(> (> 1 (+ 2 3)) 4)"),
+            ("1 + 2 > 3 + 4", "(> (+ 1 2) (+ 3 4))"),
+            ("1 == 2", "(== 1 2)"),
+            ("1 != 2", "(!= 1 2)"),
+            ("1 == 2 + 3", "(== 1 (+ 2 3))"),
+            ("1 + 2 == 3 + 4", "(== (+ 1 2) (+ 3 4))"),
+            ("1 == 2 + 3 == 4", "(== (== (+ 2 3)) 4)"),
+        ];
+        for (src, ast) in tests {
+            let tokens = src.scan().0;
+            let mut parser = Parser::new(&tokens);
+            assert_eq!(parser.expression().unwrap().print(), ast);
+        }
     }
 
     #[test]
     fn test_unexpected_end() {
-        let s = Scanner::scan("");
-        let mut p = Parser::new(s.tokens());
-        p.synchronize();
-        match p.expression().err().unwrap() {
+        let tokens = "".scan().0;
+        let mut parser = Parser::new(&tokens);
+        parser.synchronize();
+        match parser.expression().err().unwrap() {
             Error::UnexpectedEnd => { },
             _ => panic!("Should be UnexpectedEnd error.")
         }
@@ -577,9 +395,9 @@ mod tests {
 
     #[test]
     fn test_unexpected_token() {
-        let s = Scanner::scan("print");
-        let mut p = Parser::new(s.tokens());
-        match p.expression().err().unwrap() {
+        let tokens = "print".scan().0;
+        let mut parser = Parser::new(&tokens);
+        match parser.expression().err().unwrap() {
             Error::UnexpectedToken(t, l) => {
                 assert_eq!(t, "print");
                 assert_eq!(l, 1);
@@ -590,10 +408,9 @@ mod tests {
 
     #[test]
     fn test_right_paren_mismatch() {
-        let s = Scanner::scan("(1 + 1");
-        let mut p = Parser::new(s.tokens());
-        let e = p.expression().err().unwrap();
-        match e {
+        let tokens = "(1 + 1".scan().0;
+        let mut parser = Parser::new(&tokens);
+        match parser.expression().err().unwrap() {
             Error::ExpectTokenMismatch(et, ft, l) => {
                 assert_eq!(et, ")");
                 assert_eq!(ft, "eof");
@@ -605,10 +422,10 @@ mod tests {
 
     #[test]
     fn test_unary_unexpected_end() {
-        let s = Scanner::scan("");
-        let mut p = Parser::new(s.tokens());
-        p.synchronize();
-        match p.unary().err().unwrap() {
+        let tokens = "".scan().0;
+        let mut parser = Parser::new(&tokens);
+        parser.synchronize();
+        match parser.unary().err().unwrap() {
             Error::UnexpectedEnd => { },
             _ => panic!("Should be UnexpectedEnd error.")
         }

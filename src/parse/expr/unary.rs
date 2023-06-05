@@ -1,7 +1,5 @@
-use super::{
-    Expr,
-    Expression,
-};
+use super::Expression;
+use super::print::Printable;
 
 pub enum UnaryExpression<'a> {
     Negative(Expression<'a>),

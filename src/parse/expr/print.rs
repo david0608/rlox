@@ -1,17 +1,32 @@
-use crate::token::{
+use visit::{
+    Visit,
+    Accept,
+};
+use crate::scan::{
     TRUE_LEXEME,
     FALSE_LEXEME,
     NIL_LEXEME,
 };
-use crate::expr::{
-    UnaryExpression,
-    BinaryExpression,
-    LiteralExpression,
-    GroupingExpression,
-};
-use crate::visit::Visit;
+use super::unary::UnaryExpression;
+use super::binary::BinaryExpression;
+use super::literal::LiteralExpression;
+use super::grouping::GroupingExpression;
 
-pub struct Print;
+struct Print;
+
+pub trait Printable
+    where
+    Self: for<'a> Accept<'a, Print, String>
+{
+    fn print(&self) -> String {
+        self.accept(Print)
+    }
+}
+
+impl<T> Printable for T
+    where
+    T: for<'a> Accept<'a, Print, String>
+{ }
 
 impl Visit<'_, UnaryExpression<'_>, String> for Print {
     fn visit(e: &UnaryExpression<'_>) -> String {
@@ -59,8 +74,8 @@ impl Visit<'_, GroupingExpression<'_>, String> for Print {
 
 #[cfg(test)]
 mod tests {
-    use crate::scanner::Scanner;
-    use crate::parser::Parser;
+    use crate::scan::Scannable;
+    use crate::parse::parser::Parser;
 
     #[test]
     fn test_print() {
@@ -106,8 +121,8 @@ mod tests {
             "(group 123)",
             "(* (group (+ 1 2)) 3)",
         ];
-        let scanner = Scanner::scan(src);
-        let mut parser = Parser::new(scanner.tokens());
+        let tokens = &src.scan().0;
+        let mut parser = Parser::new(&tokens);
         for result in results {
             assert_eq!(parser.expression().unwrap().print(), result);
             parser.synchronize();

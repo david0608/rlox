@@ -1,7 +1,5 @@
-use super::{
-    Expr,
-    Expression,
-};
+use super::Expression;
+use super::print::Printable;
 
 pub enum BinaryExpression<'a, 'b> {
     Equal(Expression<'a>, Expression<'b>),

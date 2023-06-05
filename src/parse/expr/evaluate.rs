@@ -1,14 +1,15 @@
-use crate::expr::{
-    Expr,
-    UnaryExpression,
-    BinaryExpression,
-    LiteralExpression,
-    GroupingExpression,
+use visit::{
+    Visit,
+    Accept,
 };
-use crate::visit::Visit;
+use super::unary::UnaryExpression;
+use super::binary::BinaryExpression;
+use super::literal::LiteralExpression;
+use super::grouping::GroupingExpression;
+use super::print::Printable;
 
 #[derive(Debug)]
-pub enum Error<'a, 'b> {
+enum Error<'a, 'b> {
     InvalidNegative(&'a UnaryExpression<'b>),
     InvalidCompare(&'a BinaryExpression<'b, 'b>),
     InvalidArithmetic(&'a BinaryExpression<'b, 'b>),
@@ -16,7 +17,7 @@ pub enum Error<'a, 'b> {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum Value {
+enum Value {
     Nil,
     Bool(bool),
     Number(f64),
@@ -34,9 +35,24 @@ impl Value {
     }
 }
 
-pub type EvaluateResult<'a, 'b> = std::result::Result<Value, Error<'a, 'b>>;
+type EvaluateResult<'a, 'b> = std::result::Result<Value, Error<'a, 'b>>;
 
-pub struct Evaluate;
+struct Evaluate;
+
+pub trait Evaluable<'a>
+    where
+    Self: for<'s> Accept<'s, Evaluate, EvaluateResult<'s, 'a>>
+{
+    fn evaluate<'s>(&'s self) -> EvaluateResult<'s, 'a> {
+        self.accept(Evaluate)
+    }
+}
+
+impl<'a, T> Evaluable<'a> for T
+    where
+    T: 'a
+        + for<'s> Accept<'s, Evaluate, EvaluateResult<'s, 'a>>
+{ }
 
 impl<'a, 'b> Visit<'a, UnaryExpression<'b>, EvaluateResult<'a, 'b>> for Evaluate {
     fn visit(e: &'a UnaryExpression<'b>) -> EvaluateResult<'a, 'b> {
@@ -197,8 +213,8 @@ impl<'a, 'b> Visit<'a, GroupingExpression<'b>, EvaluateResult<'a, 'b>> for Evalu
 
 #[cfg(test)]
 mod tests {
-    use crate::scanner::Scanner;
-    use crate::parser::Parser;
+    use crate::scan::Scannable;
+    use crate::parse::parser::Parser;
     use super::Value;
 
     #[test]
@@ -487,8 +503,8 @@ mod tests {
             ("2 * (3 - 1)", Ok(Value::Number(4.0))),
         ];
         for (src, expect) in tests {
-            let scanner = Scanner::scan(src);
-            let expression = Parser::new(scanner.tokens()).expression().unwrap();
+            let tokens = src.scan().0;
+            let expression = Parser::new(&tokens).expression().unwrap();
             match expect {
                 Ok(v) => assert_eq!(expression.evaluate().unwrap(), v),
                 Err(e) => assert_eq!(format!("{:?}", expression.evaluate().unwrap_err()), e),

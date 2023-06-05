@@ -1,10 +1,7 @@
 use std::io::Write;
 
-mod token;
-mod expr;
-mod scanner;
-mod parser;
-mod visit;
+mod scan;
+mod parse;
 
 type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 

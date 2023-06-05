@@ -1,8 +1,8 @@
-use crate::token::{
+use crate::scan::{
     NumberToken,
     StringToken,
 };
-use super::Expr;
+use super::print::Printable;
 
 pub enum LiteralExpression<'a> {
     Number(NumberToken<'a>),
