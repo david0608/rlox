@@ -1,7 +1,10 @@
 use std::io::Write;
 
+mod value;
+mod scope;
 mod scan;
 mod parse;
+mod visitor;
 
 type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 

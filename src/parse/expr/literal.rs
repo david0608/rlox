@@ -1,12 +1,12 @@
-use crate::scan::{
+use crate::scan::token::{
     NumberToken,
     StringToken,
 };
-use super::print::Printable;
+use crate::visitor::Printable;
 
-pub enum LiteralExpression<'a> {
-    Number(NumberToken<'a>),
-    String(StringToken<'a>),
+pub enum LiteralExpression<'src> {
+    Number(NumberToken<'src>),
+    String(StringToken<'src>),
     True,
     False,
     Nil
@@ -25,7 +25,7 @@ macro_rules! literal_expression {
     };
 
     ( $variant:ident, $token:expr ) => {
-        Box::new(LiteralExpression::$variant(*$token))
+        Box::new(LiteralExpression::$variant($token))
     };
 
     ( $variant:ident ) => {

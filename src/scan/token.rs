@@ -1,3 +1,4 @@
+#[derive(PartialEq)]
 pub enum SimpleToken {
     LeftParen,
     RightParen,
@@ -75,7 +76,7 @@ pub const NIL_LEXEME: &str = "nil";
 pub const EOF_LEXEME: &str = "eof";
 
 impl SimpleToken {
-    fn lexeme(&self) -> &str {
+    pub fn lexeme(&self) -> &'static str {
         match self {
             Self::LeftParen => LEFT_PAREN_LEXEME,
             Self::RightParen => RIGHT_PAREN_LEXEME,
@@ -118,20 +119,20 @@ impl SimpleToken {
 }
 
 #[derive(Clone, Copy)]
-pub struct NumberToken<'a> {
-    lexeme: &'a str,
+pub struct NumberToken<'src> {
+    lexeme: &'src str,
     literal: f64,
 }
 
-impl<'a, 'b> NumberToken<'b> {
-    pub fn new(lexeme:&'b str, literal: f64) -> NumberToken<'b> {
+impl<'src> NumberToken<'src> {
+    pub fn new(lexeme:&'src str, literal: f64) -> NumberToken<'src> {
         NumberToken {
             lexeme,
             literal
         }
     }
 
-    pub fn lexeme(&'a self) -> &'b str {
+    pub fn lexeme<'this>(&'this self) -> &'src str {
         self.lexeme
     }
 
@@ -141,58 +142,59 @@ impl<'a, 'b> NumberToken<'b> {
 }
 
 #[derive(Clone, Copy)]
-pub struct StringToken<'a> {
-    lexeme: &'a str,
-    literal: &'a str,
+pub struct StringToken<'src> {
+    lexeme: &'src str,
+    literal: &'src str,
 }
 
-impl<'a, 'b> StringToken<'b> {
-    pub fn new(lexeme: &'b str, literal: &'b str) -> StringToken<'b> {
+impl<'src> StringToken<'src> {
+    pub fn new(lexeme: &'src str, literal: &'src str) -> StringToken<'src> {
         StringToken {
             lexeme,
             literal
         }
     }
 
-    pub fn lexeme(&'a self) -> &'b str {
+    pub fn lexeme<'this>(&'this self) -> &'src str {
         self.lexeme
     }
 
-    pub fn literal(&'a self) -> &'b str {
+    pub fn literal<'this>(&'this self) -> &'src str {
         self.literal
     }
 }
 
-pub struct IdentToken<'a> {
-    lexeme: &'a str,
+#[derive(Clone, Copy)]
+pub struct IdentToken<'src> {
+    lexeme: &'src str,
 }
 
-impl<'a, 'b> IdentToken<'b> {
-    pub fn new(lexeme: &'b str) -> IdentToken<'b> {
+impl<'src> IdentToken<'src> {
+    pub fn new(lexeme: &'src str) -> IdentToken<'src> {
         IdentToken {
             lexeme
         }
     }
 
-    pub fn lexeme(&'a self) -> &'b str {
+    pub fn lexeme<'this>(&'this self) -> &'src str {
         self.lexeme
     }
 }
 
-pub enum TokenType<'a> {
+pub enum TokenType<'src> {
     Simple(SimpleToken),
-    Number(NumberToken<'a>),
-    String(StringToken<'a>),
-    Ident(IdentToken<'a>),
+    Number(NumberToken<'src>),
+    String(StringToken<'src>),
+    Ident(IdentToken<'src>),
 }
 
-pub struct Token<'a> {
-    token_type: TokenType<'a>,
+pub struct Token<'src> {
+    token_type: TokenType<'src>,
     line: usize,
 }
 
-impl<'a, 'b> Token<'b> {
-    pub fn token_type(&'a self) -> &'a TokenType<'b> {
+impl<'src> Token<'src> {
+    pub fn token_type<'this>(&'this self) -> &'this TokenType<'src> {
         &self.token_type
     }
 
@@ -200,10 +202,7 @@ impl<'a, 'b> Token<'b> {
         self.line
     }
 
-    pub fn lexeme(&'a self) -> &'b str
-        where
-        'a: 'b
-    {
+    pub fn lexeme<'this>(&'this self) -> &'src str {
         match &self.token_type {
             TokenType::Simple(t) => t.lexeme(),
             TokenType::Number(t) => t.lexeme(),
@@ -219,7 +218,7 @@ impl<'a, 'b> Token<'b> {
         }
     }
 
-    pub fn new_number(lexeme: &'b str, literal: f64, line: usize) -> Token<'b> {
+    pub fn new_number(lexeme: &'src str, literal: f64, line: usize) -> Token<'src> {
         Token {
             token_type: TokenType::Number(
                 NumberToken {
@@ -231,7 +230,7 @@ impl<'a, 'b> Token<'b> {
         }
     }
 
-    pub fn new_string(lexeme: &'b str, literal: &'b str, line: usize) -> Token<'b> {
+    pub fn new_string(lexeme: &'src str, literal: &'src str, line: usize) -> Token<'src> {
         Token {
             token_type: TokenType::String(
                 StringToken {
@@ -243,7 +242,7 @@ impl<'a, 'b> Token<'b> {
         }
     }
 
-    pub fn new_ident(lexeme: &'b str, line: usize) -> Token<'b> {
+    pub fn new_ident(lexeme: &'src str, line: usize) -> Token<'src> {
         Token {
             token_type: TokenType::Ident(
                 IdentToken {

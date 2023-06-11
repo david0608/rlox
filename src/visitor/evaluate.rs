@@ -1,64 +1,54 @@
-use visit::{
-    Visit,
-    Accept,
+use std::rc::Rc;
+use std::cell::RefCell;
+use crate::value::Value;
+use crate::scope::{
+    Scope,
+    Error as ScopeError,
 };
-use super::unary::UnaryExpression;
-use super::binary::BinaryExpression;
-use super::literal::LiteralExpression;
-use super::grouping::GroupingExpression;
-use super::print::Printable;
+use crate::parse::expr::{
+    UnaryExpression,
+    BinaryExpression,
+    LiteralExpression,
+    GroupingExpression,
+    VariableExpression,
+};
+use super::{
+    ScopeVisit,
+    ScopeAccept,
+};
 
 #[derive(Debug)]
-enum Error<'a, 'b> {
-    InvalidNegative(&'a UnaryExpression<'b>),
-    InvalidCompare(&'a BinaryExpression<'b, 'b>),
-    InvalidArithmetic(&'a BinaryExpression<'b, 'b>),
-    DivideByZero(String),
+pub enum Error<'expr, 'src> {
+    InvalidNegative(&'expr UnaryExpression<'src>),
+    InvalidCompare(&'expr BinaryExpression<'src, 'src>),
+    InvalidArithmetic(&'expr BinaryExpression<'src, 'src>),
+    DivideByZero(&'expr BinaryExpression<'src, 'src>),
+    VariableResolveFailed(&'expr VariableExpression<'src>, ScopeError<'src>),
 }
 
-#[derive(PartialEq, Debug)]
-enum Value {
-    Nil,
-    Bool(bool),
-    Number(f64),
-    String(String),
-}
+pub type EvaluateResult<'expr, 'src> = std::result::Result<Value, Error<'expr, 'src>>;
 
-impl Value {
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Value::Nil => false,
-            Value::Bool(v) => *v,
-            Value::Number(v) => *v != 0.0,
-            Value::String(v) => v.len() != 0,
-        }
-    }
-}
+pub struct Evaluate;
 
-type EvaluateResult<'a, 'b> = std::result::Result<Value, Error<'a, 'b>>;
-
-struct Evaluate;
-
-pub trait Evaluable<'a>
+pub trait Evaluable<'src>
     where
-    Self: for<'s> Accept<'s, Evaluate, EvaluateResult<'s, 'a>>
+    Self: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult<'this, 'src>>
 {
-    fn evaluate<'s>(&'s self) -> EvaluateResult<'s, 'a> {
-        self.accept(Evaluate)
+    fn evaluate<'this>(&'this self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult<'this, 'src> {
+        self.accept(Evaluate, scope)
     }
 }
 
-impl<'a, T> Evaluable<'a> for T
+impl<'src, T> Evaluable<'src> for T
     where
-    T: 'a
-        + for<'s> Accept<'s, Evaluate, EvaluateResult<'s, 'a>>
+    T: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult<'this, 'src>>
 { }
 
-impl<'a, 'b> Visit<'a, UnaryExpression<'b>, EvaluateResult<'a, 'b>> for Evaluate {
-    fn visit(e: &'a UnaryExpression<'b>) -> EvaluateResult<'a, 'b> {
+impl<'that, 'src> ScopeVisit<'that, UnaryExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that UnaryExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
         match e {
             UnaryExpression::Negative(rhs) => {
-                match rhs.evaluate()? {
+                match rhs.evaluate(s)? {
                     Value::Nil => {
                         Err(Error::InvalidNegative(e))
                     }
@@ -74,23 +64,23 @@ impl<'a, 'b> Visit<'a, UnaryExpression<'b>, EvaluateResult<'a, 'b>> for Evaluate
                 }
             }
             UnaryExpression::Not(rhs) => {
-                Ok(Value::Bool(!rhs.evaluate()?.is_truthy()))
+                Ok(Value::Bool(!rhs.evaluate(s)?.is_truthy()))
             }
         }
     }
 }
 
-impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Evaluate {
-    fn visit(e: &'a BinaryExpression<'b, 'b>) -> EvaluateResult<'a, 'b> {
+impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that BinaryExpression<'src, 'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
         match e {
             BinaryExpression::Equal(lhs, rhs) => {
-                Ok(Value::Bool(lhs.evaluate()? == rhs.evaluate()?))
+                Ok(Value::Bool(lhs.evaluate(s)? == rhs.evaluate(s)?))
             }
             BinaryExpression::NotEqual(lhs, rhs) => {
-                Ok(Value::Bool(lhs.evaluate()? != rhs.evaluate()?))
+                Ok(Value::Bool(lhs.evaluate(s)? != rhs.evaluate(s)?))
             }
             BinaryExpression::Less(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l < r))
                     }
@@ -103,7 +93,7 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::LessEqual(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l <= r))
                     }
@@ -116,7 +106,7 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::Greater(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l > r))
                     }
@@ -129,7 +119,7 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::GreaterEqual(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l >= r))
                     }
@@ -142,7 +132,7 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::Plus(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(l + r))
                     }
@@ -155,7 +145,7 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::Minus(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(l - r))
                     }
@@ -165,7 +155,7 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::Multiply(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(l * r))
                     }
@@ -175,10 +165,10 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
                 }
             }
             BinaryExpression::Divide(lhs, rhs) => {
-                match (lhs.evaluate()?, rhs.evaluate()?) {
+                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
                     (Value::Number(l), Value::Number(r)) => {
                         if r == 0.0 {
-                            Err(Error::DivideByZero(e.print()))
+                            Err(Error::DivideByZero(e))
                         }
                         else {
                             Ok(Value::Number(l / r))
@@ -193,8 +183,8 @@ impl<'a, 'b> Visit<'a, BinaryExpression<'b, 'b>, EvaluateResult<'a, 'b>> for Eva
     }
 }
 
-impl<'a, 'b> Visit<'a, LiteralExpression<'b>, EvaluateResult<'a, 'b>> for Evaluate {
-    fn visit(e: &'a LiteralExpression<'b>) -> EvaluateResult<'a, 'b> {
+impl<'that, 'src> ScopeVisit<'that, LiteralExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that LiteralExpression<'src>, _s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
         match e {
             LiteralExpression::Nil => Ok(Value::Nil),
             LiteralExpression::True => Ok(Value::Bool(true)),
@@ -205,72 +195,30 @@ impl<'a, 'b> Visit<'a, LiteralExpression<'b>, EvaluateResult<'a, 'b>> for Evalua
     }
 }
 
-impl<'a, 'b> Visit<'a, GroupingExpression<'b>, EvaluateResult<'a, 'b>> for Evaluate {
-    fn visit(e: &'a GroupingExpression<'b>) -> EvaluateResult<'a, 'b> {
-        e.0.evaluate()
+impl<'that, 'src> ScopeVisit<'that, GroupingExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that GroupingExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
+        e.0.evaluate(s)
+    }
+}
+
+impl<'that, 'src> ScopeVisit<'that, VariableExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that VariableExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
+        s.borrow().get_value(e.0.lexeme())
+            .map_err(|err| Error::VariableResolveFailed(e, err))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::scan::Scannable;
-    use crate::parse::parser::Parser;
-    use super::Value;
-
-    #[test]
-    fn test_value_equal() {
-        let lvals = [
-            Value::Nil,
-            Value::Bool(true),
-            Value::Bool(false),
-            Value::Number(1.0),
-            Value::Number(100.001),
-            Value::String("hello".to_string()),
-            Value::String("world".to_string()),
-        ];
-        let rvals = [
-            Value::Nil,
-            Value::Bool(true),
-            Value::Bool(false),
-            Value::Number(1.0),
-            Value::Number(100.001),
-            Value::String("hello".to_string()),
-            Value::String("world".to_string()),
-        ];
-        let equals = [
-            [true, false, false, false, false, false, false],
-            [false, true, false, false, false, false, false],
-            [false, false, true, false, false, false, false],
-            [false, false, false, true, false, false, false],
-            [false, false, false, false, true, false, false],
-            [false, false, false, false, false, true, false],
-            [false, false, false, false, false, false, true],
-        ];
-        for (i, equals) in equals.iter().enumerate() {
-            for (j, equal) in equals.iter().enumerate() {
-                assert_eq!(lvals[i] == rvals[j], *equal);
-            }
-        }
-    }
-
-    #[test]
-    fn test_value_is_truthy() {
-        let tests = [
-            (Value::Nil, false),
-            (Value::Bool(true), true),
-            (Value::Bool(false), false),
-            (Value::Number(1.0), true),
-            (Value::Number(0.0), false),
-            (Value::String("hello".to_string()), true),
-            (Value::String("".to_string()), false),
-        ];
-        for (value, truthy) in tests {
-            assert_eq!(value.is_truthy(), truthy);
-        }
-    }
+    use crate::value::Value;
+    use crate::scope::Scope;
+    use crate::visitor::Scannable;
+    use crate::parse::Parser;
 
     #[test]
     fn test_evaluate() {
+        let scope = Scope::new().as_rc();
+        assert_eq!(scope.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
         let tests: Vec<(&str, Result<Value, &str>)> = vec![
             // Unary negative operations.
             ("-nil", Err("InvalidNegative((- nil))")),
@@ -501,13 +449,18 @@ mod tests {
             ("(123)", Ok(Value::Number(123.0))),
             ("(\"hello\")", Ok(Value::String("hello".to_string()))),
             ("2 * (3 - 1)", Ok(Value::Number(4.0))),
+            // Variable.
+            ("foo", Ok(Value::Bool(true))),
+            ("!foo", Ok(Value::Bool(false))),
+            ("!!foo", Ok(Value::Bool(true))),
+            ("bar", Err("VariableResolveFailed(bar, NotDeclared(\"bar\"))")),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
             let expression = Parser::new(&tokens).expression().unwrap();
             match expect {
-                Ok(v) => assert_eq!(expression.evaluate().unwrap(), v),
-                Err(e) => assert_eq!(format!("{:?}", expression.evaluate().unwrap_err()), e),
+                Ok(v) => assert_eq!(expression.evaluate(&scope).unwrap(), v),
+                Err(e) => assert_eq!(format!("{:?}", expression.evaluate(&scope).unwrap_err()), e),
             }
         }
     }

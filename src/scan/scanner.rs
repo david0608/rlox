@@ -1,11 +1,11 @@
 use std::str::FromStr;
-use super::token::{
+use crate::scan::token::{
     Token,
     SimpleToken,
 };
 
-pub enum Error<'a> {
-    UnexpectedCharacter(usize, &'a str),
+pub enum Error<'src> {
+    UnexpectedCharacter(usize, &'src str),
     UnclosedString(usize),
 }
 
@@ -18,18 +18,18 @@ impl std::fmt::Display for Error<'_> {
     }
 }
 
-pub type ScannerOutput<'a> = (Vec<Token<'a>>, Vec<Error<'a>>);
+pub type ScannerOutput<'src> = (Vec<Token<'src>>, Vec<Error<'src>>);
 
-pub struct Scanner<'a> {
-    src: &'a str,
+pub struct Scanner<'src> {
+    src: &'src str,
     line: usize,
     start: usize,
     current: usize,
-    tokens: Vec<Token<'a>>,
-    errors: Vec<Error<'a>>,
+    tokens: Vec<Token<'src>>,
+    errors: Vec<Error<'src>>,
 }
 
-impl<'a> Scanner<'a> {
+impl<'src> Scanner<'src> {
     pub fn new(src: &str) -> Scanner {
         Scanner {
             src,
@@ -61,7 +61,7 @@ impl<'a> Scanner<'a> {
         self.current + 1 >= self.src.len()
     }
 
-    fn peek(&self) -> Option<&'a str> {
+    fn peek(&self) -> Option<&'src str> {
         if self.is_end() {
             None
         }
@@ -70,7 +70,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn peek_next(&self) -> Option<&str> {
+    fn peek_next(&self) -> Option<&'src str> {
         if self.is_next_end() {
             None
         }

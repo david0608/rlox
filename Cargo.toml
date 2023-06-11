@@ -7,4 +7,3 @@ edition = "2021"
 
 [dependencies]
 rlox_macro = { path = "./lib/rlox_macro" }
-visit = { path = "./lib/visit" }

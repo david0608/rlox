@@ -1,9 +1,9 @@
+use crate::visitor::Printable;
 use super::Expression;
-use super::print::Printable;
 
-pub enum UnaryExpression<'a> {
-    Negative(Expression<'a>),
-    Not(Expression<'a>)
+pub enum UnaryExpression<'src> {
+    Negative(Expression<'src>),
+    Not(Expression<'src>)
 }
 
 impl std::fmt::Debug for UnaryExpression<'_> {

@@ -1,7 +1,7 @@
+use crate::visitor::Printable;
 use super::Expression;
-use super::print::Printable;
 
-pub struct GroupingExpression<'a>(pub Expression<'a>);
+pub struct GroupingExpression<'src>(pub Expression<'src>);
 
 impl std::fmt::Debug for GroupingExpression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

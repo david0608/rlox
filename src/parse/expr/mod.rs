@@ -1,3 +1,8 @@
+use crate::visitor::{
+    Printable,
+    Evaluable,
+};
+
 mod unary;
 pub use unary::UnaryExpression;
 
@@ -10,26 +15,23 @@ pub use literal::LiteralExpression;
 mod grouping;
 pub use grouping::GroupingExpression;
 
-mod print;
-use print::Printable;
+mod variable;
+pub use variable::VariableExpression;
 
-mod evaluate;
-use evaluate::Evaluable;
+pub type Expression<'src> = Box<dyn Expr<'src>>;
 
-pub type Expression<'a> = Box<dyn Expr<'a>>;
-
-pub trait Expr<'a>
+pub trait Expr<'src>
     where
-    Self: 'a
+    Self: 'src
         + Printable
-        + Evaluable<'a>
+        + Evaluable<'src>
         + std::fmt::Debug
 { }
 
-impl<'a, T> Expr<'a> for T
+impl<'src, T> Expr<'src> for T
     where
-    T: 'a
+    T: 'src
         + Printable
-        + Evaluable<'a>
+        + Evaluable<'src>
         + std::fmt::Debug
 { }
