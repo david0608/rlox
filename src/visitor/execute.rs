@@ -131,7 +131,7 @@ mod tests {
         let stmt = &tokens.parse().0[0];
         assert_eq!(
             format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveFailed(bar, NotDeclared(\"bar\")))"
+            "EvaluateError(VariableResolveError(bar, NotDeclared(\"bar\")))"
         );
     }
 
@@ -150,7 +150,7 @@ mod tests {
         let stmt = &tokens.parse().0[0];
         assert_eq!(
             format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveFailed(foo, NotDeclared(\"foo\")))"
+            "EvaluateError(VariableResolveError(foo, NotDeclared(\"foo\")))"
         );
     }
 
@@ -169,7 +169,7 @@ mod tests {
         let stmt = &tokens.parse().0[0];
         assert_eq!(
             format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveFailed(foo, NotDeclared(\"foo\")))"
+            "EvaluateError(VariableResolveError(foo, NotDeclared(\"foo\")))"
         );
     }
 }

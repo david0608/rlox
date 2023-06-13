@@ -18,6 +18,9 @@ pub use grouping::GroupingExpression;
 mod variable;
 pub use variable::VariableExpression;
 
+mod assign;
+pub use assign::AssignExpression;
+
 pub type Expression<'src> = Box<dyn Expr<'src>>;
 
 pub trait Expr<'src>

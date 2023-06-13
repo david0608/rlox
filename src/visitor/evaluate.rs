@@ -11,6 +11,7 @@ use crate::parse::expr::{
     LiteralExpression,
     GroupingExpression,
     VariableExpression,
+    AssignExpression,
 };
 use super::{
     ScopeVisit,
@@ -23,7 +24,8 @@ pub enum Error<'expr, 'src> {
     InvalidCompare(&'expr BinaryExpression<'src, 'src>),
     InvalidArithmetic(&'expr BinaryExpression<'src, 'src>),
     DivideByZero(&'expr BinaryExpression<'src, 'src>),
-    VariableResolveFailed(&'expr VariableExpression<'src>, ScopeError<'src>),
+    VariableResolveError(&'expr VariableExpression<'src>, ScopeError<'src>),
+    AssignmentError(&'expr AssignExpression<'src>, ScopeError<'src>),
 }
 
 pub type EvaluateResult<'expr, 'src> = std::result::Result<Value, Error<'expr, 'src>>;
@@ -204,7 +206,17 @@ impl<'that, 'src> ScopeVisit<'that, GroupingExpression<'src>, EvaluateResult<'th
 impl<'that, 'src> ScopeVisit<'that, VariableExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
     fn visit(e: &'that VariableExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
         s.borrow().get_value(e.0.lexeme())
-            .map_err(|err| Error::VariableResolveFailed(e, err))
+            .map_err(|err| Error::VariableResolveError(e, err))
+    }
+}
+
+impl<'that, 'src> ScopeVisit<'that, AssignExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that AssignExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
+        let v = e.value.evaluate(s)?;
+        if let Err(err) = s.borrow_mut().set_value(e.name.lexeme(), v.clone()) {
+            return Err(Error::AssignmentError(e, err));
+        };
+        return Ok(v);
     }
 }
 
@@ -453,7 +465,10 @@ mod tests {
             ("foo", Ok(Value::Bool(true))),
             ("!foo", Ok(Value::Bool(false))),
             ("!!foo", Ok(Value::Bool(true))),
-            ("bar", Err("VariableResolveFailed(bar, NotDeclared(\"bar\"))")),
+            ("bar", Err("VariableResolveError(bar, NotDeclared(\"bar\"))")),
+            // Assignment.
+            ("foo = false", Ok(Value::Bool(false))),
+            ("foo = true", Ok(Value::Bool(true))),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

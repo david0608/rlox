@@ -11,6 +11,7 @@ use crate::parse::expr::{
     LiteralExpression,
     GroupingExpression,
     VariableExpression,
+    AssignExpression,
 };
 use crate::parse::stmt::{
     VarDeclareStatement,
@@ -88,6 +89,12 @@ impl Visit<'_, VariableExpression<'_>, String> for Print {
     }
 }
 
+impl Visit<'_, AssignExpression<'_>, String> for Print {
+    fn visit(e: &AssignExpression) -> String {
+        format!("(= {} {})", e.name.lexeme(), e.value.print())
+    }
+}
+
 impl Visit<'_, VarDeclareStatement<'_>, String> for Print {
     fn visit(s: &VarDeclareStatement) -> String {
         if let Some(i) = s.initializer.as_ref() {
@@ -142,6 +149,10 @@ mod tests {
             // Grouping.
             ("(123)", "(group 123)"),
             ("(1 + 2) * 3", "(* (group (+ 1 2)) 3)"),
+            // Variable.
+            ("foo", "foo"),
+            // Assignment.
+            ("foo = true", "(= foo true)"),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

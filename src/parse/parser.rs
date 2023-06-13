@@ -11,6 +11,7 @@ use crate::parse::expr::{
     LiteralExpression,
     GroupingExpression,
     VariableExpression,
+    AssignExpression,
 };
 use crate::parse::stmt::{
     Statement,
@@ -24,6 +25,7 @@ use crate::{
     unary_expression,
     binary_expression,
     variable_expression,
+    assign_expression,
     var_declare_statement,
     expression_statement,
     print_statement,
@@ -67,6 +69,10 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
 
     fn advance(&mut self) {
         self.current += 1;
+    }
+
+    fn fallback(&mut self) {
+        self.current -= 1;
     }
 
     fn is_end(&self) -> bool {
@@ -162,7 +168,20 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
     }
 
     pub fn expression(&mut self) -> Result<Expression<'src>, Error<'src>> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expression<'src>, Error<'src>> {
+        if let Ok(i) = self.consume_identifier() {
+            if self.consume(SimpleToken::Equal).is_ok() {
+                return Ok(assign_expression!(*i, self.assignment()?));
+            }
+            else {
+                self.fallback();
+            }
+        }
+
+        return self.equality();
     }
 
     fn equality(&mut self) -> Result<Expression<'src>, Error<'src>> {
@@ -463,26 +482,31 @@ mod tests {
     #[test]
     fn test_expression() {
         let tests: Vec<(&str, &str)> = vec![
+            // Primary.
             ("1.23", "1.23"),
             ("\"hello\"", "\"hello\""),
             ("true", "true"),
             ("false", "false"),
             ("nil", "nil"),
             ("(1 + 1)", "(group (+ 1 1))"),
+            // Unary.
             ("!1", "(! 1)"),
             ("!!1", "(! (! 1))"),
             ("-1", "(- 1)"),
             ("--1", "(- (- 1))"),
             ("-(1 + 2)", "(- (group (+ 1 2)))"),
+            // Factor.
             ("1 * 2", "(* 1 2)"),
             ("1 / 2", "(/ 1 2)"),
             ("1 * 2 / 3", "(/ (* 1 2) 3)"),
             ("1 * -2", "(* 1 (- 2))"),
+            // Term.
             ("1 + 2", "(+ 1 2)"),
             ("1 + 2 + 3", "(+ (+ 1 2) 3)"),
             ("1 - 2", "(- 1 2)"),
             ("1 - 2 - 3", "(- (- 1 2) 3)"),
             ("1 + 2 * 3", "(+ 1 (* 2 3))"),
+            // Comparison.
             ("1 < 2", "(< 1 2)"),
             ("1 <= 2", "(<= 1 2)"),
             ("1 > 2", "(> 1 2)"),
@@ -490,11 +514,15 @@ mod tests {
             ("1 > 2 + 3", "(> 1 (+ 2 3))"),
             ("1 > 2 + 3 > 4", "(> (> 1 (+ 2 3)) 4)"),
             ("1 + 2 > 3 + 4", "(> (+ 1 2) (+ 3 4))"),
+            // Equality.
             ("1 == 2", "(== 1 2)"),
             ("1 != 2", "(!= 1 2)"),
             ("1 == 2 + 3", "(== 1 (+ 2 3))"),
             ("1 + 2 == 3 + 4", "(== (+ 1 2) (+ 3 4))"),
             ("1 == 2 + 3 == 4", "(== (== 1 (+ 2 3)) 4)"),
+            // Assignment.
+            ("foo = true", "(= foo true)"),
+            ("foo = bar = true", "(= foo (= bar true))"),
         ];
         for (src, ast) in tests {
             let tokens = src.scan().0;
