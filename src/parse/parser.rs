@@ -16,6 +16,7 @@ use crate::parse::expr::{
 use crate::parse::stmt::{
     Statement,
     VarDeclareStatement,
+    BlockStatement,
     ExpressionStatement,
     PrintStatement,
 };
@@ -27,6 +28,7 @@ use crate::{
     variable_expression,
     assign_expression,
     var_declare_statement,
+    block_statement,
     expression_statement,
     print_statement,
 };
@@ -412,6 +414,10 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
     fn declaration(&mut self) -> Result<Statement<'src>, Error<'src>> {
         if let Some(t) = self.peek() {
             match t.token_type() {
+                TokenType::Simple(SimpleToken::LeftBrace) => {
+                    self.advance();
+                    self.block()
+                }
                 TokenType::Simple(SimpleToken::Var) => {
                     self.advance();
                     self.var_declare_statement()
@@ -427,6 +433,21 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
         }
         else {
             Err(Error::UnexpectedEnd)
+        }
+    }
+
+    fn block(&mut self) -> Result<Statement<'src>, Error<'src>> {
+        let mut stmts = Vec::new();
+        loop {
+            if self.consume(SimpleToken::RightBrace).is_ok() {
+                return Ok(block_statement!(stmts));
+            }
+            else if self.is_end() {
+                return Err(Error::ExpectTokenNotFound(SimpleToken::RightBrace.lexeme()));
+            }
+            else {
+                stmts.push(self.declaration()?);
+            }
         }
     }
 
@@ -589,6 +610,10 @@ mod tests {
             ("var true;", Err("line 1: Expect identifier.")),
             ("var foo =", Err("Unexpected end of code.")),
             ("var foo = true", Err("Expect token: ; but not found.")),
+            // Block statement.
+            ("{var foo = true; foo = false;}", Ok("{var foo = true; (= foo false);}")),
+            ("{var foo}", Err("line 1: Expect token: ; but found: }.")),
+            ("{var foo;", Err("Expect token: } but not found.")),
             // Print statement.
             ("print \"hello\";", Ok("print \"hello\";")),
             ("print", Err("Unexpected end of code.")),

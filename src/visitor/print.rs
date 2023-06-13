@@ -15,6 +15,7 @@ use crate::parse::expr::{
 };
 use crate::parse::stmt::{
     VarDeclareStatement,
+    BlockStatement,
     ExpressionStatement,
     PrintStatement,
 };
@@ -106,6 +107,13 @@ impl Visit<'_, VarDeclareStatement<'_>, String> for Print {
     }
 }
 
+impl Visit<'_, BlockStatement<'_>, String> for Print {
+    fn visit(s: &BlockStatement) -> String {
+        let strs = s.0.iter().map(|s| s.print()).collect::<Vec<String>>();
+        format!("{{{}}}", strs.join(" "))
+    }
+}
+
 impl Visit<'_, ExpressionStatement<'_>, String> for Print {
     fn visit(s: &ExpressionStatement) -> String {
         format!("{};", s.0.print())
@@ -168,6 +176,9 @@ mod tests {
             ("var foo;", "var foo;"),
             ("var foo = true;", "var foo = true;"),
             ("var foo = 1 + 1;", "var foo = (+ 1 1);"),
+            // Block.
+            ("{var foo; var bar = true;}", "{var foo; var bar = true;}"),
+            ("{var a; {a = true;}}", "{var a; {(= a true);}}"),
             // Expression.
             ("true;", "true;"),
             ("1 + 1;", "(+ 1 1);"),

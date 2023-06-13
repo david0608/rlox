@@ -6,6 +6,9 @@ use crate::visitor::{
 mod var_declare;
 pub use var_declare::VarDeclareStatement;
 
+mod block;
+pub use block::BlockStatement;
+
 mod expression;
 pub use expression::ExpressionStatement;
 

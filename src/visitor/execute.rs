@@ -7,6 +7,7 @@ use crate::scope::{
 use crate::value::Value;
 use crate::parse::stmt::{
     VarDeclareStatement,
+    BlockStatement,
     ExpressionStatement,
     PrintStatement,
 };
@@ -54,6 +55,16 @@ impl<'that, 'src> ScopeVisit<'that, VarDeclareStatement<'src>, ExecuteResult<'th
         if let Err(e) = scope.borrow_mut().declare(stmt.name.lexeme(), value) {
             return Err(Error::DeclarationError(e));
         };
+        Ok(())
+    }
+}
+
+impl<'that, 'src> ScopeVisit<'that, BlockStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
+    fn visit(stmt: &'that BlockStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
+        let scope = Scope::new_child(scope).as_rc();
+        for stmt in &stmt.0 {
+            stmt.execute(&scope)?;
+        }
         Ok(())
     }
 }
@@ -132,6 +143,65 @@ mod tests {
         assert_eq!(
             format!("{:?}", stmt.execute(&scope).unwrap_err()),
             "EvaluateError(VariableResolveError(bar, NotDeclared(\"bar\")))"
+        );
+    }
+
+    #[test]
+    fn test_block() {
+        let src = "
+            var foo = 1;
+            {
+                var bar = 2;
+                foo = bar;
+            }
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        for stmt in stmts {
+            assert_eq!(stmt.execute(&scope).is_ok(), true);
+        }
+        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(2.0));
+    }
+
+    #[test]
+    fn test_block_shadow() {
+        let src = "
+            var foo = 1;
+            {
+                var foo = 2;
+                foo = 3;
+            }
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        for stmt in stmts {
+            assert_eq!(stmt.execute(&scope).is_ok(), true);
+        }
+        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(1.0));
+    }
+
+    #[test]
+    fn test_block_execute_error() {
+        let src = "
+            {
+                var foo;
+                foo = bar;
+            }
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(
+            format!("{:?}", stmts[0].execute(&scope).unwrap_err()),
+            "EvaluateError(VariableResolveError(bar, NotDeclared(\"bar\")))",
         );
     }
 
