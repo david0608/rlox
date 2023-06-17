@@ -16,6 +16,7 @@ use crate::parse::expr::{
 use crate::parse::stmt::{
     VarDeclareStatement,
     BlockStatement,
+    IfStatement,
     ExpressionStatement,
     PrintStatement,
 };
@@ -114,6 +115,17 @@ impl Visit<'_, BlockStatement<'_>, String> for Print {
     }
 }
 
+impl Visit<'_, IfStatement<'_>, String> for Print {
+    fn visit(s: &IfStatement<'_>) -> String {
+        if let Some(else_stmt) = s.else_stmt.as_ref() {
+            format!("if {} {} else {}", s.condition.print(), s.then_stmt.print(), else_stmt.print())
+        }
+        else {
+            format!("if {} {}", s.condition.print(), s.then_stmt.print())
+        }
+    }
+}
+
 impl Visit<'_, ExpressionStatement<'_>, String> for Print {
     fn visit(s: &ExpressionStatement) -> String {
         format!("{};", s.0.print())
@@ -179,6 +191,9 @@ mod tests {
             // Block.
             ("{var foo; var bar = true;}", "{var foo; var bar = true;}"),
             ("{var a; {a = true;}}", "{var a; {(= a true);}}"),
+            // Ifelse.
+            ("if (true) print \"hello\";", "if true print \"hello\";"),
+            ("if (1 + 1 == 2) { print 1; } else { print 2; }", "if (== (+ 1 1) 2) {print 1;} else {print 2;}"),
             // Expression.
             ("true;", "true;"),
             ("1 + 1;", "(+ 1 1);"),

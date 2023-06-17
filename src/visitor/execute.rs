@@ -8,6 +8,7 @@ use crate::value::Value;
 use crate::parse::stmt::{
     VarDeclareStatement,
     BlockStatement,
+    IfStatement,
     ExpressionStatement,
     PrintStatement,
 };
@@ -66,6 +67,22 @@ impl<'that, 'src> ScopeVisit<'that, BlockStatement<'src>, ExecuteResult<'that, '
             stmt.execute(&scope)?;
         }
         Ok(())
+    }
+}
+
+impl<'that, 'src> ScopeVisit<'that, IfStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
+    fn visit(stmt: &'that IfStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
+        let condition = stmt.condition.evaluate(scope)
+            .map(|v| v.is_truthy())
+            .map_err(|e| Error::EvaluateError(e))?;
+        let scope = Scope::new_child(scope).as_rc();
+        if condition {
+            stmt.then_stmt.execute(&scope)?;
+        }
+        else if let Some(else_stmt) = stmt.else_stmt.as_ref() {
+            else_stmt.execute(&scope)?;
+        }
+        return Ok(())
     }
 }
 
@@ -203,6 +220,44 @@ mod tests {
             format!("{:?}", stmts[0].execute(&scope).unwrap_err()),
             "EvaluateError(VariableResolveError(bar, NotDeclared(\"bar\")))",
         );
+    }
+
+    #[test]
+    fn test_if() {
+        let src = "
+            var foo = 1;
+            if (true) foo = 2;
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        for stmt in stmts {
+            assert_eq!(stmt.execute(&scope).is_ok(), true);
+        }
+        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(2.0));
+    } 
+
+    #[test]
+    fn test_if_else() {
+        let src = "
+            var foo = 1;
+            if (false) {
+                foo = 2;
+            } else {
+                foo = 3;
+            }
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        for stmt in stmts {
+            assert_eq!(stmt.execute(&scope).is_ok(), true);
+        }
+        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(3.0));
     }
 
     #[test]

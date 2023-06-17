@@ -17,6 +17,7 @@ use crate::parse::stmt::{
     Statement,
     VarDeclareStatement,
     BlockStatement,
+    IfStatement,
     ExpressionStatement,
     PrintStatement,
 };
@@ -29,6 +30,7 @@ use crate::{
     assign_expression,
     var_declare_statement,
     block_statement,
+    if_statement,
     expression_statement,
     print_statement,
 };
@@ -408,19 +410,19 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
     }
 
     pub fn statement(&mut self) -> Result<Statement<'src>, Error<'src>> {
-        self.declaration()
-    }
-
-    fn declaration(&mut self) -> Result<Statement<'src>, Error<'src>> {
         if let Some(t) = self.peek() {
             match t.token_type() {
-                TokenType::Simple(SimpleToken::LeftBrace) => {
-                    self.advance();
-                    self.block()
-                }
                 TokenType::Simple(SimpleToken::Var) => {
                     self.advance();
                     self.var_declare_statement()
+                }
+                TokenType::Simple(SimpleToken::If) => {
+                    self.advance();
+                    self.ifelse()
+                }
+                TokenType::Simple(SimpleToken::LeftBrace) => {
+                    self.advance();
+                    self.block()
                 }
                 TokenType::Simple(SimpleToken::Print) => {
                     self.advance();
@@ -436,6 +438,43 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
         }
     }
 
+    fn not_declaration_statement(&mut self) -> Result<Statement<'src>, Error<'src>> {
+        if let Some(t) = self.peek() {
+            match t.token_type() {
+                TokenType::Simple(SimpleToken::If) => {
+                    self.advance();
+                    self.ifelse()
+                }
+                TokenType::Simple(SimpleToken::LeftBrace) => {
+                    self.advance();
+                    self.block()
+                }
+                TokenType::Simple(SimpleToken::Print) => {
+                    self.advance();
+                    self.print_statement()
+                }
+                _ => {
+                    self.expression_statement()
+                }
+            }
+        }
+        else {
+            Err(Error::UnexpectedEnd)
+        }
+    }
+
+    fn ifelse(&mut self) -> Result<Statement<'src>, Error<'src>> {
+        self.consume(SimpleToken::LeftParen)?;
+        let condition = self.expression()?;
+        self.consume(SimpleToken::RightParen)?;
+        let then_stmt = self.not_declaration_statement()?;
+        let mut else_stmt = None;
+        if self.consume(SimpleToken::Else).is_ok() {
+            else_stmt = Some(self.not_declaration_statement()?);
+        }
+        Ok(if_statement!(condition, then_stmt, else_stmt))
+    }
+
     fn block(&mut self) -> Result<Statement<'src>, Error<'src>> {
         let mut stmts = Vec::new();
         loop {
@@ -446,7 +485,7 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
                 return Err(Error::ExpectTokenNotFound(SimpleToken::RightBrace.lexeme()));
             }
             else {
-                stmts.push(self.declaration()?);
+                stmts.push(self.statement()?);
             }
         }
     }
@@ -614,6 +653,10 @@ mod tests {
             ("{var foo = true; foo = false;}", Ok("{var foo = true; (= foo false);}")),
             ("{var foo}", Err("line 1: Expect token: ; but found: }.")),
             ("{var foo;", Err("Expect token: } but not found.")),
+            // Ifelse.
+            ("if (true) print \"hello\"; else print \"oops\";", Ok("if true print \"hello\"; else print \"oops\";")),
+            ("if true) print \"hello\"; else print \"oops\";", Err("line 1: Expect token: ( but found: true.")),
+            ("if (true print \"hello\"; else print \"oops\";", Err("line 1: Expect token: ) but found: print.")),
             // Print statement.
             ("print \"hello\";", Ok("print \"hello\";")),
             ("print", Err("Unexpected end of code.")),

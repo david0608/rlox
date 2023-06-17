@@ -9,6 +9,9 @@ pub use var_declare::VarDeclareStatement;
 mod block;
 pub use block::BlockStatement;
 
+mod ifelse;
+pub use ifelse::IfStatement;
+
 mod expression;
 pub use expression::ExpressionStatement;
 
