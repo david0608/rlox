@@ -12,6 +12,7 @@ use crate::parse::expr::{
     GroupingExpression,
     VariableExpression,
     AssignExpression,
+    LogicalExpression,
 };
 use crate::parse::stmt::{
     Statement,
@@ -28,6 +29,7 @@ use crate::{
     binary_expression,
     variable_expression,
     assign_expression,
+    logical_expression,
     var_declare_statement,
     block_statement,
     if_statement,
@@ -184,8 +186,23 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
                 self.fallback();
             }
         }
+        return self.logical_or();
+    }
 
-        return self.equality();
+    fn logical_or(&mut self) -> Result<Expression<'src>, Error<'src>> {
+        let mut e = self.logical_and()?;
+        while self.consume(SimpleToken::Or).is_ok() {
+            e = logical_expression!(Or, e, self.logical_and()?);
+        }
+        Ok(e)
+    }
+
+    fn logical_and(&mut self) -> Result<Expression<'src>, Error<'src>> {
+        let mut e = self.equality()?;
+        while self.consume(SimpleToken::And).is_ok() {
+            e = logical_expression!(And, e, self.equality()?);
+        }
+        Ok(e)
     }
 
     fn equality(&mut self) -> Result<Expression<'src>, Error<'src>> {
@@ -583,6 +600,11 @@ mod tests {
             // Assignment.
             ("foo = true", "(= foo true)"),
             ("foo = bar = true", "(= foo (= bar true))"),
+            // Logical.
+            ("x or y", "(or x y)"),
+            ("x and y", "(and x y)"),
+            ("x or y and z", "(or x (and y z))"),
+            ("w and x or y and z", "(or (and w x) (and y z))"),
         ];
         for (src, ast) in tests {
             let tokens = src.scan().0;

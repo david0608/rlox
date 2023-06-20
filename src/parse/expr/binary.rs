@@ -1,4 +1,5 @@
 use crate::visitor::Printable;
+use crate::impl_debug_for_printable;
 use super::Expression;
 
 pub enum BinaryExpression<'srca, 'srcb> {
@@ -14,11 +15,7 @@ pub enum BinaryExpression<'srca, 'srcb> {
     Divide(Expression<'srca>, Expression<'srcb>),
 }
 
-impl std::fmt::Debug for BinaryExpression<'_, '_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(BinaryExpression<'_, '_>);
 
 #[macro_export]
 macro_rules! binary_expression {

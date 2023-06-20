@@ -1,13 +1,10 @@
 use crate::scan::token::IdentToken;
 use crate::visitor::Printable;
+use crate::impl_debug_for_printable;
 
 pub struct VariableExpression<'src>(pub IdentToken<'src>);
 
-impl std::fmt::Debug for VariableExpression<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(VariableExpression<'_>);
 
 #[macro_export]
 macro_rules! variable_expression {

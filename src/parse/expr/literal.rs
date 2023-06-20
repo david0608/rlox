@@ -3,6 +3,7 @@ use crate::scan::token::{
     StringToken,
 };
 use crate::visitor::Printable;
+use crate::impl_debug_for_printable;
 
 pub enum LiteralExpression<'src> {
     Number(NumberToken<'src>),
@@ -12,11 +13,7 @@ pub enum LiteralExpression<'src> {
     Nil
 }
 
-impl std::fmt::Debug for LiteralExpression<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(LiteralExpression<'_>);
 
 #[macro_export]
 macro_rules! literal_expression {

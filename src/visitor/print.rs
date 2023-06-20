@@ -12,6 +12,7 @@ use crate::parse::expr::{
     GroupingExpression,
     VariableExpression,
     AssignExpression,
+    LogicalExpression,
 };
 use crate::parse::stmt::{
     VarDeclareStatement,
@@ -97,6 +98,19 @@ impl Visit<'_, AssignExpression<'_>, String> for Print {
     }
 }
 
+impl Visit<'_, LogicalExpression<'_, '_>, String> for Print {
+    fn visit(e: &LogicalExpression) -> String {
+        match e {
+            LogicalExpression::And(lhs, rhs) => {
+                format!("(and {} {})", lhs.print(), rhs.print())
+            }
+            LogicalExpression::Or(lhs, rhs) => {
+                format!("(or {} {})", lhs.print(), rhs.print())
+            }
+        }
+    }
+}
+
 impl Visit<'_, VarDeclareStatement<'_>, String> for Print {
     fn visit(s: &VarDeclareStatement) -> String {
         if let Some(i) = s.initializer.as_ref() {
@@ -138,6 +152,17 @@ impl Visit<'_, PrintStatement<'_>, String> for Print {
     }
 }
 
+#[macro_export]
+macro_rules! impl_debug_for_printable {
+    ( $target:ty ) => {
+        impl std::fmt::Debug for $target {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.print())
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::visitor::Scannable;
@@ -173,6 +198,10 @@ mod tests {
             ("foo", "foo"),
             // Assignment.
             ("foo = true", "(= foo true)"),
+            // Logical.
+            ("x and y", "(and x y)"),
+            ("x or y", "(or x y)"),
+            ("x or y and z", "(or x (and y z))"),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

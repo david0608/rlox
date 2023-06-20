@@ -12,6 +12,7 @@ use crate::parse::expr::{
     GroupingExpression,
     VariableExpression,
     AssignExpression,
+    LogicalExpression,
 };
 use super::{
     ScopeVisit,
@@ -217,6 +218,31 @@ impl<'that, 'src> ScopeVisit<'that, AssignExpression<'src>, EvaluateResult<'that
             return Err(Error::AssignmentError(e, err));
         };
         return Ok(v);
+    }
+}
+
+impl<'that, 'src> ScopeVisit<'that, LogicalExpression<'src, 'src>, EvaluateResult<'that, 'src>> for Evaluate {
+    fn visit(e: &'that LogicalExpression<'src, 'src>, scope: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
+        match e {
+            LogicalExpression::And(lhs, rhs) => {
+                let lv = lhs.evaluate(scope)?;
+                if !lv.is_truthy() {
+                    return Ok(lv);
+                }
+                else {
+                    return Ok(rhs.evaluate(scope)?);
+                }
+            }
+            LogicalExpression::Or(lhs, rhs) => {
+                let lv = lhs.evaluate(scope)?;
+                if lv.is_truthy() {
+                    return Ok(lv);
+                }
+                else {
+                    return Ok(rhs.evaluate(scope)?);
+                }
+            }
+        }
     }
 }
 
@@ -469,6 +495,12 @@ mod tests {
             // Assignment.
             ("foo = false", Ok(Value::Bool(false))),
             ("foo = true", Ok(Value::Bool(true))),
+            // Logical.
+            ("1 or 2", Ok(Value::Number(1.0))),
+            ("0 or 2", Ok(Value::Number(2.0))),
+            ("1 and 2", Ok(Value::Number(2.0))),
+            ("0 and 2", Ok(Value::Number(0.0))),
+            ("0 or 1 and \"hello\"", Ok(Value::String("hello".to_string()))),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

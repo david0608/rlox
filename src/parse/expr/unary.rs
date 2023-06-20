@@ -1,4 +1,5 @@
 use crate::visitor::Printable;
+use crate::impl_debug_for_printable;
 use super::Expression;
 
 pub enum UnaryExpression<'src> {
@@ -6,11 +7,7 @@ pub enum UnaryExpression<'src> {
     Not(Expression<'src>)
 }
 
-impl std::fmt::Debug for UnaryExpression<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(UnaryExpression<'_>);
 
 #[macro_export]
 macro_rules! unary_expression {

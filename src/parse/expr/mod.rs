@@ -21,6 +21,9 @@ pub use variable::VariableExpression;
 mod assign;
 pub use assign::AssignExpression;
 
+mod logical;
+pub use logical::LogicalExpression;
+
 pub type Expression<'src> = Box<dyn Expr<'src>>;
 
 pub trait Expr<'src>

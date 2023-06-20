@@ -1,17 +1,14 @@
 use crate::scan::token::IdentToken;
-use crate::parse::expr::Expression;
 use crate::visitor::Printable;
+use crate::impl_debug_for_printable;
+use super::Expression;
 
 pub struct AssignExpression<'src> {
     pub name: IdentToken<'src>,
     pub value: Expression<'src>,
 }
 
-impl std::fmt::Debug for AssignExpression<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(AssignExpression<'_>);
 
 #[macro_export]
 macro_rules! assign_expression {

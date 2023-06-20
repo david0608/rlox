@@ -1,6 +1,6 @@
 use crate::parse::expr::Expression;
 use crate::visitor::Printable;
-
+use crate::impl_debug_for_printable;
 use super::Statement;
 
 pub struct IfStatement<'src> {
@@ -9,11 +9,7 @@ pub struct IfStatement<'src> {
     pub else_stmt: Option<Statement<'src>>,
 }
 
-impl std::fmt::Debug for IfStatement<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(IfStatement<'_>);
 
 #[macro_export]
 macro_rules! if_statement {

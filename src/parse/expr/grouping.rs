@@ -1,13 +1,10 @@
 use crate::visitor::Printable;
+use crate::impl_debug_for_printable;
 use super::Expression;
 
 pub struct GroupingExpression<'src>(pub Expression<'src>);
 
-impl std::fmt::Debug for GroupingExpression<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.print())
-    }
-}
+impl_debug_for_printable!(GroupingExpression<'_>);
 
 #[macro_export]
 macro_rules! grouping_expression {
