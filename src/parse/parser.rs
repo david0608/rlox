@@ -21,6 +21,7 @@ use crate::parse::stmt::{
     IfStatement,
     ExpressionStatement,
     PrintStatement,
+    WhileStatement,
 };
 use crate::{
     literal_expression,
@@ -35,6 +36,7 @@ use crate::{
     if_statement,
     expression_statement,
     print_statement,
+    while_statement,
 };
 
 #[derive(Debug)]
@@ -437,6 +439,10 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
                     self.advance();
                     self.ifelse()
                 }
+                TokenType::Simple(SimpleToken::While) => {
+                    self.advance();
+                    self.r#while()
+                }
                 TokenType::Simple(SimpleToken::LeftBrace) => {
                     self.advance();
                     self.block()
@@ -461,6 +467,10 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
                 TokenType::Simple(SimpleToken::If) => {
                     self.advance();
                     self.ifelse()
+                }
+                TokenType::Simple(SimpleToken::While) => {
+                    self.advance();
+                    self.r#while()
                 }
                 TokenType::Simple(SimpleToken::LeftBrace) => {
                     self.advance();
@@ -490,6 +500,14 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
             else_stmt = Some(self.not_declaration_statement()?);
         }
         Ok(if_statement!(condition, then_stmt, else_stmt))
+    }
+
+    fn r#while(&mut self) -> Result<Statement<'src>, Error<'src>> {
+        self.consume(SimpleToken::LeftParen)?;
+        let condition = self.expression()?;
+        self.consume(SimpleToken::RightParen)?;
+        let body = self.not_declaration_statement()?;
+        Ok(while_statement!(condition, body))
     }
 
     fn block(&mut self) -> Result<Statement<'src>, Error<'src>> {
@@ -688,6 +706,10 @@ mod tests {
             ("true;", Ok("true;")),
             ("", Err("Unexpected end of code.")),
             ("true", Err("Expect token: ; but not found.")),
+            // While statement.
+            ("while (foo) print 1;", Ok("while foo print 1;")),
+            ("while foo) print 1;", Err("line 1: Expect token: ( but found: foo.")),
+            ("while (foo print 1;", Err("line 1: Expect token: ) but found: print.")),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

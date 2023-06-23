@@ -11,6 +11,7 @@ use crate::parse::stmt::{
     IfStatement,
     ExpressionStatement,
     PrintStatement,
+    WhileStatement,
 };
 use crate::visitor::evaluate::Error as EvaluateError;
 use super::{
@@ -108,6 +109,15 @@ impl<'that, 'src> ScopeVisit<'that, PrintStatement<'src>, ExecuteResult<'that, '
                 Err(Error::EvaluateError(e))
             }
         }
+    }
+}
+
+impl<'that, 'src> ScopeVisit<'that, WhileStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
+    fn visit(stmt: &'that WhileStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
+        while stmt.condition.evaluate(scope).map(|v| v.is_truthy()).map_err(|e| Error::EvaluateError(e))? {
+            stmt.body.execute(&scope)?;
+        }
+        return Ok(());
     }
 }
 
@@ -296,5 +306,26 @@ mod tests {
             format!("{:?}", stmt.execute(&scope).unwrap_err()),
             "EvaluateError(VariableResolveError(foo, NotDeclared(\"foo\")))"
         );
+    }
+
+    #[test]
+    fn test_while() {
+        let src = "
+            var sum = 0;
+            var i = 3;
+            while (i > 0) {
+                sum = sum + i;
+                i = i - 1;
+            }
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        for stmt in stmts {
+            assert_eq!(stmt.execute(&scope).is_ok(), true);
+        }
+        assert_eq!(scope.borrow().get_value("sum").unwrap(), Value::Number(6.0));
     }
 }

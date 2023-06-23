@@ -18,6 +18,9 @@ pub use expression::ExpressionStatement;
 mod print;
 pub use print::PrintStatement;
 
+mod r#while;
+pub use r#while::WhileStatement;
+
 pub type Statement<'src> = Box<dyn Stmt<'src>>;
 
 pub trait Stmt<'src>

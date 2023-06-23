@@ -20,6 +20,7 @@ use crate::parse::stmt::{
     IfStatement,
     ExpressionStatement,
     PrintStatement,
+    WhileStatement,
 };
 use super::{
     Visit,
@@ -152,6 +153,12 @@ impl Visit<'_, PrintStatement<'_>, String> for Print {
     }
 }
 
+impl Visit<'_, WhileStatement<'_>, String> for Print {
+    fn visit(s: &WhileStatement) -> String {
+        format!("while {} {}", s.condition.print(), s.body.print())
+    }
+}
+
 #[macro_export]
 macro_rules! impl_debug_for_printable {
     ( $target:ty ) => {
@@ -229,6 +236,9 @@ mod tests {
             // Print.
             ("print foo;", "print foo;"),
             ("print 1 + 1;", "print (+ 1 1);"),
+            // While.
+            ("while (foo) print \"hello\";", "while foo print \"hello\";"),
+            ("while (foo == true) print \"hello\";", "while (== foo true) print \"hello\";"),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
