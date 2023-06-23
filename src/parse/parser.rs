@@ -443,6 +443,10 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
                     self.advance();
                     self.r#while()
                 }
+                TokenType::Simple(SimpleToken::For) => {
+                    self.advance();
+                    self.r#for()
+                }
                 TokenType::Simple(SimpleToken::LeftBrace) => {
                     self.advance();
                     self.block()
@@ -471,6 +475,10 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
                 TokenType::Simple(SimpleToken::While) => {
                     self.advance();
                     self.r#while()
+                }
+                TokenType::Simple(SimpleToken::For) => {
+                    self.advance();
+                    self.r#for()
                 }
                 TokenType::Simple(SimpleToken::LeftBrace) => {
                     self.advance();
@@ -508,6 +516,52 @@ impl<'tokens, 'src> Parser<'tokens, 'src> {
         self.consume(SimpleToken::RightParen)?;
         let body = self.not_declaration_statement()?;
         Ok(while_statement!(condition, body))
+    }
+
+    fn r#for(&mut self) -> Result<Statement<'src>, Error<'src>> {
+        self.consume(SimpleToken::LeftParen)?;
+
+        let initializer = if self.consume(SimpleToken::Var).is_ok() {
+            Some(self.var_declare_statement()?)
+        }
+        else if self.consume(SimpleToken::Semicolon).is_ok() {
+            None
+        }
+        else {
+            Some(self.expression_statement()?)
+        };
+
+        let condition = if self.consume(SimpleToken::Semicolon).is_ok() {
+            literal_expression!(True)
+        }
+        else {
+            let condition = self.expression()?;
+            self.consume(SimpleToken::Semicolon)?;
+            condition
+        };
+
+        let increment = if self.consume(SimpleToken::RightParen).is_ok() {
+            None
+        }
+        else {
+            let increment = self.expression()?;
+            self.consume(SimpleToken::RightParen)?;
+            Some(increment)
+        };
+
+        let mut body = self.not_declaration_statement()?;
+
+        if let Some(increment) = increment {
+            body = block_statement!(vec![body, expression_statement!(increment)]);
+        }
+
+        body = while_statement!(condition, body);
+
+        if let Some(initializer) = initializer {
+            body = block_statement!(vec![initializer, body]);
+        }
+
+        return Ok(body);
     }
 
     fn block(&mut self) -> Result<Statement<'src>, Error<'src>> {
@@ -710,6 +764,9 @@ mod tests {
             ("while (foo) print 1;", Ok("while foo print 1;")),
             ("while foo) print 1;", Err("line 1: Expect token: ( but found: foo.")),
             ("while (foo print 1;", Err("line 1: Expect token: ) but found: print.")),
+            // For statement.
+            ("for (;;) print 1;", Ok("while true print 1;")),
+            ("for (var i = 0; i < 10; i = i + 1) print 1;", Ok("{var i = 0; while (< i 10) {print 1; (= i (+ i 1));}}")),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

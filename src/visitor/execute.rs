@@ -328,4 +328,23 @@ mod tests {
         }
         assert_eq!(scope.borrow().get_value("sum").unwrap(), Value::Number(6.0));
     }
+
+    #[test]
+    fn test_for() {
+        let src = "
+            var sum = 0;
+            for (var i = 1; i <= 10; i = i + 1) {
+                sum = sum + i;
+            }
+        ";
+        let scope = Scope::new().as_rc();
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        for stmt in stmts {
+            assert_eq!(stmt.execute(&scope).is_ok(), true);
+        }
+        assert_eq!(scope.borrow().get_value("sum").unwrap(), Value::Number(55.0));
+    }
 }
