@@ -1,39 +1,52 @@
 use std::str::FromStr;
-use crate::scan::token::{
-    Token,
-    SimpleToken,
+use crate::error::LoxError;
+use super::span::{
+    CodePoint,
+    Span,
 };
+use super::token::Token;
+use super::token::simple::SimpleTokenEnum;
 
-pub enum Error<'src> {
-    UnexpectedCharacter(usize, &'src str),
-    UnclosedString(usize),
+pub enum Error {
+    UnexpectedCharacter(CodePoint),
+    ExpectCharacterNotFound(String, CodePoint),
 }
 
-impl std::fmt::Display for Error<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl LoxError for Error {
+    fn print(&self, src_lines: &Vec<&str>) -> String {
         match self {
-            Error::UnexpectedCharacter(l, c) => write!(f, "line {}: Unexpected character {}.", l, c),
-            Error::UnclosedString(l) => write!(f, "line {}: Unclosed string.", l),
+            Error::UnexpectedCharacter(cp) => {
+                let mut out = format!("Error: Unexpected character: {}\r\n", cp.char_str(&src_lines));
+                out += cp.indication_string(&src_lines).as_ref();
+                return out;
+            }
+            Error::ExpectCharacterNotFound(ec, cp) => {
+                let mut out = format!("Error: Expect character: {} but not found.\r\n", ec);
+                out += cp.indication_string(&src_lines).as_ref();
+                return out;
+            }
         }
     }
 }
 
-pub type ScannerOutput<'src> = (Vec<Token<'src>>, Vec<Error<'src>>);
+pub type ScannerOutput = (Vec<Token>, Vec<Error>);
 
 pub struct Scanner<'src> {
     src: &'src str,
     line: usize,
+    char: usize,
     start: usize,
     current: usize,
-    tokens: Vec<Token<'src>>,
-    errors: Vec<Error<'src>>,
+    tokens: Vec<Token>,
+    errors: Vec<Error>,
 }
 
 impl<'src> Scanner<'src> {
     pub fn new(src: &str) -> Scanner {
         Scanner {
             src,
-            line: 1,
+            line: 0,
+            char: 0,
             start: 0,
             current: 0,
             tokens: Vec::new(),
@@ -42,76 +55,67 @@ impl<'src> Scanner<'src> {
     }
 
     fn advance(&mut self) {
+        self.char += 1;
         self.current += 1;
-    }
-
-    fn retreat(&mut self) {
-        self.current -= 1;
     }
 
     fn newline(&mut self) {
         self.line += 1;
+        self.char = 0;
     }
 
     fn is_end(&self) -> bool {
         self.current >= self.src.len()
     }
 
-    fn is_next_end(&self) -> bool {
+    fn _is_next_end(&self) -> bool {
         self.current + 1 >= self.src.len()
     }
 
     fn peek(&self) -> Option<&'src str> {
-        if self.is_end() {
-            None
-        }
-        else {
-            Some(&self.src[self.current..self.current+1])
-        }
+        self.src.get(self.current..(self.current + 1))
     }
 
     fn peek_next(&self) -> Option<&'src str> {
-        if self.is_next_end() {
-            None
-        }
-        else {
-            Some(&self.src[self.current+1..self.current+2])
-        }
+        self.src.get((self.current + 1)..(self.current + 2))
     }
 
     fn peek_check<F>(&self, checker: F) -> bool
         where
         F: Fn(&str) -> bool
     {
-        if let Some(pc) = self.peek() {
-            checker(pc)
-        }
-        else {
-            false
-        }
+        self.peek()
+            .map(checker)
+            .unwrap_or(false)
     }
 
     fn peek_next_check<F>(&self, checker: F) -> bool
         where
         F: Fn(&str) -> bool
     {
-        if let Some(pc) = self.peek_next() {
-            checker(pc)
-        }
-        else {
-            false
-        }
+        self.peek_next()
+            .map(checker)
+            .unwrap_or(false)
     }
 
     fn peek_check_equal(&self, c: &str) -> bool {
         self.peek_check(|pc| pc == c)
     }
 
-    fn peek_next_check_equal(&self, c: &str) -> bool {
+    fn _peek_next_check_equal(&self, c: &str) -> bool {
         self.peek_next_check(|pc| pc == c)
     }
 
+    fn get_span(&self) -> Span {
+        Span::new(
+            CodePoint::new(self.line, self.char - (self.current - self.start)),
+            CodePoint::new(self.line, self.char),
+        )
+    }
+
     fn init(&mut self) {
+        let mut newline = false;
+
         loop {
             if let Some(c) = self.peek() {
                 if c == " "
@@ -119,11 +123,15 @@ impl<'src> Scanner<'src> {
                     || c == "\t"
                 {
                     self.advance();
+                    if newline {
+                        self.char = 0;
+                    }
                     continue;
                 }
                 else if c == "\n" {
                     self.advance();
                     self.newline();
+                    newline = true;
                     continue;
                 }
                 else {
@@ -138,8 +146,8 @@ impl<'src> Scanner<'src> {
         self.start = self.current;
     }
 
-    fn simple_token(&mut self, e: SimpleToken) {
-        self.tokens.push(Token::new_simple(e, self.line));
+    fn simple_token(&mut self, variant: SimpleTokenEnum) {
+        self.tokens.push(Token::new_simple(variant, self.get_span()));
     }
 
     fn slash_token_or_comment(&mut self) {
@@ -156,37 +164,39 @@ impl<'src> Scanner<'src> {
             }
         }
         else {
-            self.simple_token(SimpleToken::Slash);
+            self.simple_token(SimpleTokenEnum::Slash);
         }
     }
 
     fn string_token(&mut self) {
-        let line = self.line;
+        let start = CodePoint::new(self.line, self.char);
+        self.advance();
         loop {
-            self.advance();
             if let Some(c) = self.peek() {
                 if c == "\"" {
                     self.advance();
                     self.tokens.push(
                         Token::new_string(
+                            &self.src[(self.start + 1)..(self.current - 1)],
                             &self.src[self.start..self.current],
-                            &self.src[self.start+1..self.current-1],
-                            line,
+                            Span::new(start, CodePoint::new(self.line, self.char)),
                         )
                     );
-                    break;
+                    return;
                 }
                 else if c == "\n" {
+                    self.advance();
                     self.newline();
                     continue;
                 }
                 else {
+                    self.advance();
                     continue;
                 }
             }
             else {
-                self.errors.push(Error::UnclosedString(line));
-                break;
+                self.expected_character_not_found("\"");
+                return;
             }
         }
     }
@@ -201,9 +211,9 @@ impl<'src> Scanner<'src> {
             let nstr = &self.src[self.start..self.current];
             self.tokens.push(
                 Token::new_number(
-                    nstr,
                     f64::from_str(nstr).unwrap(),
-                    self.line,
+                    nstr,
+                    self.get_span(),
                 )
             );
             return;
@@ -219,9 +229,9 @@ impl<'src> Scanner<'src> {
         let nstr = &self.src[self.start..self.current];
         self.tokens.push(
             Token::new_number(
-                nstr,
                 f64::from_str(nstr).unwrap(),
-                self.line,
+                nstr,
+                self.get_span(),
             )
         );
     }
@@ -234,29 +244,39 @@ impl<'src> Scanner<'src> {
 
         let lexeme = &self.src[self.start..self.current];
         match lexeme {
-            "if" => self.simple_token(SimpleToken::If),
-            "else" => self.simple_token(SimpleToken::Else),
-            "for" => self.simple_token(SimpleToken::For),
-            "while" => self.simple_token(SimpleToken::While),
-            "var" => self.simple_token(SimpleToken::Var),
-            "fun" => self.simple_token(SimpleToken::Fun),
-            "return" => self.simple_token(SimpleToken::Return),
-            "class" => self.simple_token(SimpleToken::Class),
-            "super" => self.simple_token(SimpleToken::Super),
-            "this" => self.simple_token(SimpleToken::This),
-            "print" => self.simple_token(SimpleToken::Print),
-            "and" => self.simple_token(SimpleToken::And),
-            "or" => self.simple_token(SimpleToken::Or),
-            "true" => self.simple_token(SimpleToken::True),
-            "false" => self.simple_token(SimpleToken::False),
-            "nil" => self.simple_token(SimpleToken::Nil),
-            _ => self.tokens.push(Token::new_ident(lexeme, self.line)),
+            "if" => self.simple_token(SimpleTokenEnum::If),
+            "else" => self.simple_token(SimpleTokenEnum::Else),
+            "for" => self.simple_token(SimpleTokenEnum::For),
+            "while" => self.simple_token(SimpleTokenEnum::While),
+            "var" => self.simple_token(SimpleTokenEnum::Var),
+            "fun" => self.simple_token(SimpleTokenEnum::Fun),
+            "return" => self.simple_token(SimpleTokenEnum::Return),
+            "class" => self.simple_token(SimpleTokenEnum::Class),
+            "super" => self.simple_token(SimpleTokenEnum::Super),
+            "this" => self.simple_token(SimpleTokenEnum::This),
+            "print" => self.simple_token(SimpleTokenEnum::Print),
+            "and" => self.simple_token(SimpleTokenEnum::And),
+            "or" => self.simple_token(SimpleTokenEnum::Or),
+            "true" => self.simple_token(SimpleTokenEnum::True),
+            "false" => self.simple_token(SimpleTokenEnum::False),
+            "nil" => self.simple_token(SimpleTokenEnum::Nil),
+            _ => {
+                self.tokens.push(
+                    Token::new_identifier(
+                        lexeme,
+                        self.get_span(),
+                    )
+                );
+            }
         }
     }
 
     fn unexpected_character(&mut self) {
-        self.errors.push(Error::UnexpectedCharacter(self.line, self.peek().unwrap()));
-        self.advance();
+        self.errors.push(Error::UnexpectedCharacter(CodePoint::new(self.line, self.char)));
+    }
+
+    fn expected_character_not_found(&mut self, ec: &str) {
+        self.errors.push(Error::ExpectCharacterNotFound(ec.to_string(), CodePoint::new(self.line, self.char)));
     }
 
     pub fn scan(src: &str) -> ScannerOutput {
@@ -269,82 +289,82 @@ impl<'src> Scanner<'src> {
                 match c {
                     "(" => {
                         s.advance();
-                        s.simple_token(SimpleToken::LeftParen);
+                        s.simple_token(SimpleTokenEnum::LeftParen);
                     }
                     ")" => {
                         s.advance();
-                        s.simple_token(SimpleToken::RightParen);
+                        s.simple_token(SimpleTokenEnum::RightParen);
                     }
                     "{" => {
                         s.advance();
-                        s.simple_token(SimpleToken::LeftBrace);
+                        s.simple_token(SimpleTokenEnum::LeftBrace);
                     }
                     "}" => {
                         s.advance();
-                        s.simple_token(SimpleToken::RightBrace);
+                        s.simple_token(SimpleTokenEnum::RightBrace);
                     }
                     "," => {
                         s.advance();
-                        s.simple_token(SimpleToken::Comma);
+                        s.simple_token(SimpleTokenEnum::Comma);
                     }
                     "." => {
                         s.advance();
-                        s.simple_token(SimpleToken::Dot);
+                        s.simple_token(SimpleTokenEnum::Dot);
                     }
                     "-" => {
                         s.advance();
-                        s.simple_token(SimpleToken::Minus);
+                        s.simple_token(SimpleTokenEnum::Minus);
                     }
                     "+" => {
                         s.advance();
-                        s.simple_token(SimpleToken::Plus);
+                        s.simple_token(SimpleTokenEnum::Plus);
                     }
                     "*" => {
                         s.advance();
-                        s.simple_token(SimpleToken::Star);
+                        s.simple_token(SimpleTokenEnum::Star);
                     }
                     ";" => {
                         s.advance();
-                        s.simple_token(SimpleToken::Semicolon);
+                        s.simple_token(SimpleTokenEnum::Semicolon);
                     }
                     "!" => {
                         s.advance();
                         if s.peek_check_equal("=") {
                             s.advance();
-                            s.simple_token(SimpleToken::BangEqual);
+                            s.simple_token(SimpleTokenEnum::BangEqual);
                         }
                         else {
-                            s.simple_token(SimpleToken::Bang);
+                            s.simple_token(SimpleTokenEnum::Bang);
                         }
                     }
                     "=" => {
                         s.advance();
                         if s.peek_check_equal("=") {
                             s.advance();
-                            s.simple_token(SimpleToken::EqualEqual);
+                            s.simple_token(SimpleTokenEnum::EqualEqual);
                         }
                         else {
-                            s.simple_token(SimpleToken::Equal);
+                            s.simple_token(SimpleTokenEnum::Equal);
                         }
                     }
                     ">" => {
                         s.advance();
                         if s.peek_check_equal("=") {
                             s.advance();
-                            s.simple_token(SimpleToken::GreaterEqual);
+                            s.simple_token(SimpleTokenEnum::GreaterEqual);
                         }
                         else {
-                            s.simple_token(SimpleToken::Greater);
+                            s.simple_token(SimpleTokenEnum::Greater);
                         }
                     }
                     "<" => {
                         s.advance();
                         if s.peek_check_equal("=") {
                             s.advance();
-                            s.simple_token(SimpleToken::LessEqual);
+                            s.simple_token(SimpleTokenEnum::LessEqual);
                         }
                         else {
-                            s.simple_token(SimpleToken::Less);
+                            s.simple_token(SimpleTokenEnum::Less);
                         }
                     }
                     "/" => s.slash_token_or_comment(),
@@ -358,6 +378,7 @@ impl<'src> Scanner<'src> {
                         }
                         else {
                             s.unexpected_character();
+                            s.advance();
                         }
                     }
                 }
@@ -367,7 +388,7 @@ impl<'src> Scanner<'src> {
             break;
         }
 
-        s.simple_token(SimpleToken::Eof);
+        s.simple_token(SimpleTokenEnum::Eof);
 
         return (s.tokens, s.errors);
     }
@@ -402,10 +423,13 @@ fn is_alphanumeric(c: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::scan::token::{
-        TokenType,
-        SimpleToken,
+    use crate::error::LoxError;
+    use crate::scan::span::{
+        Span,
+        CodePoint,
     };
+    use crate::scan::token::Token;
+    use crate::scan::token::simple::SimpleTokenEnum;
     use super::{
         Scanner,
         Error,
@@ -418,7 +442,8 @@ mod tests {
     fn test_scanner_new() {
         let s = Scanner::new("123");
         assert_eq!(s.src, "123");
-        assert_eq!(s.line, 1);
+        assert_eq!(s.line, 0);
+        assert_eq!(s.char, 0);
         assert_eq!(s.start, 0);
         assert_eq!(s.current, 0);
         assert_eq!(s.tokens.len(), 0);
@@ -428,27 +453,22 @@ mod tests {
     #[test]
     fn test_scanner_advance() {
         let mut s = Scanner::new("123");
+        assert_eq!(s.char, 0);
         assert_eq!(s.current, 0);
         s.advance();
+        assert_eq!(s.char, 1);
         assert_eq!(s.current, 1);
-    }
-
-    #[test]
-    fn test_scanner_retreat() {
-        let mut s = Scanner::new("123");
-        assert_eq!(s.current, 0);
-        s.advance();
-        assert_eq!(s.current, 1);
-        s.retreat();
-        assert_eq!(s.current, 0);
     }
 
     #[test]
     fn test_scanner_newline() {
         let mut s = Scanner::new("123");
-        assert_eq!(s.line, 1);
+        s.advance();
+        assert_eq!(s.line, 0);
+        assert_eq!(s.char, 1);
         s.newline();
-        assert_eq!(s.line, 2);
+        assert_eq!(s.line, 1);
+        assert_eq!(s.char, 0);
     }
 
     #[test]
@@ -466,11 +486,11 @@ mod tests {
     #[test]
     fn test_scaner_is_next_end() {
         let mut s = Scanner::new("123");
-        assert!(!s.is_next_end());
+        assert!(!s._is_next_end());
         s.advance();
-        assert!(!s.is_next_end());
+        assert!(!s._is_next_end());
         s.advance();
-        assert!(s.is_next_end());
+        assert!(s._is_next_end());
     }
 
     #[test]
@@ -540,42 +560,47 @@ mod tests {
     #[test]
     fn test_scanner_peek_next_check_equal() {
         let mut s = Scanner::new("123");
-        assert!(s.peek_next_check_equal("2"));
-        assert!(!s.peek_next_check_equal("1"));
+        assert!(s._peek_next_check_equal("2"));
+        assert!(!s._peek_next_check_equal("1"));
         s.advance();
-        assert!(s.peek_next_check_equal("3"));
+        assert!(s._peek_next_check_equal("3"));
         s.advance();
-        assert!(!s.peek_next_check_equal("3"));
+        assert!(!s._peek_next_check_equal("3"));
     }
 
     #[test]
     fn test_scanner_init() {
         let mut s = Scanner::new("123");
         s.init();
-        assert_eq!(s.line, 1);
+        assert_eq!(s.line, 0);
+        assert_eq!(s.char, 0);
         assert_eq!(s.start, 0);
         assert_eq!(s.current, 0);
 
-        let mut s = Scanner::new("  \n  \n  123");
+        let mut s = Scanner::new("  \r\n  \r\n  123");
         s.init();
-        assert_eq!(s.line, 3);
-        assert_eq!(s.start, 8);
-        assert_eq!(s.current, 8);
+        assert_eq!(s.line, 2);
+        assert_eq!(s.char, 0);
+        assert_eq!(s.start, 10);
+        assert_eq!(s.current, 10);
 
-        let mut s = Scanner::new("\n\r \t123\n\r");
+        let mut s = Scanner::new("\r\n \t123\n\r");
         s.init();
-        assert_eq!(s.line, 2);
+        assert_eq!(s.line, 1);
+        assert_eq!(s.char, 0);
         assert_eq!(s.start, 4);
         assert_eq!(s.current, 4);
         s.init();
-        assert_eq!(s.line, 2);
+        assert_eq!(s.line, 1);
+        assert_eq!(s.char, 0);
         assert_eq!(s.start, 4);
         assert_eq!(s.current, 4);
         s.advance();
         s.advance();
         s.advance();
         s.init();
-        assert_eq!(s.line, 3);
+        assert_eq!(s.line, 2);
+        assert_eq!(s.char, 0);
         assert_eq!(s.start, 9);
         assert_eq!(s.current, 9);
     }
@@ -583,70 +608,69 @@ mod tests {
     #[test]
     fn test_simple_token() {
         let mut s = Scanner::new("(123)");
-        s.simple_token(SimpleToken::LeftParen);
-        assert_eq!(s.start, 0);
-        assert_eq!(s.current, 0);
+        s.advance();
+        s.simple_token(SimpleTokenEnum::LeftParen);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.line(), 1);
-        assert_eq!(t.lexeme(), "(");
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::LeftParen) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 0), CodePoint::new(0, 1)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::LeftParen);
+            }
             _ => panic!("Should be LeftParenToken.")
         }
     }
 
     #[test]
     fn test_slash_token_or_comment() {
-        let mut s = Scanner::new("2/1//2/1\n\r2/1");
+        let mut s = Scanner::new("2/1//2/1\r\n2/1");
         s.advance();
         s.init();
         s.slash_token_or_comment();
-        assert_eq!(s.current, 2);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.line(), 1);
-        assert_eq!(t.lexeme(), "/");
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::Slash) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 1), CodePoint::new(0, 2)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Slash);
+            }
             _ => panic!("Should be SlashToken.")
         }
         s.advance();
         s.init();
         s.slash_token_or_comment();
-        assert_eq!(s.current, 8);
+        assert_eq!(s.current, 9);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
     }
 
     #[test]
     fn test_string_token() {
-        let mut s = Scanner::new("\"test\" \"test");
+        let mut s = Scanner::new("\"test\"\n\"test");
         s.string_token();
-        assert_eq!(s.current, 6);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.line(), 1);
-        assert_eq!(t.lexeme(), "\"test\"");
-        if let TokenType::String(st) = t.token_type() {
-            assert_eq!(st.literal(), "test");
-        }
-        else {
-            panic!("Should be StringToken.");
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 0), CodePoint::new(0, 6)));
+        match t {
+            Token::String(st) => {
+                assert_eq!(st.literal(), "test");
+            }
+            _ => panic!("Should be StringToken.")
         }
         s.init();
         s.string_token();
         assert_eq!(s.current, 12);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 1);
-        if let Error::UnclosedString(l) = s.errors[0] {
-            assert_eq!(l, 1);
-        }
-        else {
-            panic!("Should be UnclosedString error.");
+        match s.errors[0] {
+            Error::ExpectCharacterNotFound(ref ec, cp) => {
+                assert_eq!(ec, "\"");
+                assert_eq!(cp, CodePoint::new(1, 5));
+            }
+            _ => panic!("Should be UnclosedString error.")
         }
     }
 
@@ -654,56 +678,53 @@ mod tests {
     fn test_number_token() {
         let mut s = Scanner::new("123. 10.01");
         s.number_token();
-        assert_eq!(s.current, 3);
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.line(), 1);
-        assert_eq!(t.lexeme(), "123");
-        if let TokenType::Number(nt) = t.token_type() {
-            assert_eq!(nt.literal(), 123.0);
-        }
-        else {
-            panic!("Should be NumberToken.");
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 0), CodePoint::new(0, 3)));
+        match t {
+            Token::Number(nt) => {
+                assert_eq!(nt.literal(), 123.0);
+            }
+            _ => panic!("Should be NumberToken.")
         }
         s.advance();
         s.init();
         s.number_token();
-        assert_eq!(s.current, 10);
         assert_eq!(s.tokens.len(), 2);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[1];
-        assert_eq!(t.line(), 1);
-        assert_eq!(t.lexeme(), "10.01");
-        if let TokenType::Number(nt) = t.token_type() {
-            assert_eq!(nt.literal(), 10.01);
-        }
-        else {
-            panic!("Should be NumberToken.");
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 5), CodePoint::new(0, 10)));
+        match t {
+            Token::Number(nt) => {
+                assert_eq!(nt.literal(), 10.01);
+            }
+            _ => panic!("Should be NumberToken.")
         }
     }
 
     #[test]
     fn test_ident_or_keyword_token() {
-        let mut s = Scanner::new("if\n\relse");
+        let mut s = Scanner::new("if\r\nelse");
         s.ident_or_keyword_token();
         s.init();
         s.ident_or_keyword_token();
-        assert_eq!(s.current, 8);
         assert_eq!(s.tokens.len(), 2);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.line(), 1);
-        assert_eq!(t.lexeme(), "if");
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::If) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 0), CodePoint::new(0, 2)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::If);
+            }
             _ => panic!("Should be IfToken.")
         }
         let t = &s.tokens[1];
-        assert_eq!(t.line(), 2);
-        assert_eq!(t.lexeme(), "else");
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::Else) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(1, 0), CodePoint::new(1, 4)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Else);
+            }
             _ => panic!("Should be ElseToken.")
         }
     }
@@ -711,64 +732,84 @@ mod tests {
     #[test]
     fn test_scan() {
         let (tokens, errors) = Scanner::scan(
-            "fun hello() {
-                print \"Hello world!\"
-            }"
+            concat!(
+                "fun hello() {\r\n",
+                "    print \"Hello world!\"\r\n",
+                "}\r\n",
+            )
         );
         assert_eq!(tokens.len(), 9);
         assert_eq!(errors.len(), 0);
         let t = &tokens[0];
-        assert_eq!(t.line(), 1);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::Fun) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 0), CodePoint::new(0, 3)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Fun);
+            }
             _ => panic!("Should be Fun.")
         }
         let t = &tokens[1];
-        assert_eq!(t.line(), 1);
-        match t.token_type() {
-            TokenType::Ident(_) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 4), CodePoint::new(0, 9)));
+        match t {
+            Token::Identifier(it) => {
+                assert_eq!(it.name(), "hello");
+            }
             _ => panic!("Should be Ident.")
         }
         let t = &tokens[2];
-        assert_eq!(t.line(), 1);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::LeftParen) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 9), CodePoint::new(0, 10)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::LeftParen);
+            }
             _ => panic!("Should be LeftParen.")
         }
         let t = &tokens[3];
-        assert_eq!(t.line(), 1);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::RightParen) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 10), CodePoint::new(0, 11)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::RightParen);
+            }
             _ => panic!("Should be RightParen.")
         }
         let t = &tokens[4];
-        assert_eq!(t.line(), 1);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::LeftBrace) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(0, 12), CodePoint::new(0, 13)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::LeftBrace);
+            }
             _ => panic!("Should be LeftBrace.")
         }
         let t = &tokens[5];
-        assert_eq!(t.line(), 2);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::Print) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(1, 0), CodePoint::new(1, 5)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Print);
+            }
             _ => panic!("Should be Print.")
         }
         let t = &tokens[6];
-        assert_eq!(t.line(), 2);
-        match t.token_type() {
-            TokenType::String(_) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(1, 6), CodePoint::new(1, 20)));
+        match t {
+            Token::String(st) => {
+                assert_eq!(st.literal(), "Hello world!");
+            }
             _ => panic!("Should be String.")
         }
         let t = &tokens[7];
-        assert_eq!(t.line(), 3);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::RightBrace) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(2, 0), CodePoint::new(2, 1)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::RightBrace);
+            }
             _ => panic!("Should be RightBrace.")
         }
         let t = &tokens[8];
-        assert_eq!(t.line(), 3);
-        match t.token_type() {
-            TokenType::Simple(SimpleToken::Eof) => { }
+        assert_eq!(t.span(), Span::new(CodePoint::new(3, 0), CodePoint::new(3, 0)));
+        match t {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Eof);
+            }
             _ => panic!("Should be Eof.")
         }
     }
@@ -814,5 +855,72 @@ mod tests {
         assert!(is_alphanumeric("_"));
         assert!(!is_alphanumeric("@"));
         assert!(!is_alphanumeric("00"));
+    }
+
+    #[test]
+    fn test_unexpected_character_error_print() {
+        let src = "@\r\n";
+        let src_lines: Vec<&str> = src.lines().collect();
+        let (tokens, errors) = Scanner::scan(src);
+
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(
+            tokens[0].span(),
+            Span::new(
+                CodePoint::new(1, 0),
+                CodePoint::new(1, 0),
+            ),
+        );
+        match tokens[0] {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Eof);
+            }
+            _ => panic!("Should be Eof.")
+        }
+
+        assert_eq!(errors.len(), 1);
+        assert_eq!(
+            errors[0].print(&src_lines),
+            concat!(
+                "Error: Unexpected character: @\r\n",
+                "1: @\r\n",
+                "   ^\r\n",
+            ),
+        );
+    }
+
+    #[test]
+    fn test_expect_character_not_found_error_print() {
+        let src = concat!(
+            "\"hello\r\n",
+            "    world!\r\n",
+        );
+        let src_lines: Vec<&str> = src.lines().collect();
+        let (tokens, errors) = Scanner::scan(src);
+
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(
+            tokens[0].span(),
+            Span::new(
+                CodePoint::new(2, 0),
+                CodePoint::new(2, 0),
+            ),
+        );
+        match tokens[0] {
+            Token::Simple(st) => {
+                assert_eq!(st.variant(), SimpleTokenEnum::Eof);
+            }
+            _ => panic!("Should be Eof.")
+        }
+
+        assert_eq!(errors.len(), 1);
+        assert_eq!(
+            errors[0].print(&src_lines),
+            concat!(
+                "Error: Expect character: \" but not found.\r\n",
+                "3: \r\n",
+                "   ^\r\n",
+            ),
+        );
     }
 }

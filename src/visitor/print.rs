@@ -1,27 +1,36 @@
-use crate::scan::token::{
+use crate::scan::token::simple::{
     TRUE_LEXEME,
     FALSE_LEXEME,
     NIL_LEXEME,
     VAR_LEXEME,
     PRINT_LEXEME,
 };
-use crate::parse::expr::{
-    UnaryExpression,
+use crate::parse::expr::assign::AssignExpression;
+use crate::parse::expr::binary::{
     BinaryExpression,
+    BinaryExpressionEnum,
+};
+use crate::parse::expr::grouping::GroupingExpression;
+use crate::parse::expr::literal::{
     LiteralExpression,
-    GroupingExpression,
-    VariableExpression,
-    AssignExpression,
+    LiteralExpressionEnum,
+};
+use crate::parse::expr::logical::{
     LogicalExpression,
+    LogicalExpressionEnum,
 };
-use crate::parse::stmt::{
-    VarDeclareStatement,
-    BlockStatement,
-    IfStatement,
-    ExpressionStatement,
-    PrintStatement,
-    WhileStatement,
+use crate::parse::expr::unary::{
+    UnaryExpression,
+    UnaryExpressionEnum,
 };
+use crate::parse::expr::variable::VariableExpression;
+use crate::parse::stmt::block::BlockStatement;
+use crate::parse::stmt::expression::ExpressionStatement;
+use crate::parse::stmt::r#for::ForStatement;
+use crate::parse::stmt::ifelse::IfStatement;
+use crate::parse::stmt::print::PrintStatement;
+use crate::parse::stmt::var_declare::VarDeclareStatement;
+use crate::parse::stmt::r#while::WhileStatement;
 use super::{
     Visit,
     Accept,
@@ -31,7 +40,7 @@ pub struct Print;
 
 pub trait Printable
     where
-    Self: for<'a> Accept<'a, Print, String>
+    Self: for<'this> Accept<'this, Print, String>
 {
     fn print(&self) -> String {
         self.accept(Print)
@@ -40,122 +49,162 @@ pub trait Printable
 
 impl<T> Printable for T
     where
-    T: for<'a> Accept<'a, Print, String>
+    T: for<'this> Accept<'this, Print, String>
 { }
 
-impl Visit<'_, UnaryExpression<'_>, String> for Print {
-    fn visit(e: &UnaryExpression<'_>) -> String {
-        match e {
-            UnaryExpression::Negative(e) => format!("(- {})", e.print()),
-            UnaryExpression::Not(e) => format!("(! {})", e.print()),
+impl Visit<'_, UnaryExpression, String> for Print {
+    fn visit(e: &UnaryExpression) -> String {
+        match e.variant() {
+            UnaryExpressionEnum::Negative => format!("(- {})", e.rhs().print()),
+            UnaryExpressionEnum::Not => format!("(! {})", e.rhs().print()),
         }
     }
 }
 
-impl Visit<'_, BinaryExpression<'_, '_>, String> for Print {
-    fn visit(e: &BinaryExpression<'_, '_>) -> String {
-        match e {
-            BinaryExpression::Equal(l, r) => format!("(== {} {})", l.print(), r.print()),
-            BinaryExpression::NotEqual(l, r) => format!("(!= {} {})", l.print(), r.print()),
-            BinaryExpression::Less(l, r) => format!("(< {} {})", l.print(), r.print()),
-            BinaryExpression::LessEqual(l, r) => format!("(<= {} {})", l.print(), r.print()),
-            BinaryExpression::Greater(l, r) => format!("(> {} {})", l.print(), r.print()),
-            BinaryExpression::GreaterEqual(l, r) => format!("(>= {} {})", l.print(), r.print()),
-            BinaryExpression::Plus(l, r) => format!("(+ {} {})", l.print(), r.print()),
-            BinaryExpression::Minus(l, r) => format!("(- {} {})", l.print(), r.print()),
-            BinaryExpression::Multiply(l, r) => format!("(* {} {})", l.print(), r.print()),
-            BinaryExpression::Divide(l, r) => format!("(/ {} {})", l.print(), r.print()),
+impl Visit<'_, BinaryExpression, String> for Print {
+    fn visit(e: &BinaryExpression) -> String {
+        match e.variant() {
+            BinaryExpressionEnum::Equal => format!("(== {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::NotEqual => format!("(!= {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::Less => format!("(< {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::LessEqual => format!("(<= {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::Greater => format!("(> {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::GreaterEqual => format!("(>= {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::Plus => format!("(+ {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::Minus => format!("(- {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::Multiply => format!("(* {} {})", e.lhs().print(), e.rhs().print()),
+            BinaryExpressionEnum::Divide => format!("(/ {} {})", e.lhs().print(), e.rhs().print()),
         }
     }
 }
 
-impl Visit<'_, LiteralExpression<'_>, String> for Print {
-    fn visit(e: &LiteralExpression<'_>) -> String {
-        match e {
-            LiteralExpression::True => TRUE_LEXEME.to_string(),
-            LiteralExpression::False => FALSE_LEXEME.to_string(),
-            LiteralExpression::Nil => NIL_LEXEME.to_string(),
-            LiteralExpression::Number(t) => t.lexeme().to_string(),
-            LiteralExpression::String(t) => t.lexeme().to_string(),
+impl Visit<'_, LiteralExpression, String> for Print {
+    fn visit(e: &LiteralExpression) -> String {
+        match e.variant() {
+            LiteralExpressionEnum::True => TRUE_LEXEME.to_string(),
+            LiteralExpressionEnum::False => FALSE_LEXEME.to_string(),
+            LiteralExpressionEnum::Nil => NIL_LEXEME.to_string(),
+            LiteralExpressionEnum::Number(t) => t.lexeme().to_string(),
+            LiteralExpressionEnum::String(t) => t.lexeme().to_string(),
         }
     }
 }
 
-impl Visit<'_, GroupingExpression<'_>, String> for Print {
+impl Visit<'_, GroupingExpression, String> for Print {
     fn visit(e: &GroupingExpression) -> String {
-        format!("(group {})", e.0.print())
+        format!("(group {})", e.expr().print())
     }
 }
 
-impl Visit<'_, VariableExpression<'_>, String> for Print {
+impl Visit<'_, VariableExpression, String> for Print {
     fn visit(e: &VariableExpression) -> String {
-        e.0.lexeme().to_string()
+        e.name().to_string()
     }
 }
 
-impl Visit<'_, AssignExpression<'_>, String> for Print {
+impl Visit<'_, AssignExpression, String> for Print {
     fn visit(e: &AssignExpression) -> String {
-        format!("(= {} {})", e.name.lexeme(), e.value.print())
+        format!("(= {} {})", e.name(), e.value().print())
     }
 }
 
-impl Visit<'_, LogicalExpression<'_, '_>, String> for Print {
+impl Visit<'_, LogicalExpression, String> for Print {
     fn visit(e: &LogicalExpression) -> String {
-        match e {
-            LogicalExpression::And(lhs, rhs) => {
-                format!("(and {} {})", lhs.print(), rhs.print())
+        match e.variant() {
+            LogicalExpressionEnum::And => {
+                format!("(and {} {})", e.lhs().print(), e.rhs().print())
             }
-            LogicalExpression::Or(lhs, rhs) => {
-                format!("(or {} {})", lhs.print(), rhs.print())
+            LogicalExpressionEnum::Or => {
+                format!("(or {} {})", e.lhs().print(), e.rhs().print())
             }
         }
     }
 }
 
-impl Visit<'_, VarDeclareStatement<'_>, String> for Print {
-    fn visit(s: &VarDeclareStatement) -> String {
-        if let Some(i) = s.initializer.as_ref() {
-            format!("{} {} = {};", VAR_LEXEME, s.name.lexeme(), i.print())
-        }
-        else {
-            format!("{} {};", VAR_LEXEME, s.name.lexeme())
-        }
-    }
-}
-
-impl Visit<'_, BlockStatement<'_>, String> for Print {
+impl Visit<'_, BlockStatement, String> for Print {
     fn visit(s: &BlockStatement) -> String {
-        let strs = s.0.iter().map(|s| s.print()).collect::<Vec<String>>();
+        let strs = s.stmts().iter().map(|s| s.print()).collect::<Vec<String>>();
         format!("{{{}}}", strs.join(" "))
     }
 }
 
-impl Visit<'_, IfStatement<'_>, String> for Print {
-    fn visit(s: &IfStatement<'_>) -> String {
-        if let Some(else_stmt) = s.else_stmt.as_ref() {
-            format!("if {} {} else {}", s.condition.print(), s.then_stmt.print(), else_stmt.print())
+impl Visit<'_, ExpressionStatement, String> for Print {
+    fn visit(s: &ExpressionStatement) -> String {
+        format!("{};", s.expression().print())
+    }
+}
+
+impl Visit<'_, ForStatement, String> for Print {
+    fn visit(s: &ForStatement) -> String {
+        let mut inparen;
+
+        if let Some(initializer) = s.initializer() {
+            inparen = format!("{}", initializer.print());
         }
         else {
-            format!("if {} {}", s.condition.print(), s.then_stmt.print())
+            inparen = ";".to_owned();
+        }
+
+        if let Some(condition) = s.condition() {
+            inparen = format!("{} {};", inparen, condition.print());
+        }
+        else {
+            inparen = format!("{};", inparen);
+        }
+
+        if let Some(increment) = s.increment() {
+            inparen = format!("{} {}", inparen, increment.print());
+        }
+
+        return format!("for ({}) {}", inparen, s.body().print());
+    }
+}
+
+impl Visit<'_, IfStatement, String> for Print {
+    fn visit(s: &IfStatement) -> String {
+        if let Some(else_stmt) = s.else_stmt() {
+            format!(
+                "if {} {} else {}",
+                s.condition().print(),
+                s.then_stmt().print(),
+                else_stmt.print()
+            )
+        }
+        else {
+            format!(
+                "if {} {}",
+                s.condition().print(),
+                s.then_stmt().print()
+            )
         }
     }
 }
 
-impl Visit<'_, ExpressionStatement<'_>, String> for Print {
-    fn visit(s: &ExpressionStatement) -> String {
-        format!("{};", s.0.print())
-    }
-}
-
-impl Visit<'_, PrintStatement<'_>, String> for Print {
+impl Visit<'_, PrintStatement, String> for Print {
     fn visit(s: &PrintStatement) -> String {
-        format!("{} {};", PRINT_LEXEME, s.0.print())
+        format!("{} {};", PRINT_LEXEME, s.value().print())
     }
 }
 
-impl Visit<'_, WhileStatement<'_>, String> for Print {
+impl Visit<'_, VarDeclareStatement, String> for Print {
+    fn visit(s: &VarDeclareStatement) -> String {
+        if let Some(i) = s.initializer() {
+            format!("{} {} = {};", VAR_LEXEME, s.name(), i.print())
+        }
+        else {
+            format!("{} {};", VAR_LEXEME, s.name())
+        }
+    }
+}
+
+impl Visit<'_, WhileStatement, String> for Print {
     fn visit(s: &WhileStatement) -> String {
-        format!("while {} {}", s.condition.print(), s.body.print())
+        if let Some(condition) = s.condition() {
+            format!("while {} {}", condition.print(), s.body().print())
+        }
+        else {
+            format!("while true {}", s.body().print())
+        }
     }
 }
 

@@ -1,40 +1,30 @@
+use crate::scan::span::Span;
 use crate::visitor::{
     Printable,
     Executable,
 };
 
-mod var_declare;
-pub use var_declare::VarDeclareStatement;
+pub mod block;
 
-mod block;
-pub use block::BlockStatement;
+pub mod expression;
 
-mod ifelse;
-pub use ifelse::IfStatement;
+pub mod r#for;
 
-mod expression;
-pub use expression::ExpressionStatement;
+pub mod ifelse;
 
-mod print;
-pub use print::PrintStatement;
+pub mod print;
 
-mod r#while;
-pub use r#while::WhileStatement;
+pub mod var_declare;
 
-pub type Statement<'src> = Box<dyn Stmt<'src>>;
+pub mod r#while;
 
-pub trait Stmt<'src>
+pub type Statement = Box<dyn Stmt>;
+
+pub trait Stmt
     where
-    Self: 'src
-        + Printable
-        + Executable<'src>
+    Self: Printable
+        + Executable
         + std::fmt::Debug
-{ }
-
-impl<'src, T> Stmt<'src> for T
-    where
-    T: 'src
-        + Printable
-        + Executable<'src>
-        + std::fmt::Debug
-{ }
+{
+    fn span(&self) -> Span;
+}

@@ -1,95 +1,59 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::scope::{
-    Scope,
-    Error as ScopeError,
-};
+use crate::scope::Scope;
 use crate::value::Value;
-use crate::parse::stmt::{
-    VarDeclareStatement,
-    BlockStatement,
-    IfStatement,
-    ExpressionStatement,
-    PrintStatement,
-    WhileStatement,
-};
+use crate::scan::span::Span;
+use crate::parse::stmt::Stmt;
+use crate::parse::stmt::block::BlockStatement;
+use crate::parse::stmt::expression::ExpressionStatement;
+use crate::parse::stmt::r#for::ForStatement;
+use crate::parse::stmt::ifelse::IfStatement;
+use crate::parse::stmt::print::PrintStatement;
+use crate::parse::stmt::var_declare::VarDeclareStatement;
+use crate::parse::stmt::r#while::WhileStatement;
 use crate::visitor::evaluate::Error as EvaluateError;
 use super::{
     ScopeVisit,
     ScopeAccept,
 };
 
-#[derive(Debug)]
-pub enum Error<'expr, 'src> {
-    EvaluateError(EvaluateError<'expr, 'src>),
-    DeclarationError(ScopeError<'src>)
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    EvaluateError(EvaluateError),
+    MultipleDeclaration(Span),
 }
 
-pub type ExecuteResult<'expr, 'src> = std::result::Result<(), Error<'expr, 'src>>;
+pub type ExecuteResult = std::result::Result<(), Error>;
 
 pub struct Execute;
 
-pub trait Executable<'src>
+pub trait Executable
     where
-    Self: for<'this> ScopeAccept<'this, Execute, ExecuteResult<'this, 'src>>
+    Self: for<'this> ScopeAccept<'this, Execute, ExecuteResult>
 {
-    fn execute<'this>(&'this self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'this, 'src> {
+    fn execute<'this>(&'this self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         self.accept(Execute, scope)
     }
 }
 
-impl<'src, T> Executable<'src> for T
+impl<T> Executable for T
     where
-    T: for<'this> ScopeAccept<'this, Execute, ExecuteResult<'this, 'src>>
+    T: for<'this> ScopeAccept<'this, Execute, ExecuteResult>
 { }
 
-impl<'that, 'src> ScopeVisit<'that, VarDeclareStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
-    fn visit(stmt: &'that VarDeclareStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
-        let mut value = Value::Nil;
-        if let Some(i) = stmt.initializer.as_ref() {
-            match i.evaluate(scope) {
-                Ok(v) => value = v,
-                Err(e) => {
-                    return Err(Error::EvaluateError(e));
-                }
-            }
-        };
-        if let Err(e) = scope.borrow_mut().declare(stmt.name.lexeme(), value) {
-            return Err(Error::DeclarationError(e));
-        };
-        Ok(())
-    }
-}
-
-impl<'that, 'src> ScopeVisit<'that, BlockStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
-    fn visit(stmt: &'that BlockStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
+impl<'that> ScopeVisit<'that, BlockStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that BlockStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let scope = Scope::new_child(scope).as_rc();
-        for stmt in &stmt.0 {
+        for stmt in stmt.stmts() {
             stmt.execute(&scope)?;
         }
         Ok(())
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, IfStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
-    fn visit(stmt: &'that IfStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
-        let condition = stmt.condition.evaluate(scope)
-            .map(|v| v.is_truthy())
-            .map_err(|e| Error::EvaluateError(e))?;
-        let scope = Scope::new_child(scope).as_rc();
-        if condition {
-            stmt.then_stmt.execute(&scope)?;
-        }
-        else if let Some(else_stmt) = stmt.else_stmt.as_ref() {
-            else_stmt.execute(&scope)?;
-        }
-        return Ok(())
-    }
-}
-
-impl<'that, 'src> ScopeVisit<'that, ExpressionStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
-    fn visit(stmt: &'that ExpressionStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
-        if let Err(e) = stmt.0.evaluate(scope) {
+impl<'that> ScopeVisit<'that, ExpressionStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that ExpressionStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        if let Err(e) = stmt.expression().evaluate(scope) {
             Err(Error::EvaluateError(e))
         }
         else {
@@ -98,9 +62,60 @@ impl<'that, 'src> ScopeVisit<'that, ExpressionStatement<'src>, ExecuteResult<'th
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, PrintStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
-    fn visit(stmt: &'that PrintStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
-        match stmt.0.evaluate(scope) {
+impl<'that> ScopeVisit<'that, ForStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that ForStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        let scope = Scope::new_child(scope).as_rc();
+
+        if let Some(initializer) = stmt.initializer() {
+            initializer.execute(&scope)?;
+        }
+
+        loop {
+            if let Some(condition) = stmt.condition() {
+                match condition.evaluate(&scope) {
+                    Ok(v) => {
+                        if !v.is_truthy() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        return Err(Error::EvaluateError(e));
+                    }
+                }
+            }
+
+            stmt.body().execute(&scope)?;
+
+            if let Some(increment) = stmt.increment() {
+                if let Err(e) = increment.evaluate(&scope) {
+                    return Err(Error::EvaluateError(e));
+                }
+            }
+        }
+
+        return Ok(());
+    }
+}
+
+impl<'that> ScopeVisit<'that, IfStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that IfStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        let condition = stmt.condition().evaluate(scope)
+            .map(|v| v.is_truthy())
+            .map_err(|e| Error::EvaluateError(e))?;
+        let scope = Scope::new_child(scope).as_rc();
+        if condition {
+            stmt.then_stmt().execute(&scope)?;
+        }
+        else if let Some(else_stmt) = stmt.else_stmt() {
+            else_stmt.execute(&scope)?;
+        }
+        return Ok(())
+    }
+}
+
+impl<'that> ScopeVisit<'that, PrintStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that PrintStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        match stmt.value().evaluate(scope) {
             Ok(v) => {
                 println!("{}", v);
                 Ok(())
@@ -112,11 +127,43 @@ impl<'that, 'src> ScopeVisit<'that, PrintStatement<'src>, ExecuteResult<'that, '
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, WhileStatement<'src>, ExecuteResult<'that, 'src>> for Execute {
-    fn visit(stmt: &'that WhileStatement<'src>, scope: &Rc<RefCell<Scope>>) -> ExecuteResult<'that, 'src> {
-        while stmt.condition.evaluate(scope).map(|v| v.is_truthy()).map_err(|e| Error::EvaluateError(e))? {
-            stmt.body.execute(&scope)?;
+impl<'that> ScopeVisit<'that, VarDeclareStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that VarDeclareStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        let mut value = Value::Nil;
+        if let Some(i) = stmt.initializer() {
+            match i.evaluate(scope) {
+                Ok(v) => value = v,
+                Err(e) => {
+                    return Err(Error::EvaluateError(e));
+                }
+            }
+        };
+        if scope.borrow_mut().declare(stmt.name(), value).is_err() {
+            return Err(Error::MultipleDeclaration(stmt.span()))
         }
+        Ok(())
+    }
+}
+
+impl<'that> ScopeVisit<'that, WhileStatement, ExecuteResult> for Execute {
+    fn visit(stmt: &'that WhileStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        loop {
+            if let Some(condition) = stmt.condition() {
+                match condition.evaluate(scope) {
+                    Ok(v) => {
+                        if !v.is_truthy() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        return Err(Error::EvaluateError(e));
+                    }
+                }
+            }
+
+            stmt.body().execute(scope)?;
+        }
+
         return Ok(());
     }
 }
@@ -125,10 +172,22 @@ impl<'that, 'src> ScopeVisit<'that, WhileStatement<'src>, ExecuteResult<'that, '
 mod tests {
     use crate::value::Value;
     use crate::scope::Scope;
+    use crate::scan::span::{
+        Span,
+        CodePoint,
+    };
     use crate::visitor::{
         Scannable,
         Parsable,
     };
+    use super::{
+        Error,
+        EvaluateError,
+    };
+
+    fn span(sl: usize, sc: usize, el: usize, ec: usize) -> Span {
+        Span::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
+    }
 
     #[test]
     fn test_var_declare() {
@@ -157,8 +216,8 @@ mod tests {
         let stmt = &tokens.parse().0[0];
         assert_eq!(stmt.execute(&scope).is_ok(), true);
         assert_eq!(
-            format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "DeclarationError(MultipleDeclaration(\"foo\"))"
+            stmt.execute(&scope).unwrap_err(),
+            Error::MultipleDeclaration(span(0, 0, 0, 8))
         );
     }
 
@@ -168,8 +227,10 @@ mod tests {
         let tokens = "var foo = bar;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(
-            format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveError(bar, NotDeclared(\"bar\")))"
+            stmt.execute(&scope).unwrap_err(),
+            Error::EvaluateError(
+                EvaluateError::VariableNotDeclared(span(0, 10, 0, 13))
+            )
         );
     }
 
@@ -227,9 +288,11 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(
-            format!("{:?}", stmts[0].execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveError(bar, NotDeclared(\"bar\")))",
-        );
+            stmts[0].execute(&scope).unwrap_err(),
+            Error::EvaluateError(
+                EvaluateError::VariableNotDeclared(span(3, 6, 3, 9))
+            )
+    )
     }
 
     #[test]
@@ -281,11 +344,12 @@ mod tests {
     #[test]
     fn test_expression_evaluate_error() {
         let scope = Scope::new().as_rc();
-        let tokens = "foo;".scan().0;
-        let stmt = &tokens.parse().0[0];
+        let stmt = &"foo;".scan().0.parse().0[0];
         assert_eq!(
-            format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveError(foo, NotDeclared(\"foo\")))"
+            stmt.execute(&scope).unwrap_err(),
+            Error::EvaluateError(
+                EvaluateError::VariableNotDeclared(span(0, 0, 0, 3))
+            )
         );
     }
 
@@ -300,11 +364,10 @@ mod tests {
     #[test]
     fn test_print_evaluate_error() {
         let scope = Scope::new().as_rc();
-        let tokens = "print foo;".scan().0;
-        let stmt = &tokens.parse().0[0];
+        let stmt = &"print foo;".scan().0.parse().0[0];
         assert_eq!(
-            format!("{:?}", stmt.execute(&scope).unwrap_err()),
-            "EvaluateError(VariableResolveError(foo, NotDeclared(\"foo\")))"
+            stmt.execute(&scope).unwrap_err(),
+            Error::EvaluateError(EvaluateError::VariableNotDeclared(span(0, 6, 0, 9)))
         );
     }
 

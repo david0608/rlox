@@ -1,8 +1,9 @@
 use std::io::Write;
 
 mod value;
-mod scope;
-mod scan;
+mod error;
+pub mod scope;
+pub mod scan;
 mod parse;
 mod visitor;
 

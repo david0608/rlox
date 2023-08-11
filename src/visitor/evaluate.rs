@@ -5,85 +5,101 @@ use crate::scope::{
     Scope,
     Error as ScopeError,
 };
-use crate::parse::expr::{
-    UnaryExpression,
+use crate::scan::span::Span;
+use crate::parse::expr::Expr;
+use crate::parse::expr::assign::AssignExpression;
+use crate::parse::expr::binary::{
     BinaryExpression,
-    LiteralExpression,
-    GroupingExpression,
-    VariableExpression,
-    AssignExpression,
-    LogicalExpression,
+    BinaryExpressionEnum,
 };
+use crate::parse::expr::grouping::GroupingExpression;
+use crate::parse::expr::literal::{
+    LiteralExpression,
+    LiteralExpressionEnum,
+};
+use crate::parse::expr::logical::{
+    LogicalExpression,
+    LogicalExpressionEnum,
+};
+use crate::parse::expr::unary::{
+    UnaryExpression,
+    UnaryExpressionEnum,
+};
+use crate::parse::expr::variable::VariableExpression;
 use super::{
     ScopeVisit,
     ScopeAccept,
 };
 
-#[derive(Debug)]
-pub enum Error<'expr, 'src> {
-    InvalidNegative(&'expr UnaryExpression<'src>),
-    InvalidCompare(&'expr BinaryExpression<'src, 'src>),
-    InvalidArithmetic(&'expr BinaryExpression<'src, 'src>),
-    DivideByZero(&'expr BinaryExpression<'src, 'src>),
-    VariableResolveError(&'expr VariableExpression<'src>, ScopeError<'src>),
-    AssignmentError(&'expr AssignExpression<'src>, ScopeError<'src>),
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    InvalidNegate(Span, Value),
+    InvalidCompare(Span, Value, Value),
+    InvalidArithmetic(Span, Value, Value),
+    DivideByZero(Span, Value, Value),
+    VariableNotDeclared(Span),
+    GlobalVariableMutation(Span),
+    Unknown(Span),
 }
 
-pub type EvaluateResult<'expr, 'src> = std::result::Result<Value, Error<'expr, 'src>>;
+pub type EvaluateResult = std::result::Result<Value, Error>;
 
 pub struct Evaluate;
 
-pub trait Evaluable<'src>
+pub trait Evaluable
     where
-    Self: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult<'this, 'src>>
+    Self: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult>
 {
-    fn evaluate<'this>(&'this self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult<'this, 'src> {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
         self.accept(Evaluate, scope)
     }
 }
 
-impl<'src, T> Evaluable<'src> for T
+impl<T> Evaluable for T
     where
-    T: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult<'this, 'src>>
+    T: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult>
 { }
 
-impl<'that, 'src> ScopeVisit<'that, UnaryExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that UnaryExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        match e {
-            UnaryExpression::Negative(rhs) => {
-                match rhs.evaluate(s)? {
+impl<'that> ScopeVisit<'that, UnaryExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that UnaryExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        match e.variant() {
+            UnaryExpressionEnum::Negative => {
+                let rhs = e.rhs().evaluate(s)?;
+                match rhs {
                     Value::Nil => {
-                        Err(Error::InvalidNegative(e))
+                        Err(Error::InvalidNegate(e.span(), rhs))
                     }
                     Value::Bool(_) => {
-                        Err(Error::InvalidNegative(e))
+                        Err(Error::InvalidNegate(e.span(), rhs))
                     }
-                    Value::Number(v) => {
-                        Ok(Value::Number(-v))
+                    Value::Number(rhs) => {
+                        Ok(Value::Number(-rhs))
                     }
                     Value::String(_) => {
-                        Err(Error::InvalidNegative(e))
+                        Err(Error::InvalidNegate(e.span(), rhs))
                     }
                 }
             }
-            UnaryExpression::Not(rhs) => {
-                Ok(Value::Bool(!rhs.evaluate(s)?.is_truthy()))
+            UnaryExpressionEnum::Not => {
+                Ok(Value::Bool(!e.rhs().evaluate(s)?.is_truthy()))
             }
         }
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that BinaryExpression<'src, 'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        match e {
-            BinaryExpression::Equal(lhs, rhs) => {
-                Ok(Value::Bool(lhs.evaluate(s)? == rhs.evaluate(s)?))
+impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that BinaryExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        let lhs = e.lhs().evaluate(s)?;
+        let rhs = e.rhs().evaluate(s)?;
+        match e.variant() {
+            BinaryExpressionEnum::Equal => {
+                Ok(Value::Bool(lhs == rhs))
             }
-            BinaryExpression::NotEqual(lhs, rhs) => {
-                Ok(Value::Bool(lhs.evaluate(s)? != rhs.evaluate(s)?))
+            BinaryExpressionEnum::NotEqual => {
+                Ok(Value::Bool(lhs != rhs))
             }
-            BinaryExpression::Less(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::Less => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l < r))
                     }
@@ -91,12 +107,12 @@ impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult
                         Ok(Value::Bool(l < r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e))
+                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::LessEqual(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::LessEqual => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l <= r))
                     }
@@ -104,12 +120,12 @@ impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult
                         Ok(Value::Bool(l <= r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e))
+                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::Greater(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::Greater => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l > r))
                     }
@@ -117,12 +133,12 @@ impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult
                         Ok(Value::Bool(l > r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e))
+                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::GreaterEqual(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::GreaterEqual => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Bool(l >= r))
                     }
@@ -130,55 +146,55 @@ impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult
                         Ok(Value::Bool(l >= r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e))
+                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::Plus(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::Plus => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(l + r))
                     }
                     (Value::String(l), Value::String(r)) => {
-                        Ok(Value::String(l + &r))
+                        Ok(Value::String(l.to_owned() + r))
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e))
+                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::Minus(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::Minus => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(l - r))
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e))
+                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::Multiply(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::Multiply => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         Ok(Value::Number(l * r))
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e))
+                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
                     }
                 }
             }
-            BinaryExpression::Divide(lhs, rhs) => {
-                match (lhs.evaluate(s)?, rhs.evaluate(s)?) {
+            BinaryExpressionEnum::Divide => {
+                match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
-                        if r == 0.0 {
-                            Err(Error::DivideByZero(e))
+                        if *r == 0.0 {
+                            Err(Error::DivideByZero(e.span(), lhs, rhs))
                         }
                         else {
                             Ok(Value::Number(l / r))
                         }
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e))
+                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
                     }
                 }
             }
@@ -186,60 +202,74 @@ impl<'that, 'src> ScopeVisit<'that, BinaryExpression<'src, 'src>, EvaluateResult
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, LiteralExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that LiteralExpression<'src>, _s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        match e {
-            LiteralExpression::Nil => Ok(Value::Nil),
-            LiteralExpression::True => Ok(Value::Bool(true)),
-            LiteralExpression::False => Ok(Value::Bool(false)),
-            LiteralExpression::Number(t) => Ok(Value::Number(t.literal())),
-            LiteralExpression::String(t) => Ok(Value::String(t.literal().to_string())),
+impl<'that> ScopeVisit<'that, LiteralExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that LiteralExpression, _s: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        match e.variant() {
+            LiteralExpressionEnum::Nil => Ok(Value::Nil),
+            LiteralExpressionEnum::True => Ok(Value::Bool(true)),
+            LiteralExpressionEnum::False => Ok(Value::Bool(false)),
+            LiteralExpressionEnum::Number(t) => Ok(Value::Number(t.literal())),
+            LiteralExpressionEnum::String(t) => Ok(Value::String(t.literal().to_string())),
         }
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, GroupingExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that GroupingExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        e.0.evaluate(s)
+impl<'that> ScopeVisit<'that, GroupingExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that GroupingExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        e.expr().evaluate(s)
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, VariableExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that VariableExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        s.borrow().get_value(e.0.lexeme())
-            .map_err(|err| Error::VariableResolveError(e, err))
+impl<'that> ScopeVisit<'that, VariableExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that VariableExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        s.borrow().get_value(e.name())
+            .map_err(|_| Error::VariableNotDeclared(e.span()))
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, AssignExpression<'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that AssignExpression<'src>, s: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        let v = e.value.evaluate(s)?;
-        if let Err(err) = s.borrow_mut().set_value(e.name.lexeme(), v.clone()) {
-            return Err(Error::AssignmentError(e, err));
-        };
-        return Ok(v);
+impl<'that> ScopeVisit<'that, AssignExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that AssignExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        let v = e.value().evaluate(s)?;
+        match s.borrow_mut().set_value(e.name(), v.clone()) {
+            Ok(_) => {
+                Ok(v)
+            }
+            Err(err) => {
+                match err {
+                    ScopeError::NotDeclared => {
+                        Err(Error::VariableNotDeclared(e.span()))
+                    }
+                    ScopeError::GlobalVariableMutationNotSupport => {
+                        Err(Error::GlobalVariableMutation(e.span()))
+                    }
+                    _ => {
+                        Err(Error::Unknown(e.span()))
+                    }
+                }
+            }
+        }
     }
 }
 
-impl<'that, 'src> ScopeVisit<'that, LogicalExpression<'src, 'src>, EvaluateResult<'that, 'src>> for Evaluate {
-    fn visit(e: &'that LogicalExpression<'src, 'src>, scope: &Rc<RefCell<Scope>>) -> EvaluateResult<'that, 'src> {
-        match e {
-            LogicalExpression::And(lhs, rhs) => {
-                let lv = lhs.evaluate(scope)?;
+impl<'that> ScopeVisit<'that, LogicalExpression, EvaluateResult> for Evaluate {
+    fn visit(e: &'that LogicalExpression, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        match e.variant() {
+            LogicalExpressionEnum::And => {
+                let lv = e.lhs().evaluate(scope)?;
                 if !lv.is_truthy() {
                     return Ok(lv);
                 }
                 else {
-                    return Ok(rhs.evaluate(scope)?);
+                    return Ok(e.rhs().evaluate(scope)?);
                 }
             }
-            LogicalExpression::Or(lhs, rhs) => {
-                let lv = lhs.evaluate(scope)?;
+            LogicalExpressionEnum::Or => {
+                let lv = e.lhs().evaluate(scope)?;
                 if lv.is_truthy() {
                     return Ok(lv);
                 }
                 else {
-                    return Ok(rhs.evaluate(scope)?);
+                    return Ok(e.rhs().evaluate(scope)?);
                 }
             }
         }
@@ -250,228 +280,329 @@ impl<'that, 'src> ScopeVisit<'that, LogicalExpression<'src, 'src>, EvaluateResul
 mod tests {
     use crate::value::Value;
     use crate::scope::Scope;
-    use crate::visitor::Scannable;
+    use crate::scan::span::{
+        Span,
+        CodePoint,
+    };
     use crate::parse::Parser;
+    use crate::visitor::Scannable;
+    use super::Error;
+
+    fn src_span(src: &str) -> Span {
+        Span::new(CodePoint::new(0, 0), CodePoint::new(0, src.len()))
+    }
+
+    macro_rules! test_value {
+        ( nil ) => {
+            Value::Nil
+        };
+
+        ( true ) => {
+            Value::Bool(true)
+        };
+
+        ( false ) => {
+            Value::Bool(false)
+        };
+
+        ( 1 ) => {
+            Value::Number(1.0)
+        };
+
+        ( 0.0 ) => {
+            Value::Number(0.0)
+        };
+
+        ( 1.0 ) => {
+            Value::Number(1.0)
+        };
+
+        ( -1.0 ) => {
+            Value::Number(-1.0)
+        };
+
+        ( 2.0 ) => {
+            Value::Number(2.0)
+        };
+
+        ( 4.0 ) => {
+            Value::Number(4.0)
+        };
+
+        ( "hello" ) => {
+            Value::String("hello".to_owned())
+        };
+
+        ( "hellohello" ) => {
+            Value::String("hellohello".to_owned())
+        };
+    }
+
+    macro_rules! ok_test_case {
+        ( $lhs:tt, $op:tt, $rhs:tt, $($val:tt)+ ) => {
+            (
+                stringify!($lhs$op$rhs),
+                Ok(test_value!($($val)+)),
+            )
+        };
+
+        ( $op:tt, $rhs:tt, $($val:tt)+ ) => {
+            (
+                stringify!($op$rhs),
+                Ok(test_value!($($val)+)),
+            )
+        };
+    }
+
+    macro_rules! err_test_case {
+        ( $lhs:tt, $op:tt, $rhs:tt, $err:tt ) => {
+            (
+                stringify!($lhs$op$rhs),
+                Err(
+                    Error::$err(
+                        src_span(stringify!($lhs$op$rhs)),
+                        test_value!($lhs),
+                        test_value!($rhs),
+                    )
+                )
+            )
+        };
+
+        ( $op:tt, $rhs:tt, $err:tt ) => {
+            (
+                stringify!($op$rhs),
+                Err(
+                    Error::$err(
+                        src_span(stringify!($op$rhs)),
+                        test_value!($rhs),
+                    )
+                )
+            )
+        };
+    }
 
     #[test]
     fn test_evaluate() {
         let scope = Scope::new().as_rc();
-        assert_eq!(scope.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
-        let tests: Vec<(&str, Result<Value, &str>)> = vec![
+        scope.borrow_mut().declare("foo", Value::Bool(true)).unwrap();
+
+        let tests: Vec<(&str, Result<Value, Error>)> = vec![
             // Unary negative operations.
-            ("-nil", Err("InvalidNegative((- nil))")),
-            ("-true", Err("InvalidNegative((- true))")),
-            ("-1", Ok(Value::Number(-1.0))),
-            ("-\"hello\"", Err("InvalidNegative((- \"hello\"))")),
+            err_test_case!(-, nil, InvalidNegate),
+            err_test_case!(-, true, InvalidNegate),
+            ok_test_case!(-, 1, -1.0),
+            err_test_case!(-, "hello", InvalidNegate),
             // Unary not operations.
-            ("!nil", Ok(Value::Bool(true))),
-            ("!true", Ok(Value::Bool(false))),
-            ("!false", Ok(Value::Bool(true))),
-            ("!1", Ok(Value::Bool(false))),
-            ("!0", Ok(Value::Bool(true))),
-            ("!\"hello\"", Ok(Value::Bool(false))),
-            ("!\"\"", Ok(Value::Bool(true))),
+            ok_test_case!(!, nil, true),
+            ok_test_case!(!, true, false),
+            ok_test_case!(!, false, true),
+            ok_test_case!(!, 1, false),
+            ok_test_case!(!, 0,true),
+            ok_test_case!(!, "hello", false),
+            ok_test_case!(!, "", true),
             // Binary equal operations.
-            ("nil == nil", Ok(Value::Bool(true))),
-            ("true == true", Ok(Value::Bool(true))),
-            ("false == false", Ok(Value::Bool(true))),
-            ("1 == 1", Ok(Value::Bool(true))),
-            ("\"hello\" == \"hello\"", Ok(Value::Bool(true))),
+            ok_test_case!(nil, ==, nil, true),
+            ok_test_case!(nil, ==, true, false),
+            ok_test_case!(true, ==, true, true),
+            ok_test_case!(false, ==, false, true),
+            ok_test_case!(false, ==, true, false),
+            ok_test_case!(1, ==, 1, true),
+            ok_test_case!(1, ==, 2, false),
+            ok_test_case!("hello", ==, "hello", true),
             // Binary not equal operations.
-            ("nil != true", Ok(Value::Bool(true))),
-            ("nil != false", Ok(Value::Bool(true))),
-            ("nil != 1", Ok(Value::Bool(true))),
-            ("nil != 0", Ok(Value::Bool(true))),
-            ("nil != \"hello\"", Ok(Value::Bool(true))),
-            ("nil != \"\"", Ok(Value::Bool(true))),
-            ("true != nil", Ok(Value::Bool(true))),
-            ("true != false", Ok(Value::Bool(true))),
-            ("true != 1", Ok(Value::Bool(true))),
-            ("true != 0", Ok(Value::Bool(true))),
-            ("true != \"hello\"", Ok(Value::Bool(true))),
-            ("true != \"\"", Ok(Value::Bool(true))),
-            ("false != nil", Ok(Value::Bool(true))),
-            ("false != true", Ok(Value::Bool(true))),
-            ("false != 1", Ok(Value::Bool(true))),
-            ("false != 0", Ok(Value::Bool(true))),
-            ("false != \"hello\"", Ok(Value::Bool(true))),
-            ("false != \"\"", Ok(Value::Bool(true))),
-            ("1 != nil", Ok(Value::Bool(true))),
-            ("1 != true", Ok(Value::Bool(true))),
-            ("1 != false", Ok(Value::Bool(true))),
-            ("1 != 0", Ok(Value::Bool(true))),
-            ("1 != \"hello\"", Ok(Value::Bool(true))),
-            ("1 != \"\"", Ok(Value::Bool(true))),
-            ("0 != nil", Ok(Value::Bool(true))),
-            ("0 != true", Ok(Value::Bool(true))),
-            ("0 != false", Ok(Value::Bool(true))),
-            ("0 != 1", Ok(Value::Bool(true))),
-            ("0 != \"hello\"", Ok(Value::Bool(true))),
-            ("0 != \"\"", Ok(Value::Bool(true))),
-            ("\"hello\" != nil", Ok(Value::Bool(true))),
-            ("\"hello\" != true", Ok(Value::Bool(true))),
-            ("\"hello\" != false", Ok(Value::Bool(true))),
-            ("\"hello\" != 1", Ok(Value::Bool(true))),
-            ("\"hello\" != 1", Ok(Value::Bool(true))),
-            ("\"hello\" != \"\"", Ok(Value::Bool(true))),
-            ("\"\" != nil", Ok(Value::Bool(true))),
-            ("\"\" != true", Ok(Value::Bool(true))),
-            ("\"\" != false", Ok(Value::Bool(true))),
-            ("\"\" != 1", Ok(Value::Bool(true))),
-            ("\"\" != 1", Ok(Value::Bool(true))),
-            ("\"\" != \"hello\"", Ok(Value::Bool(true))),
+            ok_test_case!(nil, !=, nil, false),
+            ok_test_case!(nil, !=, true, true),
+            ok_test_case!(nil, !=, false, true),
+            ok_test_case!(nil, !=, 1, true),
+            ok_test_case!(nil, !=, 0, true),
+            ok_test_case!(nil, !=, "hello", true),
+            ok_test_case!(nil, !=, "", true),
+            ok_test_case!(true, !=, nil, true),
+            ok_test_case!(true, !=, false, true),
+            ok_test_case!(true, !=, 1, true),
+            ok_test_case!(true, !=, 0, true),
+            ok_test_case!(true, !=, "hello", true),
+            ok_test_case!(true, !=, "", true),
+            ok_test_case!(false, !=, nil, true),
+            ok_test_case!(false, !=, true, true),
+            ok_test_case!(false, !=, 1, true),
+            ok_test_case!(false, !=, 0, true),
+            ok_test_case!(false, !=, "hello", true),
+            ok_test_case!(false, !=, "", true),
+            ok_test_case!(1, !=, nil, true),
+            ok_test_case!(1, !=, true, true),
+            ok_test_case!(1, !=, false, true),
+            ok_test_case!(1, !=, 0, true),
+            ok_test_case!(1, !=, "hello", true),
+            ok_test_case!(1, !=, "", true),
+            ok_test_case!(0, !=, nil, true),
+            ok_test_case!(0, !=, true, true),
+            ok_test_case!(0, !=, false, true),
+            ok_test_case!(0, !=, 1, true),
+            ok_test_case!(0, !=, "hello", true),
+            ok_test_case!(0, !=, "", true),
+            ok_test_case!("hello", !=, nil, true),
+            ok_test_case!("hello", !=, true, true),
+            ok_test_case!("hello", !=, false, true),
+            ok_test_case!("hello", !=, 1, true),
+            ok_test_case!("hello", !=, "", true),
+            ok_test_case!("", !=, nil, true),
+            ok_test_case!("", !=, true, true),
+            ok_test_case!("", !=, false, true),
+            ok_test_case!("", !=, 1, true),
+            ok_test_case!("", !=, "hello", true),
             // Binary less operations.
-            ("nil < nil", Err("InvalidCompare((< nil nil))")),
-            ("nil < true", Err("InvalidCompare((< nil true))")),
-            ("nil < 1", Err("InvalidCompare((< nil 1))")),
-            ("nil < \"hello\"", Err("InvalidCompare((< nil \"hello\"))")),
-            ("true < nil", Err("InvalidCompare((< true nil))")),
-            ("true < true", Err("InvalidCompare((< true true))")),
-            ("true < 1", Err("InvalidCompare((< true 1))")),
-            ("true < \"hello\"", Err("InvalidCompare((< true \"hello\"))")),
-            ("1 < nil", Err("InvalidCompare((< 1 nil))")),
-            ("1 < true", Err("InvalidCompare((< 1 true))")),
-            ("1 < 0", Ok(Value::Bool(false))),
-            ("1 < 1", Ok(Value::Bool(false))),
-            ("1 < 2", Ok(Value::Bool(true))),
-            ("1 < \"hello\"", Err("InvalidCompare((< 1 \"hello\"))")),
-            ("\"hello\" < nil", Err("InvalidCompare((< \"hello\" nil))")),
-            ("\"hello\" < true", Err("InvalidCompare((< \"hello\" true))")),
-            ("\"hello\" < 1", Err("InvalidCompare((< \"hello\" 1))")),
-            ("\"hello\" < \"gello\"", Ok(Value::Bool(false))),
-            ("\"hello\" < \"hello\"", Ok(Value::Bool(false))),
-            ("\"hello\" < \"iello\"", Ok(Value::Bool(true))),
+            err_test_case!(nil, <, nil, InvalidCompare),
+            err_test_case!(nil, <, true, InvalidCompare),
+            err_test_case!(nil, <, 1, InvalidCompare),
+            err_test_case!(nil, <, "hello", InvalidCompare),
+            err_test_case!(true, <, nil, InvalidCompare),
+            err_test_case!(true, <, true, InvalidCompare),
+            err_test_case!(true, <, 1, InvalidCompare),
+            err_test_case!(true, <, "hello", InvalidCompare),
+            err_test_case!(1, <, nil, InvalidCompare),
+            err_test_case!(1, <, true, InvalidCompare),
+            ok_test_case!(1, <, 0, false),
+            ok_test_case!(1, <, 1, false),
+            ok_test_case!(1, <, 2, true),
+            err_test_case!(1, < ,"hello", InvalidCompare),
+            err_test_case!("hello", <, nil, InvalidCompare),
+            err_test_case!("hello", <, true, InvalidCompare),
+            err_test_case!("hello", <, 1, InvalidCompare),
+            ok_test_case!("hello", <, "gello", false),
+            ok_test_case!("hello", <, "hello", false),
+            ok_test_case!("hello", <, "iello", true),
             // Binary less equal operations.
-            ("nil <= nil", Err("InvalidCompare((<= nil nil))")),
-            ("nil <= true", Err("InvalidCompare((<= nil true))")),
-            ("nil <= 1", Err("InvalidCompare((<= nil 1))")),
-            ("nil <= \"hello\"", Err("InvalidCompare((<= nil \"hello\"))")),
-            ("true <= nil", Err("InvalidCompare((<= true nil))")),
-            ("true <= true", Err("InvalidCompare((<= true true))")),
-            ("true <= 1", Err("InvalidCompare((<= true 1))")),
-            ("true <= \"hello\"", Err("InvalidCompare((<= true \"hello\"))")),
-            ("1 <= nil", Err("InvalidCompare((<= 1 nil))")),
-            ("1 <= true", Err("InvalidCompare((<= 1 true))")),
-            ("1 <= 0", Ok(Value::Bool(false))),
-            ("1 <= 1", Ok(Value::Bool(true))),
-            ("1 <= 2", Ok(Value::Bool(true))),
-            ("1 <= \"hello\"", Err("InvalidCompare((<= 1 \"hello\"))")),
-            ("\"hello\" <= nil", Err("InvalidCompare((<= \"hello\" nil))")),
-            ("\"hello\" <= true", Err("InvalidCompare((<= \"hello\" true))")),
-            ("\"hello\" <= 1", Err("InvalidCompare((<= \"hello\" 1))")),
-            ("\"hello\" <= \"gello\"", Ok(Value::Bool(false))),
-            ("\"hello\" <= \"hello\"", Ok(Value::Bool(true))),
-            ("\"hello\" <= \"iello\"", Ok(Value::Bool(true))),
+            err_test_case!(nil, <=, nil, InvalidCompare),
+            err_test_case!(nil, <=, true, InvalidCompare),
+            err_test_case!(nil, <=, 1, InvalidCompare),
+            err_test_case!(nil, <=, "hello", InvalidCompare),
+            err_test_case!(true, <=, nil, InvalidCompare),
+            err_test_case!(true, <=, true, InvalidCompare),
+            err_test_case!(true, <=, 1, InvalidCompare),
+            err_test_case!(true, <=, "hello", InvalidCompare),
+            err_test_case!(1, <=, nil, InvalidCompare),
+            err_test_case!(1, <=, true, InvalidCompare),
+            ok_test_case!(1, <=, 0, false),
+            ok_test_case!(1, <=, 1, true),
+            ok_test_case!(1, <=, 2, true),
+            err_test_case!(1, <=, "hello", InvalidCompare),
+            err_test_case!("hello", <=, nil, InvalidCompare),
+            err_test_case!("hello", <=, true, InvalidCompare),
+            err_test_case!("hello", <=, 1, InvalidCompare),
+            ok_test_case!("hello", <=, "gello", false),
+            ok_test_case!("hello", <=, "hello", true),
+            ok_test_case!("hello", <=, "iello", true),
             // Binary greater operations.
-            ("nil > nil", Err("InvalidCompare((> nil nil))")),
-            ("nil > true", Err("InvalidCompare((> nil true))")),
-            ("nil > 1", Err("InvalidCompare((> nil 1))")),
-            ("nil > \"hello\"", Err("InvalidCompare((> nil \"hello\"))")),
-            ("true > nil", Err("InvalidCompare((> true nil))")),
-            ("true > true", Err("InvalidCompare((> true true))")),
-            ("true > 1", Err("InvalidCompare((> true 1))")),
-            ("true > \"hello\"", Err("InvalidCompare((> true \"hello\"))")),
-            ("1 > nil", Err("InvalidCompare((> 1 nil))")),
-            ("1 > true", Err("InvalidCompare((> 1 true))")),
-            ("1 > 0", Ok(Value::Bool(true))),
-            ("1 > 1", Ok(Value::Bool(false))),
-            ("1 > 2", Ok(Value::Bool(false))),
-            ("1 > \"hello\"", Err("InvalidCompare((> 1 \"hello\"))")),
-            ("\"hello\" > nil", Err("InvalidCompare((> \"hello\" nil))")),
-            ("\"hello\" > true", Err("InvalidCompare((> \"hello\" true))")),
-            ("\"hello\" > 1", Err("InvalidCompare((> \"hello\" 1))")),
-            ("\"hello\" > \"gello\"", Ok(Value::Bool(true))),
-            ("\"hello\" > \"hello\"", Ok(Value::Bool(false))),
-            ("\"hello\" > \"iello\"", Ok(Value::Bool(false))),
+            err_test_case!(nil, >, nil, InvalidCompare),
+            err_test_case!(nil, >, true, InvalidCompare),
+            err_test_case!(nil, >, 1, InvalidCompare),
+            err_test_case!(nil, >, "hello", InvalidCompare),
+            err_test_case!(true, >, nil, InvalidCompare),
+            err_test_case!(true, >, true, InvalidCompare),
+            err_test_case!(true, >, 1, InvalidCompare),
+            err_test_case!(true, >, "hello", InvalidCompare),
+            err_test_case!(1, >, nil, InvalidCompare),
+            err_test_case!(1, >, true, InvalidCompare),
+            ok_test_case!(1, >, 0, true),
+            ok_test_case!(1, >, 1, false),
+            ok_test_case!(1, >, 2, false),
+            err_test_case!(1, >, "hello", InvalidCompare),
+            err_test_case!("hello", >, nil, InvalidCompare),
+            err_test_case!("hello", >, true, InvalidCompare),
+            err_test_case!("hello", >, 1, InvalidCompare),
+            ok_test_case!("hello", >, "gello", true),
+            ok_test_case!("hello", >, "hello", false),
+            ok_test_case!("hello", >, "iello", false),
             // Binary greater equal operations.
-            ("nil >= nil", Err("InvalidCompare((>= nil nil))")),
-            ("nil >= true", Err("InvalidCompare((>= nil true))")),
-            ("nil >= 1", Err("InvalidCompare((>= nil 1))")),
-            ("nil >= \"hello\"", Err("InvalidCompare((>= nil \"hello\"))")),
-            ("true >= nil", Err("InvalidCompare((>= true nil))")),
-            ("true >= true", Err("InvalidCompare((>= true true))")),
-            ("true >= 1", Err("InvalidCompare((>= true 1))")),
-            ("true >= \"hello\"", Err("InvalidCompare((>= true \"hello\"))")),
-            ("1 >= nil", Err("InvalidCompare((>= 1 nil))")),
-            ("1 >= true", Err("InvalidCompare((>= 1 true))")),
-            ("1 >= 0", Ok(Value::Bool(true))),
-            ("1 >= 1", Ok(Value::Bool(true))),
-            ("1 >= 2", Ok(Value::Bool(false))),
-            ("1 >= \"hello\"", Err("InvalidCompare((>= 1 \"hello\"))")),
-            ("\"hello\" >= nil", Err("InvalidCompare((>= \"hello\" nil))")),
-            ("\"hello\" >= true", Err("InvalidCompare((>= \"hello\" true))")),
-            ("\"hello\" >= 1", Err("InvalidCompare((>= \"hello\" 1))")),
-            ("\"hello\" >= \"gello\"", Ok(Value::Bool(true))),
-            ("\"hello\" >= \"hello\"", Ok(Value::Bool(true))),
-            ("\"hello\" >= \"iello\"", Ok(Value::Bool(false))),
+            err_test_case!(nil, >=, nil, InvalidCompare),
+            err_test_case!(nil, >=, true, InvalidCompare),
+            err_test_case!(nil, >=, 1, InvalidCompare),
+            err_test_case!(nil, >=, "hello", InvalidCompare),
+            err_test_case!(true, >=, nil, InvalidCompare),
+            err_test_case!(true, >=, true, InvalidCompare),
+            err_test_case!(true, >=, 1, InvalidCompare),
+            err_test_case!(true, >=, "hello", InvalidCompare),
+            err_test_case!(1, >=, nil, InvalidCompare),
+            err_test_case!(1, >=, true, InvalidCompare),
+            ok_test_case!(1, >=, 0, true),
+            ok_test_case!(1, >=, 1, true),
+            ok_test_case!(1, >=, 2, false),
+            err_test_case!(1, >=, "hello", InvalidCompare),
+            err_test_case!("hello", >=, nil, InvalidCompare),
+            err_test_case!("hello", >=, true, InvalidCompare),
+            err_test_case!("hello", >=, 1, InvalidCompare),
+            ok_test_case!("hello", >=, "gello", true),
+            ok_test_case!("hello", >=, "hello", true),
+            ok_test_case!("hello", >=, "iello", false),
             // Binary plus operations.
-            ("nil + nil", Err("InvalidArithmetic((+ nil nil))")),
-            ("nil + true", Err("InvalidArithmetic((+ nil true))")),
-            ("nil + 1", Err("InvalidArithmetic((+ nil 1))")),
-            ("nil + \"hello\"", Err("InvalidArithmetic((+ nil \"hello\"))")),
-            ("true + nil", Err("InvalidArithmetic((+ true nil))")),
-            ("true + true", Err("InvalidArithmetic((+ true true))")),
-            ("true + 1", Err("InvalidArithmetic((+ true 1))")),
-            ("true + \"hello\"", Err("InvalidArithmetic((+ true \"hello\"))")),
-            ("1 + nil", Err("InvalidArithmetic((+ 1 nil))")),
-            ("1 + true", Err("InvalidArithmetic((+ 1 true))")),
-            ("1 + 1", Ok(Value::Number(2.0))),
-            ("1 + \"hello\"", Err("InvalidArithmetic((+ 1 \"hello\"))")),
-            ("\"hello\" + nil", Err("InvalidArithmetic((+ \"hello\" nil))")),
-            ("\"hello\" + true", Err("InvalidArithmetic((+ \"hello\" true))")),
-            ("\"hello\" + 1", Err("InvalidArithmetic((+ \"hello\" 1))")),
-            ("\"hello\" + \"hello\"", Ok(Value::String("hellohello".to_string()))),
+            err_test_case!(nil, +, nil, InvalidArithmetic),
+            err_test_case!(nil, +, true, InvalidArithmetic),
+            err_test_case!(nil, +, 1, InvalidArithmetic),
+            err_test_case!(nil, +, "hello", InvalidArithmetic),
+            err_test_case!(true, +, nil, InvalidArithmetic),
+            err_test_case!(true, +, true, InvalidArithmetic),
+            err_test_case!(true, +, 1, InvalidArithmetic),
+            err_test_case!(true, +, "hello", InvalidArithmetic),
+            err_test_case!(1, +, nil, InvalidArithmetic),
+            err_test_case!(1, +, true, InvalidArithmetic),
+            ok_test_case!(1, +, 1, 2.0),
+            err_test_case!(1, +, "hello", InvalidArithmetic),
+            err_test_case!("hello", +, nil, InvalidArithmetic),
+            err_test_case!("hello", +, true, InvalidArithmetic),
+            err_test_case!("hello", +, 1, InvalidArithmetic),
+            ok_test_case!("hello", +, "hello", "hellohello"),
             // Binary minus operations.
-            ("nil - nil", Err("InvalidArithmetic((- nil nil))")),
-            ("nil - true", Err("InvalidArithmetic((- nil true))")),
-            ("nil - 1", Err("InvalidArithmetic((- nil 1))")),
-            ("nil - \"hello\"", Err("InvalidArithmetic((- nil \"hello\"))")),
-            ("true - nil", Err("InvalidArithmetic((- true nil))")),
-            ("true - true", Err("InvalidArithmetic((- true true))")),
-            ("true - 1", Err("InvalidArithmetic((- true 1))")),
-            ("true - \"hello\"", Err("InvalidArithmetic((- true \"hello\"))")),
-            ("1 - nil", Err("InvalidArithmetic((- 1 nil))")),
-            ("1 - true", Err("InvalidArithmetic((- 1 true))")),
-            ("1 - 1", Ok(Value::Number(0.0))),
-            ("1 - \"hello\"", Err("InvalidArithmetic((- 1 \"hello\"))")),
-            ("\"hello\" - nil", Err("InvalidArithmetic((- \"hello\" nil))")),
-            ("\"hello\" - true", Err("InvalidArithmetic((- \"hello\" true))")),
-            ("\"hello\" - 1", Err("InvalidArithmetic((- \"hello\" 1))")),
-            ("\"hello\" - \"hello\"", Err("InvalidArithmetic((- \"hello\" \"hello\"))")),
+            err_test_case!(nil, -, nil, InvalidArithmetic),
+            err_test_case!(nil, -, true, InvalidArithmetic),
+            err_test_case!(nil, -, 1, InvalidArithmetic),
+            err_test_case!(nil, -, "hello", InvalidArithmetic),
+            err_test_case!(true, -, nil, InvalidArithmetic),
+            err_test_case!(true, -, true, InvalidArithmetic),
+            err_test_case!(true, -, 1, InvalidArithmetic),
+            err_test_case!(true, -, "hello", InvalidArithmetic),
+            err_test_case!(1, -, nil, InvalidArithmetic),
+            err_test_case!(1, -, true, InvalidArithmetic),
+            ok_test_case!(1, -, 1, 0.0),
+            err_test_case!(1, -, "hello", InvalidArithmetic),
+            err_test_case!("hello", -, nil, InvalidArithmetic),
+            err_test_case!("hello", -, true, InvalidArithmetic),
+            err_test_case!("hello", -, 1, InvalidArithmetic),
+            err_test_case!("hello", -, "hello", InvalidArithmetic),
             // Binary multiply operations.
-            ("nil * nil", Err("InvalidArithmetic((* nil nil))")),
-            ("nil * true", Err("InvalidArithmetic((* nil true))")),
-            ("nil * 1", Err("InvalidArithmetic((* nil 1))")),
-            ("nil * \"hello\"", Err("InvalidArithmetic((* nil \"hello\"))")),
-            ("true * nil", Err("InvalidArithmetic((* true nil))")),
-            ("true * true", Err("InvalidArithmetic((* true true))")),
-            ("true * 1", Err("InvalidArithmetic((* true 1))")),
-            ("true * \"hello\"", Err("InvalidArithmetic((* true \"hello\"))")),
-            ("1 * nil", Err("InvalidArithmetic((* 1 nil))")),
-            ("1 * true", Err("InvalidArithmetic((* 1 true))")),
-            ("2 * 2", Ok(Value::Number(4.0))),
-            ("1 * \"hello\"", Err("InvalidArithmetic((* 1 \"hello\"))")),
-            ("\"hello\" * nil", Err("InvalidArithmetic((* \"hello\" nil))")),
-            ("\"hello\" * true", Err("InvalidArithmetic((* \"hello\" true))")),
-            ("\"hello\" * 1", Err("InvalidArithmetic((* \"hello\" 1))")),
-            ("\"hello\" * \"hello\"", Err("InvalidArithmetic((* \"hello\" \"hello\"))")),
+            err_test_case!(nil, *, nil, InvalidArithmetic),
+            err_test_case!(nil, *, true, InvalidArithmetic),
+            err_test_case!(nil, *, 1, InvalidArithmetic),
+            err_test_case!(nil, *, "hello", InvalidArithmetic),
+            err_test_case!(true, *, nil, InvalidArithmetic),
+            err_test_case!(true, *, true, InvalidArithmetic),
+            err_test_case!(true, *, 1, InvalidArithmetic),
+            err_test_case!(true, *, "hello", InvalidArithmetic),
+            err_test_case!(1, *, nil, InvalidArithmetic),
+            err_test_case!(1, *, true, InvalidArithmetic),
+            ok_test_case!(2, *, 2, 4.0),
+            err_test_case!(1, *, "hello", InvalidArithmetic),
+            err_test_case!("hello", *, nil, InvalidArithmetic),
+            err_test_case!("hello", *, true, InvalidArithmetic),
+            err_test_case!("hello", *, 1, InvalidArithmetic),
+            err_test_case!("hello", *, "hello", InvalidArithmetic),
             // Binary divide operations.
-            ("nil / nil", Err("InvalidArithmetic((/ nil nil))")),
-            ("nil / true", Err("InvalidArithmetic((/ nil true))")),
-            ("nil / 1", Err("InvalidArithmetic((/ nil 1))")),
-            ("nil / \"hello\"", Err("InvalidArithmetic((/ nil \"hello\"))")),
-            ("true / nil", Err("InvalidArithmetic((/ true nil))")),
-            ("true / true", Err("InvalidArithmetic((/ true true))")),
-            ("true / 1", Err("InvalidArithmetic((/ true 1))")),
-            ("true / \"hello\"", Err("InvalidArithmetic((/ true \"hello\"))")),
-            ("1 / nil", Err("InvalidArithmetic((/ 1 nil))")),
-            ("1 / true", Err("InvalidArithmetic((/ 1 true))")),
-            ("2 / 2", Ok(Value::Number(1.0))),
-            ("1 / \"hello\"", Err("InvalidArithmetic((/ 1 \"hello\"))")),
-            ("\"hello\" / nil", Err("InvalidArithmetic((/ \"hello\" nil))")),
-            ("\"hello\" / true", Err("InvalidArithmetic((/ \"hello\" true))")),
-            ("\"hello\" / 1", Err("InvalidArithmetic((/ \"hello\" 1))")),
-            ("\"hello\" / \"hello\"", Err("InvalidArithmetic((/ \"hello\" \"hello\"))")),
+            err_test_case!(nil, /, nil, InvalidArithmetic),
+            err_test_case!(nil, /, true, InvalidArithmetic),
+            err_test_case!(nil, /, 1, InvalidArithmetic),
+            err_test_case!(nil, /, "hello", InvalidArithmetic),
+            err_test_case!(true, /, nil, InvalidArithmetic),
+            err_test_case!(true, /, true, InvalidArithmetic),
+            err_test_case!(true, /, 1, InvalidArithmetic),
+            err_test_case!(true, /, "hello", InvalidArithmetic),
+            err_test_case!(1, /, nil, InvalidArithmetic),
+            err_test_case!(1, /, true, InvalidArithmetic),
+            ok_test_case!(2, /, 2, 1.0),
+            err_test_case!(1, /, "hello", InvalidArithmetic),
+            err_test_case!("hello", /, nil, InvalidArithmetic),
+            err_test_case!("hello", /, true, InvalidArithmetic),
+            err_test_case!("hello", /, 1, InvalidArithmetic),
+            err_test_case!("hello", /, "hello", InvalidArithmetic),
             // Literals.
             ("nil", Ok(Value::Nil)),
             ("true", Ok(Value::Bool(true))),
@@ -480,21 +611,22 @@ mod tests {
             ("0.0", Ok(Value::Number(0.0))),
             ("123", Ok(Value::Number(123.0))),
             ("1.23", Ok(Value::Number(1.230))),
-            ("\"hello\"", Ok(Value::String("hello".to_string()))),
+            ("\"hello\"", Ok(Value::String("hello".to_owned()))),
             // Grouping.
             ("(nil)", Ok(Value::Nil)),
             ("(true)", Ok(Value::Bool(true))),
             ("(123)", Ok(Value::Number(123.0))),
-            ("(\"hello\")", Ok(Value::String("hello".to_string()))),
+            ("(\"hello\")", Ok(Value::String("hello".to_owned()))),
             ("2 * (3 - 1)", Ok(Value::Number(4.0))),
             // Variable.
             ("foo", Ok(Value::Bool(true))),
             ("!foo", Ok(Value::Bool(false))),
             ("!!foo", Ok(Value::Bool(true))),
-            ("bar", Err("VariableResolveError(bar, NotDeclared(\"bar\"))")),
+            ("bar", Err(Error::VariableNotDeclared(src_span("bar")))),
             // Assignment.
             ("foo = false", Ok(Value::Bool(false))),
             ("foo = true", Ok(Value::Bool(true))),
+            ("bar = true", Err(Error::VariableNotDeclared(src_span("bar = true")))),
             // Logical.
             ("1 or 2", Ok(Value::Number(1.0))),
             ("0 or 2", Ok(Value::Number(2.0))),
@@ -507,7 +639,7 @@ mod tests {
             let expression = Parser::new(&tokens).expression().unwrap();
             match expect {
                 Ok(v) => assert_eq!(expression.evaluate(&scope).unwrap(), v),
-                Err(e) => assert_eq!(format!("{:?}", expression.evaluate(&scope).unwrap_err()), e),
+                Err(e) => assert_eq!(expression.evaluate(&scope).unwrap_err(), e),
             }
         }
     }

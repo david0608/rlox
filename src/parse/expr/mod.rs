@@ -1,43 +1,30 @@
+use crate::scan::span::Span;
 use crate::visitor::{
     Printable,
     Evaluable,
 };
 
-mod unary;
-pub use unary::UnaryExpression;
+pub mod unary;
 
-mod binary;
-pub use binary::BinaryExpression;
+pub mod binary;
 
-mod literal;
-pub use literal::LiteralExpression;
+pub mod literal;
 
-mod grouping;
-pub use grouping::GroupingExpression;
+pub mod grouping;
 
-mod variable;
-pub use variable::VariableExpression;
+pub mod variable;
 
-mod assign;
-pub use assign::AssignExpression;
+pub mod assign;
 
-mod logical;
-pub use logical::LogicalExpression;
+pub mod logical;
 
-pub type Expression<'src> = Box<dyn Expr<'src>>;
+pub type Expression = Box<dyn Expr>;
 
-pub trait Expr<'src>
+pub trait Expr
     where
-    Self: 'src
-        + Printable
-        + Evaluable<'src>
+    Self: Printable
+        + Evaluable
         + std::fmt::Debug
-{ }
-
-impl<'src, T> Expr<'src> for T
-    where
-    T: 'src
-        + Printable
-        + Evaluable<'src>
-        + std::fmt::Debug
-{ }
+{
+    fn span(&self) -> Span;
+}

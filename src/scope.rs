@@ -4,21 +4,32 @@ use std::collections::HashMap;
 use crate::value::Value;
 
 #[derive(PartialEq, Debug)]
-pub enum Error<'src> {
-    NotDeclared(&'src str),
-    MultipleDeclaration(&'src str)
+pub enum Error {
+    NotDeclared,
+    MultipleDeclaration,
+    GlobalVariableMutationNotSupport,
 }
 
 #[derive(Debug)]
 pub struct Scope {
     values: HashMap<String, Value>,
+    global: Option<Rc<RefCell<Scope>>>,
     parent: Option<Rc<RefCell<Scope>>>,
 }
 
-impl Scope {
+impl<'stmt> Scope {
     pub fn new() -> Scope {
         Scope {
             values: HashMap::new(),
+            global: None,
+            parent: None,
+        }
+    }
+
+    pub fn new_isolate_child(parent: &Rc<RefCell<Scope>>) -> Scope {
+        Scope {
+            values: HashMap::new(),
+            global: Some(Rc::clone(parent.borrow().global.as_ref().unwrap_or(parent))),
             parent: None,
         }
     }
@@ -26,6 +37,7 @@ impl Scope {
     pub fn new_child(parent: &Rc<RefCell<Scope>>) -> Scope {
         Scope {
             values: HashMap::new(),
+            global: Some(Rc::clone(parent.borrow().global.as_ref().unwrap_or(parent))),
             parent: Some(Rc::clone(parent)),
         }
     }
@@ -63,12 +75,19 @@ impl Scope {
                 }
             }
             else {
-                return false;
+                break;
             }
+        }
+
+        if let Some(gs) = self.global.as_ref() {
+            return gs.borrow().values.contains_key(name);
+        }
+        else {
+            return false;
         }
     }
 
-    pub fn get_value<'src>(&self, name: &'src str) -> Result<Value, Error<'src>> {
+    pub fn get_value(&self, name: &str) -> Result<Value, Error> {
         if let Some(v) = self.values.get(name) {
             return Ok(v.clone());
         }
@@ -84,12 +103,20 @@ impl Scope {
                 }
             }
             else {
-                return Err(Error::NotDeclared(name));
+                break;
             }
         }
+
+        if let Some(gs) = self.global.as_ref() {
+            if let Some(v) = gs.borrow().values.get(name) {
+                return Ok(v.clone());
+            }
+        }
+
+        return Err(Error::NotDeclared);
     }
 
-    pub fn set_value<'src>(&mut self, name: &'src str, value: Value) -> Result<(), Error<'src>> {
+    pub fn set_value(&mut self, name: &str, value: Value) -> Result<(), Error> {
         if self.values.contains_key(name) {
             self.values.insert(name.to_string(), value);
             return Ok(());
@@ -107,14 +134,22 @@ impl Scope {
                 }
             }
             else {
-                return Err(Error::NotDeclared(name));
+                break;
             }
         }
+
+        if let Some(gs) = self.global.as_ref() {
+            if gs.borrow().values.contains_key(name) {
+                return Err(Error::GlobalVariableMutationNotSupport);
+            }
+        }
+
+        return Err(Error::NotDeclared);
     }
 
-    pub fn declare<'src>(&mut self, name: &'src str, value: Value) -> Result<(), Error<'src>> {
+    pub fn declare(&mut self, name: &str, value: Value) -> Result<(), Error> {
         if self.values.contains_key(name) {
-            return Err(Error::MultipleDeclaration(name));
+            return Err(Error::MultipleDeclaration);
         }
         else {
             self.values.insert(name.to_string(), value);
@@ -132,24 +167,72 @@ mod tests {
     };
 
     #[test]
-    fn test_scope() {
-        let global = Scope::new().as_rc();
-        assert_eq!(global.borrow_mut().declare("foo", Value::Number(123.0)).is_ok(), true);
+    fn test_declare() {
+        let s = Scope::new().as_rc();
+        assert_eq!(s.borrow_mut().declare("foo", Value::Number(123.0)).is_ok(), true);
+        assert_eq!(s.borrow().get_value("foo"), Ok(Value::Number(123.0)));
+    }
+
+    #[test]
+    fn test_local() {
+        let p = Scope::new().as_rc();
         {
-            let outer = Scope::new_child(&global).as_rc();
-            assert_eq!(outer.borrow_mut().declare("bar", Value::Bool(true)).is_ok(), true);
-            {
-                let inner = Scope::new_child(&outer).as_rc();
-                assert_eq!(inner.borrow_mut().declare("bar", Value::String("hello".to_string())).is_ok(), true);
-                assert_eq!(inner.borrow().get_value("bar"), Ok(Value::String("hello".to_string())));
-                assert_eq!(inner.borrow_mut().set_value("barr", Value::Nil), Err(Error::NotDeclared("barr")));
-                assert_eq!(inner.borrow_mut().declare("bar", Value::Nil), Err(Error::MultipleDeclaration("bar")));
-                assert_eq!(inner.borrow_mut().set_value("bar", Value::String("world".to_string())).is_ok(), true);
-                assert_eq!(inner.borrow().get_value("bar"), Ok(Value::String("world".to_string())));
-            }
-            assert_eq!(outer.borrow().get_value("bar"), Ok(Value::Bool(true)));
-            assert_eq!(outer.borrow_mut().set_value("foo", Value::Number(0.0)).is_ok(), true);
+            let c = Scope::new_child(&p).as_rc();
+            assert_eq!(c.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
+            assert_eq!(c.borrow().get_value("foo"), Ok(Value::Bool(true)));
         }
-        assert_eq!(global.borrow().get_value("foo"), Ok(Value::Number(0.0)));
+        assert_eq!(p.borrow().get_value("foo"), Err(Error::NotDeclared));
+    }
+
+    #[test]
+    fn test_global() {
+        let g = Scope::new().as_rc();
+        assert_eq!(g.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
+        {
+            let s = Scope::new_isolate_child(&g).as_rc();
+            assert_eq!(s.borrow().get_value("foo"), Ok(Value::Bool(true)));
+        }
+    }
+
+    #[test]
+    fn test_isolation() {
+        let g = Scope::new().as_rc();
+        assert_eq!(g.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
+        {
+            let s1 = Scope::new_isolate_child(&g).as_rc();
+            assert_eq!(s1.borrow_mut().declare("bar", Value::Bool(true)).is_ok(), true);
+            {
+                let s2 = Scope::new_isolate_child(&s1).as_rc();
+                assert_eq!(s2.borrow().get_value("foo"), Ok(Value::Bool(true)));
+                assert_eq!(s2.borrow().get_value("bar"), Err(Error::NotDeclared));
+            }
+        }
+    }
+
+    #[test]
+    fn test_multiple_declaration() {
+        let p = Scope::new().as_rc();
+        assert_eq!(p.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
+        assert_eq!(p.borrow_mut().declare("foo", Value::Bool(true)), Err(Error::MultipleDeclaration));
+        {
+            let c = Scope::new_child(&p).as_rc();
+            assert_eq!(c.borrow_mut().declare("foo", Value::Number(123.0)).is_ok(), true);
+            assert_eq!(c.borrow_mut().declare("foo", Value::Number(123.0)), Err(Error::MultipleDeclaration));
+            assert_eq!(c.borrow().get_value("foo"), Ok(Value::Number(123.0)));
+        }
+        assert_eq!(p.borrow().get_value("foo"), Ok(Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_global_mutation() {
+        let g = Scope::new().as_rc();
+        assert_eq!(g.borrow_mut().declare("foo", Value::Bool(true)).is_ok(), true);
+        {
+            let l = Scope::new_isolate_child(&g).as_rc();
+            assert_eq!(l.borrow_mut().set_value("foo", Value::Bool(false)), Err(Error::GlobalVariableMutationNotSupport));
+            assert_eq!(l.borrow().get_value("foo"), Ok(Value::Bool(true)));
+        }
+        assert_eq!(g.borrow_mut().set_value("foo", Value::Bool(false)).is_ok(), true);
+        assert_eq!(g.borrow().get_value("foo"), Ok(Value::Bool(false)));
     }
 }
