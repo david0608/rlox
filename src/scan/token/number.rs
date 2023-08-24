@@ -1,17 +1,18 @@
-use crate::scan::span::Span;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
 
 #[derive(Clone)]
 pub struct NumberToken {
     literal: f64,
     lexeme: String,
-    span: Span,
+    code_span: CodeSpan,
 }
 
 impl NumberToken {
-    pub fn new(literal: f64 ,lexeme: &str, span: Span) -> NumberToken {
+    pub fn new(literal: f64 ,lexeme: &str, code_span: CodeSpan) -> NumberToken {
         NumberToken {
             literal,
-            span,
+            code_span,
             lexeme: lexeme.to_owned(),
         }
     }
@@ -23,8 +24,10 @@ impl NumberToken {
     pub fn lexeme(&self) -> &str {
         &self.lexeme
     }
+}
 
-    pub fn span(&self) -> Span {
-        self.span
+impl Code for NumberToken {
+    fn code_span(&self) -> CodeSpan {
+        self.code_span
     }
 }

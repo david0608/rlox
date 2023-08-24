@@ -2,20 +2,15 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use crate::scope::Scope;
 
-mod print;
-pub use print::Printable;
+pub mod print;
 
-mod evaluate;
-pub use evaluate::Evaluable;
+pub mod evaluate;
 
-mod execute;
-pub use execute::Executable;
+pub mod execute;
 
-mod scan;
-pub use scan::Scannable;
+pub mod scan;
 
-mod parse;
-pub use parse::Parsable;
+pub mod parse;
 
 pub trait Accept<'this, V, R> {
     fn accept(&'this self, visitor: V) -> R;

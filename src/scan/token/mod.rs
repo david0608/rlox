@@ -1,4 +1,11 @@
-use super::span::Span;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
+
+pub mod identifier;
+use identifier::IdentifierToken;
+
+pub mod number;
+use number::NumberToken;
 
 pub mod simple;
 use simple::{
@@ -6,37 +13,31 @@ use simple::{
     SimpleTokenEnum,
 };
 
-pub mod number;
-use number::NumberToken;
-
 pub mod string;
 use string:: StringToken;
 
-pub mod identifier;
-use identifier::IdentifierToken;
-
 pub enum Token {
-    Simple(SimpleToken),
-    Number(NumberToken),
-    String(StringToken),
     Identifier(IdentifierToken),
+    Number(NumberToken),
+    Simple(SimpleToken),
+    String(StringToken),
 }
 
 impl Token {
-    pub fn new_simple(variant: SimpleTokenEnum, span: Span) -> Token {
-        Token::Simple(SimpleToken::new(variant, span))
+    pub fn new_identifier(name: &str, code_span: CodeSpan) -> Token {
+        Token::Identifier(IdentifierToken::new(name, code_span))
     }
 
-    pub fn new_number(literal: f64, lexeme: &str, span: Span) -> Token {
-        Token::Number(NumberToken::new(literal, lexeme, span))
+    pub fn new_number(literal: f64, lexeme: &str, code_span: CodeSpan) -> Token {
+        Token::Number(NumberToken::new(literal, lexeme, code_span))
     }
 
-    pub fn new_string(literal: &str, lexeme: &str, span: Span) -> Token {
-        Token::String(StringToken::new(literal, lexeme, span))
+    pub fn new_simple(variant: SimpleTokenEnum, code_span: CodeSpan) -> Token {
+        Token::Simple(SimpleToken::new(variant, code_span))
     }
 
-    pub fn new_identifier(name: &str, span: Span) -> Token {
-        Token::Identifier(IdentifierToken::new(name, span))
+    pub fn new_string(literal: &str, lexeme: &str, code_span: CodeSpan) -> Token {
+        Token::String(StringToken::new(literal, lexeme, code_span))
     }
 
     pub fn lexeme(&self) -> &str {
@@ -47,13 +48,15 @@ impl Token {
             Token::Identifier(t) => t.lexeme(),
         }
     }
+}
 
-    pub fn span(&self) -> Span {
+impl Code for Token {
+    fn code_span(&self) -> CodeSpan {
         match self {
-            Token::Simple(t) => t.span(),
-            Token::Number(t) => t.span(),
-            Token::String(t) => t.span(),
-            Token::Identifier(t) => t.span(),
+            Token::Identifier(t) => t.code_span(),
+            Token::Number(t) => t.code_span(),
+            Token::Simple(t) => t.code_span(),
+            Token::String(t) => t.code_span(),
         }
     }
 }

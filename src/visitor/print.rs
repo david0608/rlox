@@ -5,32 +5,33 @@ use crate::scan::token::simple::{
     VAR_LEXEME,
     PRINT_LEXEME,
 };
-use crate::parse::expr::assign::AssignExpression;
-use crate::parse::expr::binary::{
+use crate::parse::expression::assign::AssignExpression;
+use crate::parse::expression::binary::{
     BinaryExpression,
     BinaryExpressionEnum,
 };
-use crate::parse::expr::grouping::GroupingExpression;
-use crate::parse::expr::literal::{
+use crate::parse::expression::call::CallExpression;
+use crate::parse::expression::grouping::GroupingExpression;
+use crate::parse::expression::literal::{
     LiteralExpression,
     LiteralExpressionEnum,
 };
-use crate::parse::expr::logical::{
+use crate::parse::expression::logical::{
     LogicalExpression,
     LogicalExpressionEnum,
 };
-use crate::parse::expr::unary::{
+use crate::parse::expression::unary::{
     UnaryExpression,
     UnaryExpressionEnum,
 };
-use crate::parse::expr::variable::VariableExpression;
-use crate::parse::stmt::block::BlockStatement;
-use crate::parse::stmt::expression::ExpressionStatement;
-use crate::parse::stmt::r#for::ForStatement;
-use crate::parse::stmt::ifelse::IfStatement;
-use crate::parse::stmt::print::PrintStatement;
-use crate::parse::stmt::var_declare::VarDeclareStatement;
-use crate::parse::stmt::r#while::WhileStatement;
+use crate::parse::expression::variable::VariableExpression;
+use crate::parse::statement::block::BlockStatement;
+use crate::parse::statement::expression::ExpressionStatement;
+use crate::parse::statement::r#for::ForStatement;
+use crate::parse::statement::ifelse::IfStatement;
+use crate::parse::statement::print::PrintStatement;
+use crate::parse::statement::var_declare::VarDeclareStatement;
+use crate::parse::statement::r#while::WhileStatement;
 use super::{
     Visit,
     Accept,
@@ -92,7 +93,7 @@ impl Visit<'_, LiteralExpression, String> for Print {
 
 impl Visit<'_, GroupingExpression, String> for Print {
     fn visit(e: &GroupingExpression) -> String {
-        format!("(group {})", e.expr().print())
+        format!("(group {})", e.expression().print())
     }
 }
 
@@ -121,9 +122,19 @@ impl Visit<'_, LogicalExpression, String> for Print {
     }
 }
 
+impl Visit<'_, CallExpression, String> for Print {
+    fn visit(e: &CallExpression) -> String {
+        format!(
+            "(call {} {})",
+            e.callee().print(),
+            e.arguments().iter().map(|s| s.print()).collect::<Vec<String>>().join(" "),
+        )
+    }
+}
+
 impl Visit<'_, BlockStatement, String> for Print {
     fn visit(s: &BlockStatement) -> String {
-        let strs = s.stmts().iter().map(|s| s.print()).collect::<Vec<String>>();
+        let strs = s.statements().iter().map(|s| s.print()).collect::<Vec<String>>();
         format!("{{{}}}", strs.join(" "))
     }
 }
@@ -162,19 +173,19 @@ impl Visit<'_, ForStatement, String> for Print {
 
 impl Visit<'_, IfStatement, String> for Print {
     fn visit(s: &IfStatement) -> String {
-        if let Some(else_stmt) = s.else_stmt() {
+        if let Some(else_statement) = s.else_statement() {
             format!(
                 "if {} {} else {}",
                 s.condition().print(),
-                s.then_stmt().print(),
-                else_stmt.print()
+                s.then_statement().print(),
+                else_statement.print()
             )
         }
         else {
             format!(
                 "if {} {}",
                 s.condition().print(),
-                s.then_stmt().print()
+                s.then_statement().print()
             )
         }
     }
@@ -221,8 +232,8 @@ macro_rules! impl_debug_for_printable {
 
 #[cfg(test)]
 mod tests {
-    use crate::visitor::Scannable;
-    use crate::parse::Parser;
+    use crate::visitor::scan::Scannable;
+    use crate::parse::parser::Parser;
 
     #[test]
     fn test_print_expression() {

@@ -1,5 +1,5 @@
 use crate::scan::token::Token;
-use crate::parse::{
+use crate::parse::parser::{
     Parser,
     ParserOutput,
 };

@@ -1,11 +1,13 @@
 use std::io::Write;
 
-mod value;
-mod error;
-pub mod scope;
-pub mod scan;
+mod code;
 mod parse;
+mod scan;
+mod r#trait;
+mod value;
 mod visitor;
+mod error;
+mod scope;
 
 type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 

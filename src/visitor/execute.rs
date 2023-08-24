@@ -1,29 +1,36 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
 use crate::scope::Scope;
 use crate::value::Value;
-use crate::scan::span::Span;
-use crate::parse::stmt::Stmt;
-use crate::parse::stmt::block::BlockStatement;
-use crate::parse::stmt::expression::ExpressionStatement;
-use crate::parse::stmt::r#for::ForStatement;
-use crate::parse::stmt::ifelse::IfStatement;
-use crate::parse::stmt::print::PrintStatement;
-use crate::parse::stmt::var_declare::VarDeclareStatement;
-use crate::parse::stmt::r#while::WhileStatement;
-use crate::visitor::evaluate::Error as EvaluateError;
+use crate::parse::statement::block::BlockStatement;
+use crate::parse::statement::expression::ExpressionStatement;
+use crate::parse::statement::r#for::ForStatement;
+use crate::parse::statement::ifelse::IfStatement;
+use crate::parse::statement::print::PrintStatement;
+use crate::parse::statement::var_declare::VarDeclareStatement;
+use crate::parse::statement::r#while::WhileStatement;
+use crate::visitor::evaluate::EvaluateError;
 use super::{
     ScopeVisit,
     ScopeAccept,
 };
 
-#[derive(Debug, PartialEq)]
-pub enum Error {
-    EvaluateError(EvaluateError),
-    MultipleDeclaration(Span),
+#[derive(PartialEq, Debug)]
+pub enum ExecuteOk {
+    KeepGoing,
+    Break,
+    Return(Value),
 }
 
-pub type ExecuteResult = std::result::Result<(), Error>;
+#[derive(Debug, PartialEq)]
+pub enum ExecuteError {
+    EvaluateError(EvaluateError),
+    MultipleDeclaration(CodeSpan),
+}
+
+pub type ExecuteResult = std::result::Result<ExecuteOk, ExecuteError>;
 
 pub struct Execute;
 
@@ -42,129 +49,158 @@ impl<T> Executable for T
 { }
 
 impl<'that> ScopeVisit<'that, BlockStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that BlockStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn visit(bs: &'that BlockStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let scope = Scope::new_child(scope).as_rc();
-        for stmt in stmt.stmts() {
-            stmt.execute(&scope)?;
+        for statement in bs.statements() {
+            let ok = statement.execute(&scope)?;
+            match ok {
+                ExecuteOk::KeepGoing => {
+                    // do nothing.
+                }
+                ExecuteOk::Break => {
+                    return Ok(ExecuteOk::Break);
+                }
+                ExecuteOk::Return(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+            }
         }
-        Ok(())
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
 impl<'that> ScopeVisit<'that, ExpressionStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that ExpressionStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        if let Err(e) = stmt.expression().evaluate(scope) {
-            Err(Error::EvaluateError(e))
+    fn visit(es: &'that ExpressionStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        if let Err(e) = es.expression().evaluate(scope) {
+            return Err(ExecuteError::EvaluateError(e));
         }
         else {
-            Ok(())
+            return Ok(ExecuteOk::KeepGoing);
         }
     }
 }
 
 impl<'that> ScopeVisit<'that, ForStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that ForStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn visit(fs: &'that ForStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let scope = Scope::new_child(scope).as_rc();
 
-        if let Some(initializer) = stmt.initializer() {
+        if let Some(initializer) = fs.initializer() {
             initializer.execute(&scope)?;
         }
 
         loop {
-            if let Some(condition) = stmt.condition() {
+            if let Some(condition) = fs.condition() {
                 match condition.evaluate(&scope) {
                     Ok(v) => {
                         if !v.is_truthy() {
-                            break;
+                            return Ok(ExecuteOk::KeepGoing);
                         }
                     }
                     Err(e) => {
-                        return Err(Error::EvaluateError(e));
+                        return Err(ExecuteError::EvaluateError(e));
                     }
                 }
             }
 
-            stmt.body().execute(&scope)?;
+            let ok = fs.body().execute(&scope)?;
+            match ok {
+                ExecuteOk::KeepGoing => {
+                    // do nothing.
+                }
+                ExecuteOk::Break => {
+                    return Ok(ExecuteOk::KeepGoing);
+                }
+                ExecuteOk::Return(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+            }
 
-            if let Some(increment) = stmt.increment() {
+            if let Some(increment) = fs.increment() {
                 if let Err(e) = increment.evaluate(&scope) {
-                    return Err(Error::EvaluateError(e));
+                    return Err(ExecuteError::EvaluateError(e));
                 }
             }
         }
-
-        return Ok(());
     }
 }
 
 impl<'that> ScopeVisit<'that, IfStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that IfStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        let condition = stmt.condition().evaluate(scope)
+    fn visit(ifs: &'that IfStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        let condition = ifs.condition().evaluate(scope)
             .map(|v| v.is_truthy())
-            .map_err(|e| Error::EvaluateError(e))?;
+            .map_err(|e| ExecuteError::EvaluateError(e))?;
         let scope = Scope::new_child(scope).as_rc();
         if condition {
-            stmt.then_stmt().execute(&scope)?;
+            return ifs.then_statement().execute(&scope);
         }
-        else if let Some(else_stmt) = stmt.else_stmt() {
-            else_stmt.execute(&scope)?;
+        else if let Some(else_statement) = ifs.else_statement() {
+            return else_statement.execute(&scope);
         }
-        return Ok(())
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
 impl<'that> ScopeVisit<'that, PrintStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that PrintStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        match stmt.value().evaluate(scope) {
+    fn visit(ps: &'that PrintStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        match ps.value().evaluate(scope) {
             Ok(v) => {
                 println!("{}", v);
-                Ok(())
+                return Ok(ExecuteOk::KeepGoing);
             }
             Err(e) => {
-                Err(Error::EvaluateError(e))
+                return Err(ExecuteError::EvaluateError(e));
             }
         }
     }
 }
 
 impl<'that> ScopeVisit<'that, VarDeclareStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that VarDeclareStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn visit(vds: &'that VarDeclareStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let mut value = Value::Nil;
-        if let Some(i) = stmt.initializer() {
+        if let Some(i) = vds.initializer() {
             match i.evaluate(scope) {
                 Ok(v) => value = v,
                 Err(e) => {
-                    return Err(Error::EvaluateError(e));
+                    return Err(ExecuteError::EvaluateError(e));
                 }
             }
         };
-        if scope.borrow_mut().declare(stmt.name(), value).is_err() {
-            return Err(Error::MultipleDeclaration(stmt.span()))
+        if scope.borrow_mut().declare(vds.name(), value).is_err() {
+            return Err(ExecuteError::MultipleDeclaration(vds.code_span()));
         }
-        Ok(())
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
 impl<'that> ScopeVisit<'that, WhileStatement, ExecuteResult> for Execute {
-    fn visit(stmt: &'that WhileStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn visit(ws: &'that WhileStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         loop {
-            if let Some(condition) = stmt.condition() {
+            if let Some(condition) = ws.condition() {
                 match condition.evaluate(scope) {
                     Ok(v) => {
                         if !v.is_truthy() {
-                            break;
+                            return Ok(ExecuteOk::KeepGoing);
                         }
                     }
                     Err(e) => {
-                        return Err(Error::EvaluateError(e));
+                        return Err(ExecuteError::EvaluateError(e));
                     }
                 }
             }
 
-            stmt.body().execute(scope)?;
+            let ok = ws.body().execute(scope)?;
+            match ok {
+                ExecuteOk::KeepGoing => {
+                    // do nothing
+                }
+                ExecuteOk::Break => {
+                    return Ok(ExecuteOk::KeepGoing);
+                }
+                ExecuteOk::Return(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+            }
         }
-
-        return Ok(());
     }
 }
 
@@ -172,21 +208,17 @@ impl<'that> ScopeVisit<'that, WhileStatement, ExecuteResult> for Execute {
 mod tests {
     use crate::value::Value;
     use crate::scope::Scope;
-    use crate::scan::span::{
-        Span,
-        CodePoint,
-    };
-    use crate::visitor::{
-        Scannable,
-        Parsable,
-    };
+    use crate::code::code_point::CodePoint;
+    use crate::code::code_span::CodeSpan;
+    use crate::visitor::scan::Scannable;
+    use crate::visitor::parse::Parsable;
     use super::{
-        Error,
+        ExecuteError,
         EvaluateError,
     };
 
-    fn span(sl: usize, sc: usize, el: usize, ec: usize) -> Span {
-        Span::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
+    fn code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
+        CodeSpan::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
     }
 
     #[test]
@@ -217,7 +249,7 @@ mod tests {
         assert_eq!(stmt.execute(&scope).is_ok(), true);
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            Error::MultipleDeclaration(span(0, 0, 0, 8))
+            ExecuteError::MultipleDeclaration(code_span(0, 0, 0, 8))
         );
     }
 
@@ -228,8 +260,8 @@ mod tests {
         let stmt = &tokens.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            Error::EvaluateError(
-                EvaluateError::VariableNotDeclared(span(0, 10, 0, 13))
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(code_span(0, 10, 0, 13))
             )
         );
     }
@@ -289,8 +321,8 @@ mod tests {
         assert_eq!(errors.len(), 0);
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
-            Error::EvaluateError(
-                EvaluateError::VariableNotDeclared(span(3, 6, 3, 9))
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(code_span(3, 6, 3, 9))
             )
     )
     }
@@ -347,8 +379,8 @@ mod tests {
         let stmt = &"foo;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            Error::EvaluateError(
-                EvaluateError::VariableNotDeclared(span(0, 0, 0, 3))
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(code_span(0, 0, 0, 3))
             )
         );
     }
@@ -367,7 +399,7 @@ mod tests {
         let stmt = &"print foo;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            Error::EvaluateError(EvaluateError::VariableNotDeclared(span(0, 6, 0, 9)))
+            ExecuteError::EvaluateError(EvaluateError::VariableNotDeclared(code_span(0, 6, 0, 9)))
         );
     }
 
