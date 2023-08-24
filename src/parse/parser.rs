@@ -1,39 +1,38 @@
 use crate::error::LoxError;
-use crate::scan::span::{
-    CodePoint,
-    Span,
-};
+use crate::code::Code;
+use crate::code::code_point::CodePoint;
+use crate::code::code_span::CodeSpan;
 use crate::scan::token::Token;
 use crate::scan::token::simple::SimpleTokenEnum;
 use crate::scan::token::identifier::IdentifierToken;
-use crate::parse::expr::Expression;
-use crate::parse::expr::assign::AssignExpression;
-use crate::parse::expr::binary::{
+use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::assign::AssignExpression;
+use crate::parse::expression::binary::{
     BinaryExpression,
     BinaryExpressionEnum,
 };
-use crate::parse::expr::grouping::GroupingExpression;
-use crate::parse::expr::literal::{
+use crate::parse::expression::grouping::GroupingExpression;
+use crate::parse::expression::literal::{
     LiteralExpression,
     LiteralExpressionEnum,
 };
-use crate::parse::expr::logical::{
+use crate::parse::expression::logical::{
     LogicalExpression,
     LogicalExpressionEnum,
 };
-use crate::parse::expr::unary::{
+use crate::parse::expression::unary::{
     UnaryExpression,
     UnaryExpressionEnum,
 };
-use crate::parse::expr::variable::VariableExpression;
-use crate::parse::stmt::Statement;
-use crate::parse::stmt::block::BlockStatement;
-use crate::parse::stmt::expression::ExpressionStatement;
-use crate::parse::stmt::r#for::ForStatement;
-use crate::parse::stmt::ifelse::IfStatement;
-use crate::parse::stmt::print::PrintStatement;
-use crate::parse::stmt::var_declare::VarDeclareStatement;
-use crate::parse::stmt::r#while::WhileStatement;
+use crate::parse::expression::variable::VariableExpression;
+use crate::parse::statement::BoxedStatement;
+use crate::parse::statement::block::BlockStatement;
+use crate::parse::statement::expression::ExpressionStatement;
+use crate::parse::statement::r#for::ForStatement;
+use crate::parse::statement::ifelse::IfStatement;
+use crate::parse::statement::print::PrintStatement;
+use crate::parse::statement::var_declare::VarDeclareStatement;
+use crate::parse::statement::r#while::WhileStatement;
 use crate::{
     assign_expression,
     binary_expression,
@@ -54,10 +53,10 @@ use crate::{
 #[derive(Debug, PartialEq)]
 pub enum Error {
     UnexpectedEnd(CodePoint),
-    UnexpectedToken(Span),
-    ExpectTokenMismatch(String, Span),
+    UnexpectedToken(CodeSpan),
+    ExpectTokenMismatch(String, CodeSpan),
     ExpectTokenNotFound(String, CodePoint),
-    ExpectIdentifier(Span),
+    ExpectIdentifier(CodeSpan),
 }
 
 impl LoxError for Error {
@@ -65,31 +64,31 @@ impl LoxError for Error {
         match self {
             Error::UnexpectedEnd(cp) => {
                 let mut out = "Error: Unexpected end.\r\n".to_owned();
-                out += cp.indication_string(&src_lines).as_ref();
+                out += cp.debug_string(&src_lines).as_ref();
                 return out;
             }
             Error::UnexpectedToken(s) => {
-                let mut out = format!("Error: Unexpected token: {}\r\n", s.token_string(&src_lines, 10));
-                out += s.indication_string(&src_lines).as_ref();
+                let mut out = format!("Error: Unexpected token: {}\r\n", s.code_string(&src_lines, 10));
+                out += s.debug_string(&src_lines).as_ref();
                 return out;
             }
             Error::ExpectTokenMismatch(et, s) => {
                 let mut out = format!(
                     "Error: Expect token: {} but found: {}\r\n",
                     et,
-                    s.token_string(&src_lines, 10)
+                    s.code_string(&src_lines, 10)
                 );
-                out += s.indication_string(&src_lines).as_ref();
+                out += s.debug_string(&src_lines).as_ref();
                 return out;
             }
             Error::ExpectTokenNotFound(et, cp) => {
                 let mut out = format!("Error: Expect token: {} but not found.\r\n", et);
-                out += cp.indication_string(&src_lines).as_ref();
+                out += cp.debug_string(&src_lines).as_ref();
                 return out;
             }
             Error::ExpectIdentifier(s) => {
                 let mut out = "Error: Expect identifier.\r\n".to_owned();
-                out += s.indication_string(&src_lines).as_ref();
+                out += s.debug_string(&src_lines).as_ref();
                 return out;
             }
         }
@@ -97,7 +96,7 @@ impl LoxError for Error {
     }
 }
 
-pub type ParserOutput = (Vec<Statement>, Vec<Error>);
+pub type ParserOutput = (Vec<BoxedStatement>, Vec<Error>);
 
 pub struct Parser<'tokens> {
     tokens: &'tokens Vec<Token>,
@@ -157,7 +156,7 @@ impl<'tokens> Parser<'tokens> {
             return Err(
                 Error::ExpectTokenMismatch(
                     variant.lexeme().to_string(),
-                    t.span(),
+                    t.code_span(),
                 )
             );
         }
@@ -173,7 +172,7 @@ impl<'tokens> Parser<'tokens> {
                     self.advance();
                     Ok(it)
                 }
-                _ => Err(Error::ExpectIdentifier(t.span()))
+                _ => Err(Error::ExpectIdentifier(t.code_span()))
             }
         }
         else {
@@ -216,15 +215,15 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn expression(&mut self) -> Result<Expression, Error> {
+    pub fn expression(&mut self) -> Result<BoxedExpression, Error> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<Expression, Error> {
+    fn assignment(&mut self) -> Result<BoxedExpression, Error> {
         if let Ok(ident) = self.consume_identifier() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
                 let expr = self.assignment()?;
-                let span = Span::new(ident.span().start, expr.span().end);
+                let span = CodeSpan::new(ident.code_span().start(), expr.code_span().end());
                 return Ok(assign_expression!(ident.name(), expr, span));
             }
             else {
@@ -234,27 +233,27 @@ impl<'tokens> Parser<'tokens> {
         return self.logical_or();
     }
 
-    fn logical_or(&mut self) -> Result<Expression, Error> {
+    fn logical_or(&mut self) -> Result<BoxedExpression, Error> {
         let mut lhs = self.logical_and()?;
         while self.consume(SimpleTokenEnum::Or).is_ok() {
             let rhs = self.logical_and()?;
-            let span = Span::new(lhs.span().start, rhs.span().end);
+            let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
             lhs = logical_expression!(Or, lhs, rhs, span);
         }
         Ok(lhs)
     }
 
-    fn logical_and(&mut self) -> Result<Expression, Error> {
+    fn logical_and(&mut self) -> Result<BoxedExpression, Error> {
         let mut lhs = self.equality()?;
         while self.consume(SimpleTokenEnum::And).is_ok() {
             let rhs = self.equality()?;
-            let span = Span::new(lhs.span().start, rhs.span().end);
+            let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
             lhs = logical_expression!(And, lhs, rhs, span);
         }
         Ok(lhs)
     }
 
-    fn equality(&mut self) -> Result<Expression, Error> {
+    fn equality(&mut self) -> Result<BoxedExpression, Error> {
         let mut lhs = self.comparison()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -262,14 +261,14 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::EqualEqual => {
                         self.advance();
                         let rhs = self.comparison()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Equal, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::BangEqual => {
                         self.advance();
                         let rhs = self.comparison()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(NotEqual, lhs, rhs, span);
                         continue;
                     }
@@ -283,7 +282,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn comparison(&mut self) -> Result<Expression, Error> {
+    fn comparison(&mut self) -> Result<BoxedExpression, Error> {
         let mut lhs = self.term()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -291,28 +290,28 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Less => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Less, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::LessEqual => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(LessEqual, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::Greater => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Greater, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::GreaterEqual => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(GreaterEqual, lhs, rhs, span);
                         continue;
                     }
@@ -326,7 +325,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn term(&mut self) -> Result<Expression, Error> {
+    fn term(&mut self) -> Result<BoxedExpression, Error> {
         let mut lhs = self.factor()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -334,14 +333,14 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Plus => {
                         self.advance();
                         let rhs = self.factor()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Plus, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::Minus => {
                         self.advance();
                         let rhs = self.factor()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Minus, lhs, rhs, span);
                         continue;
                     }
@@ -355,7 +354,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn factor(&mut self) -> Result<Expression, Error> {
+    fn factor(&mut self) -> Result<BoxedExpression, Error> {
         let mut lhs = self.unary()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -363,14 +362,14 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Star => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Multiply, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::Slash => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = Span::new(lhs.span().start, rhs.span().end);
+                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Divide, lhs, rhs, span);
                         continue;
                     }
@@ -384,20 +383,20 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn unary(&mut self) -> Result<Expression, Error> {
+    fn unary(&mut self) -> Result<BoxedExpression, Error> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
                     SimpleTokenEnum::Bang  => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = Span::new(t.span().start, rhs.span().end);
+                        let span = CodeSpan::new(t.code_span().start(), rhs.code_span().end());
                         return Ok(unary_expression!(Not, rhs, span));
                     }
                     SimpleTokenEnum::Minus  => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = Span::new(t.span().start, rhs.span().end);
+                        let span = CodeSpan::new(t.code_span().start(), rhs.code_span().end());
                         return Ok(unary_expression!(Negative, rhs, span));
                     }
                     _ => { }
@@ -411,43 +410,43 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn primary(&mut self) -> Result<Expression, Error> {
+    fn primary(&mut self) -> Result<BoxedExpression, Error> {
         if let Some(t) = self.peek() {
             match t {
                 Token::Number(nt) => {
                     self.advance();
-                    Ok(literal_expression!(Number, nt.clone(), nt.span()))
+                    Ok(literal_expression!(Number, nt.clone(), nt.code_span()))
                 }
                 Token::String(st) => {
                     self.advance();
-                    Ok(literal_expression!(String, st.clone(), st.span()))
+                    Ok(literal_expression!(String, st.clone(), st.code_span()))
                 }
                 Token::Identifier(it) => {
                     self.advance();
-                    Ok(variable_expression!(it.name(), it.span()))
+                    Ok(variable_expression!(it.name(), it.code_span()))
                 }
                 Token::Simple(st) => {
                     match st.variant() {
                         SimpleTokenEnum::True => {
                             self.advance();
-                            Ok(literal_expression!(True, st.span()))
+                            Ok(literal_expression!(True, st.code_span()))
                         }
                         SimpleTokenEnum::False => {
                             self.advance();
-                            Ok(literal_expression!(False, st.span()))
+                            Ok(literal_expression!(False, st.code_span()))
                         }
                         SimpleTokenEnum::Nil => {
                             self.advance();
-                            Ok(literal_expression!(Nil, st.span()))
+                            Ok(literal_expression!(Nil, st.code_span()))
                         }
                         SimpleTokenEnum::LeftParen => {
                             self.advance();
                             let e = self.expression()?;
                             Ok(grouping_expression!(
                                 e,
-                                Span::new(
-                                    st.span().start,
-                                    self.consume(SimpleTokenEnum::RightParen)?.span().end,
+                                CodeSpan::new(
+                                    st.code_span().start(),
+                                    self.consume(SimpleTokenEnum::RightParen)?.code_span().end(),
                                 )
                             ))
                         }
@@ -455,7 +454,7 @@ impl<'tokens> Parser<'tokens> {
                             Err(self.unexpected_end_error())
                         }
                         _ => {
-                            Err(Error::UnexpectedToken(t.span()))
+                            Err(Error::UnexpectedToken(t.code_span()))
                         }
                     }
                 }
@@ -466,7 +465,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn statement(&mut self) -> Result<Statement, Error> {
+    pub fn statement(&mut self) -> Result<BoxedStatement, Error> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -508,7 +507,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn not_declaration_statement(&mut self) -> Result<Statement, Error> {
+    fn not_declaration_statement(&mut self) -> Result<BoxedStatement, Error> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -546,8 +545,8 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn ifelse(&mut self) -> Result<Statement, Error> {
-        let cp_start = self.peek_last().span().start;
+    fn ifelse(&mut self) -> Result<BoxedStatement, Error> {
+        let cp_start = self.peek_last().code_span().start();
         self.consume(SimpleTokenEnum::LeftParen)?;
         let condition = self.expression()?;
         self.consume(SimpleTokenEnum::RightParen)?;
@@ -556,26 +555,26 @@ impl<'tokens> Parser<'tokens> {
         if self.consume(SimpleTokenEnum::Else).is_ok() {
             else_stmt = Some(self.not_declaration_statement()?);
         }
-        let cp_end = self.peek_last().span().end;
+        let cp_end = self.peek_last().code_span().end();
         if let Some(else_stmt) = else_stmt {
             Ok(if_statement!(
                 condition,
                 then_stmt,
                 else_stmt,
-                Span::new(cp_start, cp_end)
+                CodeSpan::new(cp_start, cp_end)
             ))
         }
         else {
             Ok(if_statement!(
                 condition,
                 then_stmt,
-                Span::new(cp_start, cp_end)
+                CodeSpan::new(cp_start, cp_end)
             ))
         }
     }
 
-    fn r#while(&mut self) -> Result<Statement, Error> {
-        let cp_start = self.peek_last().span().start;
+    fn r#while(&mut self) -> Result<BoxedStatement, Error> {
+        let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
 
@@ -585,17 +584,17 @@ impl<'tokens> Parser<'tokens> {
 
         let body = self.not_declaration_statement()?;
 
-        let cp_end = self.peek_last().span().end;
+        let cp_end = self.peek_last().code_span().end();
 
         Ok(while_statement!(
             condition,
             body,
-            Span::new(cp_start, cp_end)
+            CodeSpan::new(cp_start, cp_end)
         ))
     }
 
-    fn r#for(&mut self) -> Result<Statement, Error> {
-        let cp_start = self.peek_last().span().start;
+    fn r#for(&mut self) -> Result<BoxedStatement, Error> {
+        let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
 
@@ -629,23 +628,23 @@ impl<'tokens> Parser<'tokens> {
 
         let body = self.not_declaration_statement()?;
 
-        let cp_end = self.peek_last().span().end;
+        let cp_end = self.peek_last().code_span().end();
 
         return Ok(for_statement!(
             initializer,
             condition,
             increment,
             body,
-            Span::new(cp_start, cp_end),
+            CodeSpan::new(cp_start, cp_end),
         ));
     }
 
-    fn block(&mut self) -> Result<Statement, Error> {
-        let cp_start = self.peek_last().span().start;
+    fn block(&mut self) -> Result<BoxedStatement, Error> {
+        let cp_start = self.peek_last().code_span().start();
         let mut stmts = Vec::new();
         loop {
             if let Ok(t) = self.consume(SimpleTokenEnum::RightBrace) {
-                return Ok(block_statement!(stmts, Span::new(cp_start, t.span().end)));
+                return Ok(block_statement!(stmts, CodeSpan::new(cp_start, t.code_span().end())));
             }
             else if self.is_end() {
                 return Err(self.expect_token_not_found_error(SimpleTokenEnum::RightBrace.lexeme()));
@@ -656,8 +655,8 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn var_declare_statement(&mut self) -> Result<Statement, Error> {
-        let cp_start = self.peek_last().span().start;
+    fn var_declare_statement(&mut self) -> Result<BoxedStatement, Error> {
+        let cp_start = self.peek_last().code_span().start();
 
         let name = self.consume_identifier()?.name();
 
@@ -668,34 +667,34 @@ impl<'tokens> Parser<'tokens> {
 
         self.consume(SimpleTokenEnum::Semicolon)?;
 
-        let cp_end = self.peek_last().span().end;
+        let cp_end = self.peek_last().code_span().end();
 
         return Ok(var_declare_statement!(
             name,
             initializer,
-            Span::new(cp_start, cp_end)
+            CodeSpan::new(cp_start, cp_end)
         ));
     }
 
-    fn print_statement(&mut self) -> Result<Statement, Error> {
-        let cp_start = self.peek_last().span().start;
+    fn print_statement(&mut self) -> Result<BoxedStatement, Error> {
+        let cp_start = self.peek_last().code_span().start();
         let value = self.expression()?;
         self.consume(SimpleTokenEnum::Semicolon)?;
-        let cp_end = self.peek_last().span().end;
+        let cp_end = self.peek_last().code_span().end();
         Ok(print_statement!(
             value,
-            Span::new(cp_start, cp_end)
+            CodeSpan::new(cp_start, cp_end)
         ))
     }
 
-    fn expression_statement(&mut self) -> Result<Statement, Error> {
+    fn expression_statement(&mut self) -> Result<BoxedStatement, Error> {
         let expr = self.expression()?;
-        let cp_start = expr.span().start;
+        let cp_start = expr.code_span().start();
         self.consume(SimpleTokenEnum::Semicolon)?;
-        let cp_end = self.peek_last().span().end;
+        let cp_end = self.peek_last().code_span().end();
         Ok(expression_statement!(
             expr,
-            Span::new(cp_start, cp_end)
+            CodeSpan::new(cp_start, cp_end)
         ))
     }
 
@@ -704,7 +703,7 @@ impl<'tokens> Parser<'tokens> {
             Error::ExpectTokenNotFound(token.to_string(), CodePoint::new(0, 0))
         }
         else {
-            Error::ExpectTokenNotFound(token.to_string(), self.peek_last().span().end)
+            Error::ExpectTokenNotFound(token.to_string(), self.peek_last().code_span().end())
         }
     }
 
@@ -713,13 +712,13 @@ impl<'tokens> Parser<'tokens> {
             Error::UnexpectedEnd(CodePoint::new(0, 0))
         }
         else {
-            Error::UnexpectedEnd(self.peek_last().span().end)
+            Error::UnexpectedEnd(self.peek_last().code_span().end())
         }
     }
 
     pub fn parse(tokens: &Vec<Token>) -> ParserOutput {
         let mut p = Parser::new(tokens);
-        let mut stmts: Vec<Statement> = Vec::new();
+        let mut stmts: Vec<BoxedStatement> = Vec::new();
         let mut errors: Vec<Error> = Vec::new();
 
         while !p.is_end() {
@@ -738,11 +737,9 @@ impl<'tokens> Parser<'tokens> {
 
 #[cfg(test)]
 mod tests {
-    use crate::scan::span::{
-        Span,
-        CodePoint,
-    };
-    use crate::visitor::Scannable;
+    use crate::code::code_point::CodePoint;
+    use crate::code::code_span::CodeSpan;
+    use crate::visitor::scan::Scannable;
     use super::{
         Parser,
         Error,
@@ -812,8 +809,8 @@ mod tests {
         parser.synchronize();
         match parser.expression().err().unwrap() {
             Error::UnexpectedEnd(cp) => {
-                assert_eq!(cp.line, 0);
-                assert_eq!(cp.char, 0);
+                assert_eq!(cp.line(), 0);
+                assert_eq!(cp.char(), 0);
             },
             _ => panic!("Should be UnexpectedEnd error.")
         }
@@ -825,10 +822,10 @@ mod tests {
         let mut parser = Parser::new(&tokens);
         match parser.expression().err().unwrap() {
             Error::UnexpectedToken(s) => {
-                assert_eq!(s.start.line, 0);
-                assert_eq!(s.start.char, 0);
-                assert_eq!(s.end.line, 0);
-                assert_eq!(s.end.char, 5);
+                assert_eq!(s.start().line(), 0);
+                assert_eq!(s.start().char(), 0);
+                assert_eq!(s.end().line(), 0);
+                assert_eq!(s.end().char(), 5);
             },
             _ => panic!("Should be UnexpectedEnd error.")
         }
@@ -841,10 +838,10 @@ mod tests {
         match parser.expression().err().unwrap() {
             Error::ExpectTokenMismatch(ts, s) => {
                 assert_eq!(ts, ")");
-                assert_eq!(s.start.line, 0);
-                assert_eq!(s.start.char, 6);
-                assert_eq!(s.end.line, 0);
-                assert_eq!(s.end.char, 7);
+                assert_eq!(s.start().line(), 0);
+                assert_eq!(s.start().char(), 6);
+                assert_eq!(s.end().line(), 0);
+                assert_eq!(s.end().char(), 7);
             },
             _ => panic!("Should be ExpectTokenMismatch error.")
         }
@@ -857,8 +854,8 @@ mod tests {
         parser.synchronize();
         match parser.unary().err().unwrap() {
             Error::UnexpectedEnd(cp) => {
-                assert_eq!(cp.line, 0);
-                assert_eq!(cp.char, 0);
+                assert_eq!(cp.line(), 0);
+                assert_eq!(cp.char(), 0);
             },
             _ => panic!("Should be UnexpectedEnd error.")
         }
@@ -878,7 +875,7 @@ mod tests {
             ),
             (
                 "var true;",
-                Err(Error::ExpectIdentifier(Span::new(CodePoint::new(0, 4), CodePoint::new(0, 8))))
+                Err(Error::ExpectIdentifier(CodeSpan::new(CodePoint::new(0, 4), CodePoint::new(0, 8))))
             ),
             (
                 "var foo =",
@@ -898,7 +895,7 @@ mod tests {
                 Err(
                     Error::ExpectTokenMismatch(
                         ";".to_owned(),
-                        Span::new(CodePoint::new(0, 8), CodePoint::new(0, 9)),
+                        CodeSpan::new(CodePoint::new(0, 8), CodePoint::new(0, 9)),
                     )
                 ),
             ),
@@ -916,7 +913,7 @@ mod tests {
                 Err(
                     Error::ExpectTokenMismatch(
                         "(".to_owned(),
-                        Span::new(CodePoint::new(0, 3), CodePoint::new(0, 7)),
+                        CodeSpan::new(CodePoint::new(0, 3), CodePoint::new(0, 7)),
                     )
                 ),
             ),
@@ -925,7 +922,7 @@ mod tests {
                 Err(
                     Error::ExpectTokenMismatch(
                         ")".to_owned(),
-                        Span::new(CodePoint::new(0, 9), CodePoint::new(0, 14)),
+                        CodeSpan::new(CodePoint::new(0, 9), CodePoint::new(0, 14)),
                     )
                 ),
             ),
@@ -940,7 +937,7 @@ mod tests {
             ),
             (
                 "print fun",
-                Err(Error::UnexpectedToken(Span::new(CodePoint::new(0, 6), CodePoint::new(0, 9)))),
+                Err(Error::UnexpectedToken(CodeSpan::new(CodePoint::new(0, 6), CodePoint::new(0, 9)))),
             ),
             (
                 "print \"hello\"",
@@ -969,7 +966,7 @@ mod tests {
                 Err(
                     Error::ExpectTokenMismatch(
                         "(".to_owned(),
-                        Span::new(CodePoint::new(0, 6), CodePoint::new(0, 9)),
+                        CodeSpan::new(CodePoint::new(0, 6), CodePoint::new(0, 9)),
                     )
                 ),
             ),
@@ -978,7 +975,7 @@ mod tests {
                 Err(
                     Error::ExpectTokenMismatch(
                         ")".to_owned(),
-                        Span::new(CodePoint::new(0, 11), CodePoint::new(0, 16)),
+                        CodeSpan::new(CodePoint::new(0, 11), CodePoint::new(0, 16)),
                     )
                 ),
             ),

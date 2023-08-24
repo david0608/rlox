@@ -1,15 +1,17 @@
-use crate::scan::span::Span;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
 
+#[derive(Clone, Debug)]
 pub struct IdentifierToken {
     name: String,
-    span: Span,
+    code_span: CodeSpan,
 }
 
 impl IdentifierToken {
-    pub fn new(name: &str, span: Span) -> IdentifierToken {
+    pub fn new(name: &str, code_span: CodeSpan) -> IdentifierToken {
         IdentifierToken {
             name: name.to_owned(),
-            span,
+            code_span,
         }
     }
 
@@ -20,8 +22,10 @@ impl IdentifierToken {
     pub fn lexeme(&self) -> &str {
         &self.name
     }
+}
 
-    pub fn span(&self) -> Span {
-        self.span
+impl Code for IdentifierToken {
+    fn code_span(&self) -> CodeSpan {
+        self.code_span
     }
 }

@@ -1,18 +1,19 @@
-use crate::scan::span::Span;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
 
 #[derive(Clone)]
 pub struct StringToken {
     literal: String,
     lexeme: String,
-    span: Span,
+    code_span: CodeSpan,
 }
 
 impl StringToken {
-    pub fn new(literal: &str, lexeme: &str, span: Span) -> StringToken {
+    pub fn new(literal: &str, lexeme: &str, code_span: CodeSpan) -> StringToken {
         StringToken {
             literal: literal.to_owned(),
             lexeme: lexeme.to_owned(),
-            span,
+            code_span,
         }
     }
 
@@ -23,8 +24,10 @@ impl StringToken {
     pub fn lexeme(&self) -> &str {
         &self.lexeme
     }
+}
 
-    pub fn span(&self) -> Span {
-        self.span
+impl Code for StringToken {
+    fn code_span(&self) -> CodeSpan {
+        self.code_span
     }
 }

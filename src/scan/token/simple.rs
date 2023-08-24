@@ -1,4 +1,5 @@
-use crate::scan::span::Span;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
 
 pub const LEFT_PAREN_LEXEME: &str = "(";
 pub const RIGHT_PAREN_LEXEME: &str = ")";
@@ -123,14 +124,14 @@ impl SimpleTokenEnum {
 #[derive(Clone, Copy)]
 pub struct SimpleToken {
     variant: SimpleTokenEnum,
-    span: Span,
+    code_span: CodeSpan,
 }
 
 impl SimpleToken {
-    pub fn new(variant: SimpleTokenEnum, span: Span) -> SimpleToken {
+    pub fn new(variant: SimpleTokenEnum, code_span: CodeSpan) -> SimpleToken {
         SimpleToken {
             variant,
-            span,
+            code_span,
         }
     }
 
@@ -141,8 +142,10 @@ impl SimpleToken {
     pub fn lexeme(&self) -> &'static str {
         self.variant.lexeme()
     }
+}
 
-    pub fn span(&self) -> Span {
-        self.span
+impl Code for SimpleToken {
+    fn code_span(&self) -> CodeSpan {
+        self.code_span
     }
 }

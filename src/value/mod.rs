@@ -1,20 +1,22 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+use crate::scope::Scope;
+use crate::r#trait::call::{
+    Call,
+    CallResult,
+    CallError,
+};
+
+pub mod function;
+use function::Function;
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum Value {
     Nil,
     Bool(bool),
     Number(f64),
     String(String),
-}
-
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Nil => write!(f, "Nil"),
-            Value::Bool(v) => write!(f, "{}", v),
-            Value::Number(v) => write!(f, "{}", v),
-            Value::String(v) => write!(f, "{}", v),
-        }
-    }
+    Function(Function),
 }
 
 impl Value {
@@ -24,6 +26,32 @@ impl Value {
             Value::Bool(v) => *v,
             Value::Number(v) => *v != 0.0,
             Value::String(v) => v.len() != 0,
+            Value::Function(_) => true,
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Nil => write!(f, "Nil"),
+            Value::Bool(v) => write!(f, "{}", v),
+            Value::Number(v) => write!(f, "{}", v),
+            Value::String(v) => write!(f, "{}", v),
+            Value::Function(v) => write!(f, "{:?}", v),
+        }
+    }
+}
+
+impl Call for Value {
+    fn call(&self, scope: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
+        match self {
+            Value::Function(f) => {
+                return f.call(scope, arguments);
+            }
+            _ => {
+                return Err(CallError::NotCallable);
+            }
         }
     }
 }

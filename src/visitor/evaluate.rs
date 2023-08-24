@@ -1,48 +1,57 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use crate::code::Code;
+use crate::code::code_span::CodeSpan;
 use crate::value::Value;
 use crate::scope::{
     Scope,
-    Error as ScopeError,
+    ScopeError,
 };
-use crate::scan::span::Span;
-use crate::parse::expr::Expr;
-use crate::parse::expr::assign::AssignExpression;
-use crate::parse::expr::binary::{
+use crate::parse::expression::assign::AssignExpression;
+use crate::parse::expression::binary::{
     BinaryExpression,
     BinaryExpressionEnum,
 };
-use crate::parse::expr::grouping::GroupingExpression;
-use crate::parse::expr::literal::{
+use crate::parse::expression::call::CallExpression;
+use crate::parse::expression::grouping::GroupingExpression;
+use crate::parse::expression::literal::{
     LiteralExpression,
     LiteralExpressionEnum,
 };
-use crate::parse::expr::logical::{
+use crate::parse::expression::logical::{
     LogicalExpression,
     LogicalExpressionEnum,
 };
-use crate::parse::expr::unary::{
+use crate::parse::expression::unary::{
     UnaryExpression,
     UnaryExpressionEnum,
 };
-use crate::parse::expr::variable::VariableExpression;
+use crate::parse::expression::variable::VariableExpression;
+use crate::r#trait::call::{
+    Call,
+    CallError,
+};
+use crate::visitor::execute::ExecuteError;
 use super::{
     ScopeVisit,
     ScopeAccept,
 };
 
 #[derive(Debug, PartialEq)]
-pub enum Error {
-    InvalidNegate(Span, Value),
-    InvalidCompare(Span, Value, Value),
-    InvalidArithmetic(Span, Value, Value),
-    DivideByZero(Span, Value, Value),
-    VariableNotDeclared(Span),
-    GlobalVariableMutation(Span),
-    Unknown(Span),
+pub enum EvaluateError {
+    InvalidNegate(CodeSpan, Value),
+    InvalidCompare(CodeSpan, Value, Value),
+    InvalidArithmetic(CodeSpan, Value, Value),
+    DivideByZero(CodeSpan, Value, Value),
+    VariableNotDeclared(CodeSpan),
+    GlobalVariableMutation(CodeSpan),
+    ArgumentNumberMismatch(CodeSpan, usize, usize),
+    NotCallable(CodeSpan, Value),
+    ExecuteError(CodeSpan, Box<ExecuteError>),
+    Unknown(CodeSpan),
 }
 
-pub type EvaluateResult = std::result::Result<Value, Error>;
+pub type EvaluateResult = std::result::Result<Value, EvaluateError>;
 
 pub struct Evaluate;
 
@@ -67,16 +76,19 @@ impl<'that> ScopeVisit<'that, UnaryExpression, EvaluateResult> for Evaluate {
                 let rhs = e.rhs().evaluate(s)?;
                 match rhs {
                     Value::Nil => {
-                        Err(Error::InvalidNegate(e.span(), rhs))
+                        Err(EvaluateError::InvalidNegate(e.code_span(), rhs))
                     }
                     Value::Bool(_) => {
-                        Err(Error::InvalidNegate(e.span(), rhs))
+                        Err(EvaluateError::InvalidNegate(e.code_span(), rhs))
                     }
                     Value::Number(rhs) => {
                         Ok(Value::Number(-rhs))
                     }
                     Value::String(_) => {
-                        Err(Error::InvalidNegate(e.span(), rhs))
+                        Err(EvaluateError::InvalidNegate(e.code_span(), rhs))
+                    }
+                    Value::Function(_) => {
+                        unreachable!()
                     }
                 }
             }
@@ -107,7 +119,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l < r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -120,7 +132,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l <= r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -133,7 +145,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l > r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -146,7 +158,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l >= r))
                     }
                     _ => {
-                        Err(Error::InvalidCompare(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -159,7 +171,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::String(l.to_owned() + r))
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -169,7 +181,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Number(l - r))
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -179,7 +191,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Number(l * r))
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -187,14 +199,14 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                 match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         if *r == 0.0 {
-                            Err(Error::DivideByZero(e.span(), lhs, rhs))
+                            Err(EvaluateError::DivideByZero(e.code_span(), lhs, rhs))
                         }
                         else {
                             Ok(Value::Number(l / r))
                         }
                     }
                     _ => {
-                        Err(Error::InvalidArithmetic(e.span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -216,14 +228,14 @@ impl<'that> ScopeVisit<'that, LiteralExpression, EvaluateResult> for Evaluate {
 
 impl<'that> ScopeVisit<'that, GroupingExpression, EvaluateResult> for Evaluate {
     fn visit(e: &'that GroupingExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        e.expr().evaluate(s)
+        e.expression().evaluate(s)
     }
 }
 
 impl<'that> ScopeVisit<'that, VariableExpression, EvaluateResult> for Evaluate {
     fn visit(e: &'that VariableExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
         s.borrow().get_value(e.name())
-            .map_err(|_| Error::VariableNotDeclared(e.span()))
+            .map_err(|_| EvaluateError::VariableNotDeclared(e.code_span()))
     }
 }
 
@@ -237,13 +249,13 @@ impl<'that> ScopeVisit<'that, AssignExpression, EvaluateResult> for Evaluate {
             Err(err) => {
                 match err {
                     ScopeError::NotDeclared => {
-                        Err(Error::VariableNotDeclared(e.span()))
+                        Err(EvaluateError::VariableNotDeclared(e.code_span()))
                     }
                     ScopeError::GlobalVariableMutationNotSupport => {
-                        Err(Error::GlobalVariableMutation(e.span()))
+                        Err(EvaluateError::GlobalVariableMutation(e.code_span()))
                     }
                     _ => {
-                        Err(Error::Unknown(e.span()))
+                        Err(EvaluateError::Unknown(e.code_span()))
                     }
                 }
             }
@@ -276,20 +288,46 @@ impl<'that> ScopeVisit<'that, LogicalExpression, EvaluateResult> for Evaluate {
     }
 }
 
+impl<'that> ScopeVisit<'that, CallExpression, EvaluateResult> for Evaluate {
+    fn visit(ce: &'that CallExpression, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        let callee = ce.callee().evaluate(scope)?;
+        let mut arguments = Vec::new();
+        for a in ce.arguments() {
+            arguments.push(a.evaluate(scope)?);
+        }
+        match callee.call(scope, arguments) {
+            Ok(v) => {
+                return Ok(v);
+            }
+            Err(err) => {
+                match err {
+                    CallError::ArgumentNumberMismatch(ec, pc) => {
+                        return Err(EvaluateError::ArgumentNumberMismatch(ce.code_span(), ec, pc));
+                    }
+                    CallError::NotCallable => {
+                        return Err(EvaluateError::NotCallable(ce.code_span(), callee));
+                    }
+                    CallError::ExecuteError(err) => {
+                        return Err(EvaluateError::ExecuteError(ce.code_span(), Box::new(err)));
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::value::Value;
     use crate::scope::Scope;
-    use crate::scan::span::{
-        Span,
-        CodePoint,
-    };
-    use crate::parse::Parser;
-    use crate::visitor::Scannable;
-    use super::Error;
+    use crate::code::code_point::CodePoint;
+    use crate::code::code_span::CodeSpan;
+    use crate::parse::parser::Parser;
+    use crate::visitor::scan::Scannable;
+    use super::EvaluateError;
 
-    fn src_span(src: &str) -> Span {
-        Span::new(CodePoint::new(0, 0), CodePoint::new(0, src.len()))
+    fn src_span(src: &str) -> CodeSpan {
+        CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, src.len()))
     }
 
     macro_rules! test_value {
@@ -359,7 +397,7 @@ mod tests {
             (
                 stringify!($lhs$op$rhs),
                 Err(
-                    Error::$err(
+                    EvaluateError::$err(
                         src_span(stringify!($lhs$op$rhs)),
                         test_value!($lhs),
                         test_value!($rhs),
@@ -372,7 +410,7 @@ mod tests {
             (
                 stringify!($op$rhs),
                 Err(
-                    Error::$err(
+                    EvaluateError::$err(
                         src_span(stringify!($op$rhs)),
                         test_value!($rhs),
                     )
@@ -386,7 +424,7 @@ mod tests {
         let scope = Scope::new().as_rc();
         scope.borrow_mut().declare("foo", Value::Bool(true)).unwrap();
 
-        let tests: Vec<(&str, Result<Value, Error>)> = vec![
+        let tests: Vec<(&str, Result<Value, EvaluateError>)> = vec![
             // Unary negative operations.
             err_test_case!(-, nil, InvalidNegate),
             err_test_case!(-, true, InvalidNegate),
@@ -622,11 +660,11 @@ mod tests {
             ("foo", Ok(Value::Bool(true))),
             ("!foo", Ok(Value::Bool(false))),
             ("!!foo", Ok(Value::Bool(true))),
-            ("bar", Err(Error::VariableNotDeclared(src_span("bar")))),
+            ("bar", Err(EvaluateError::VariableNotDeclared(src_span("bar")))),
             // Assignment.
             ("foo = false", Ok(Value::Bool(false))),
             ("foo = true", Ok(Value::Bool(true))),
-            ("bar = true", Err(Error::VariableNotDeclared(src_span("bar = true")))),
+            ("bar = true", Err(EvaluateError::VariableNotDeclared(src_span("bar = true")))),
             // Logical.
             ("1 or 2", Ok(Value::Number(1.0))),
             ("0 or 2", Ok(Value::Number(2.0))),
