@@ -121,7 +121,7 @@ impl SimpleTokenEnum {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct SimpleToken {
     variant: SimpleTokenEnum,
     code_span: CodeSpan,

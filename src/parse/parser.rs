@@ -3,7 +3,10 @@ use crate::code::Code;
 use crate::code::code_point::CodePoint;
 use crate::code::code_span::CodeSpan;
 use crate::scan::token::Token;
-use crate::scan::token::simple::SimpleTokenEnum;
+use crate::scan::token::simple::{
+    SimpleToken,
+    SimpleTokenEnum,
+};
 use crate::scan::token::identifier::IdentifierToken;
 use crate::parse::expression::BoxedExpression;
 use crate::parse::expression::assign::AssignExpression;
@@ -11,6 +14,7 @@ use crate::parse::expression::binary::{
     BinaryExpression,
     BinaryExpressionEnum,
 };
+use crate::parse::expression::call::CallExpression;
 use crate::parse::expression::grouping::GroupingExpression;
 use crate::parse::expression::literal::{
     LiteralExpression,
@@ -36,6 +40,7 @@ use crate::parse::statement::r#while::WhileStatement;
 use crate::{
     assign_expression,
     binary_expression,
+    call_expression,
     grouping_expression,
     literal_expression,
     logical_expression,
@@ -51,7 +56,7 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq)]
-pub enum Error {
+pub enum ParseError {
     UnexpectedEnd(CodePoint),
     UnexpectedToken(CodeSpan),
     ExpectTokenMismatch(String, CodeSpan),
@@ -59,20 +64,20 @@ pub enum Error {
     ExpectIdentifier(CodeSpan),
 }
 
-impl LoxError for Error {
+impl LoxError for ParseError {
     fn print(&self, src_lines: &Vec<&str>) -> String {
         match self {
-            Error::UnexpectedEnd(cp) => {
+            ParseError::UnexpectedEnd(cp) => {
                 let mut out = "Error: Unexpected end.\r\n".to_owned();
                 out += cp.debug_string(&src_lines).as_ref();
                 return out;
             }
-            Error::UnexpectedToken(s) => {
+            ParseError::UnexpectedToken(s) => {
                 let mut out = format!("Error: Unexpected token: {}\r\n", s.code_string(&src_lines, 10));
                 out += s.debug_string(&src_lines).as_ref();
                 return out;
             }
-            Error::ExpectTokenMismatch(et, s) => {
+            ParseError::ExpectTokenMismatch(et, s) => {
                 let mut out = format!(
                     "Error: Expect token: {} but found: {}\r\n",
                     et,
@@ -81,12 +86,12 @@ impl LoxError for Error {
                 out += s.debug_string(&src_lines).as_ref();
                 return out;
             }
-            Error::ExpectTokenNotFound(et, cp) => {
+            ParseError::ExpectTokenNotFound(et, cp) => {
                 let mut out = format!("Error: Expect token: {} but not found.\r\n", et);
                 out += cp.debug_string(&src_lines).as_ref();
                 return out;
             }
-            Error::ExpectIdentifier(s) => {
+            ParseError::ExpectIdentifier(s) => {
                 let mut out = "Error: Expect identifier.\r\n".to_owned();
                 out += s.debug_string(&src_lines).as_ref();
                 return out;
@@ -96,7 +101,7 @@ impl LoxError for Error {
     }
 }
 
-pub type ParserOutput = (Vec<BoxedStatement>, Vec<Error>);
+pub type ParserOutput = (Vec<BoxedStatement>, Vec<ParseError>);
 
 pub struct Parser<'tokens> {
     tokens: &'tokens Vec<Token>,
@@ -137,11 +142,25 @@ impl<'tokens> Parser<'tokens> {
         self.tokens.get(self.current)
     }
 
+    fn peek_simple(&self, variant: SimpleTokenEnum) -> Option<&'tokens SimpleToken> {
+        if let Some(Token::Simple(st)) = self.peek() {
+            if st.variant() == variant {
+                return Some(st);
+            }
+            else {
+                return None;
+            }
+        }
+        else {
+            return None;
+        }
+    }
+
     fn peek_last(&self) -> &'tokens Token {
         &self.tokens[self.current - 1]
     }
 
-    fn consume(&mut self, variant: SimpleTokenEnum) -> Result<&'tokens Token, Error> {
+    fn consume(&mut self, variant: SimpleTokenEnum) -> Result<&'tokens Token, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 if st.variant() == variant {
@@ -154,7 +173,7 @@ impl<'tokens> Parser<'tokens> {
             }
 
             return Err(
-                Error::ExpectTokenMismatch(
+                ParseError::ExpectTokenMismatch(
                     variant.lexeme().to_string(),
                     t.code_span(),
                 )
@@ -165,14 +184,14 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn consume_identifier(&mut self) -> Result<&'tokens IdentifierToken, Error> {
+    fn consume_identifier(&mut self) -> Result<&'tokens IdentifierToken, ParseError> {
         if let Some(t) = self.peek() {
             match t {
                 Token::Identifier(ref it) => {
                     self.advance();
                     Ok(it)
                 }
-                _ => Err(Error::ExpectIdentifier(t.code_span()))
+                _ => Err(ParseError::ExpectIdentifier(t.code_span()))
             }
         }
         else {
@@ -215,11 +234,11 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn expression(&mut self) -> Result<BoxedExpression, Error> {
+    pub fn expression(&mut self) -> Result<BoxedExpression, ParseError> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<BoxedExpression, Error> {
+    fn assignment(&mut self) -> Result<BoxedExpression, ParseError> {
         if let Ok(ident) = self.consume_identifier() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
                 let expr = self.assignment()?;
@@ -233,7 +252,7 @@ impl<'tokens> Parser<'tokens> {
         return self.logical_or();
     }
 
-    fn logical_or(&mut self) -> Result<BoxedExpression, Error> {
+    fn logical_or(&mut self) -> Result<BoxedExpression, ParseError> {
         let mut lhs = self.logical_and()?;
         while self.consume(SimpleTokenEnum::Or).is_ok() {
             let rhs = self.logical_and()?;
@@ -243,7 +262,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn logical_and(&mut self) -> Result<BoxedExpression, Error> {
+    fn logical_and(&mut self) -> Result<BoxedExpression, ParseError> {
         let mut lhs = self.equality()?;
         while self.consume(SimpleTokenEnum::And).is_ok() {
             let rhs = self.equality()?;
@@ -253,7 +272,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn equality(&mut self) -> Result<BoxedExpression, Error> {
+    fn equality(&mut self) -> Result<BoxedExpression, ParseError> {
         let mut lhs = self.comparison()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -282,7 +301,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn comparison(&mut self) -> Result<BoxedExpression, Error> {
+    fn comparison(&mut self) -> Result<BoxedExpression, ParseError> {
         let mut lhs = self.term()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -325,7 +344,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn term(&mut self) -> Result<BoxedExpression, Error> {
+    fn term(&mut self) -> Result<BoxedExpression, ParseError> {
         let mut lhs = self.factor()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -354,7 +373,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn factor(&mut self) -> Result<BoxedExpression, Error> {
+    fn factor(&mut self) -> Result<BoxedExpression, ParseError> {
         let mut lhs = self.unary()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -383,7 +402,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn unary(&mut self) -> Result<BoxedExpression, Error> {
+    fn unary(&mut self) -> Result<BoxedExpression, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -403,14 +422,51 @@ impl<'tokens> Parser<'tokens> {
                 }
             }
 
-            return self.primary();
+            return self.call();
         }
         else {
             return Err(self.unexpected_end_error());
         }
     }
 
-    fn primary(&mut self) -> Result<BoxedExpression, Error> {
+    fn call(&mut self) -> Result<BoxedExpression, ParseError> {
+        let mut e = self.primary()?;
+        loop {
+            if self.peek_simple(SimpleTokenEnum::LeftParen).is_some() {
+                self.advance();
+                let mut arguments = Vec::<BoxedExpression>::new();
+
+                if let Some(rp) = self.peek_simple(SimpleTokenEnum::RightParen) {
+                    self.advance();
+                    let span = CodeSpan::new(e.code_span().start(), rp.code_span().end());
+                    e = call_expression!(e, arguments, span);
+                    continue;
+                }
+                else {
+                    loop {
+                        arguments.push(self.expression()?);
+                        if self.peek_simple(SimpleTokenEnum::Comma).is_some() {
+                            self.advance();
+                            continue;
+                        }
+                        else {
+                            let rp = self.consume(SimpleTokenEnum::RightParen)?;
+                            let span = CodeSpan::new(e.code_span().start(), rp.code_span().end());
+                            e = call_expression!(e, arguments, span);
+                            break;
+                        }
+                    }
+                    continue;
+                }
+            }
+            else {
+                break;
+            }
+        }
+        return Ok(e);
+    }
+
+    fn primary(&mut self) -> Result<BoxedExpression, ParseError> {
         if let Some(t) = self.peek() {
             match t {
                 Token::Number(nt) => {
@@ -454,7 +510,7 @@ impl<'tokens> Parser<'tokens> {
                             Err(self.unexpected_end_error())
                         }
                         _ => {
-                            Err(Error::UnexpectedToken(t.code_span()))
+                            Err(ParseError::UnexpectedToken(t.code_span()))
                         }
                     }
                 }
@@ -465,7 +521,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn statement(&mut self) -> Result<BoxedStatement, Error> {
+    pub fn statement(&mut self) -> Result<BoxedStatement, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -507,7 +563,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn not_declaration_statement(&mut self) -> Result<BoxedStatement, Error> {
+    fn not_declaration_statement(&mut self) -> Result<BoxedStatement, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -545,7 +601,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn ifelse(&mut self) -> Result<BoxedStatement, Error> {
+    fn ifelse(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         self.consume(SimpleTokenEnum::LeftParen)?;
         let condition = self.expression()?;
@@ -573,7 +629,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn r#while(&mut self) -> Result<BoxedStatement, Error> {
+    fn r#while(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
@@ -593,7 +649,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn r#for(&mut self) -> Result<BoxedStatement, Error> {
+    fn r#for(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
@@ -639,7 +695,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn block(&mut self) -> Result<BoxedStatement, Error> {
+    fn block(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         let mut stmts = Vec::new();
         loop {
@@ -655,7 +711,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn var_declare_statement(&mut self) -> Result<BoxedStatement, Error> {
+    fn var_declare_statement(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         let name = self.consume_identifier()?.name();
@@ -676,7 +732,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn print_statement(&mut self) -> Result<BoxedStatement, Error> {
+    fn print_statement(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         let value = self.expression()?;
         self.consume(SimpleTokenEnum::Semicolon)?;
@@ -687,7 +743,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn expression_statement(&mut self) -> Result<BoxedStatement, Error> {
+    fn expression_statement(&mut self) -> Result<BoxedStatement, ParseError> {
         let expr = self.expression()?;
         let cp_start = expr.code_span().start();
         self.consume(SimpleTokenEnum::Semicolon)?;
@@ -698,28 +754,28 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn expect_token_not_found_error(&self, token: &str) -> Error {
+    fn expect_token_not_found_error(&self, token: &str) -> ParseError {
         if self.current == 0 {
-            Error::ExpectTokenNotFound(token.to_string(), CodePoint::new(0, 0))
+            ParseError::ExpectTokenNotFound(token.to_string(), CodePoint::new(0, 0))
         }
         else {
-            Error::ExpectTokenNotFound(token.to_string(), self.peek_last().code_span().end())
+            ParseError::ExpectTokenNotFound(token.to_string(), self.peek_last().code_span().end())
         }
     }
 
-    fn unexpected_end_error(&self) -> Error {
+    fn unexpected_end_error(&self) -> ParseError {
         if self.current == 0 {
-            Error::UnexpectedEnd(CodePoint::new(0, 0))
+            ParseError::UnexpectedEnd(CodePoint::new(0, 0))
         }
         else {
-            Error::UnexpectedEnd(self.peek_last().code_span().end())
+            ParseError::UnexpectedEnd(self.peek_last().code_span().end())
         }
     }
 
     pub fn parse(tokens: &Vec<Token>) -> ParserOutput {
         let mut p = Parser::new(tokens);
         let mut stmts: Vec<BoxedStatement> = Vec::new();
-        let mut errors: Vec<Error> = Vec::new();
+        let mut errors: Vec<ParseError> = Vec::new();
 
         while !p.is_end() {
             match p.statement() {
@@ -739,95 +795,290 @@ impl<'tokens> Parser<'tokens> {
 mod tests {
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
+    use crate::scan::token::Token;
     use crate::visitor::scan::Scannable;
     use super::{
         Parser,
-        Error,
+        ParseError,
     };
 
     #[test]
-    fn test_expression() {
+    fn test_primary() {
         let tests: Vec<(&str, &str)> = vec![
-            // Primary.
+            // number.
             ("1.23", "1.23"),
+            // string.
             ("\"hello\"", "\"hello\""),
+            // identifier.
+            ("hello", "hello"),
+            // simple true.
             ("true", "true"),
+            // simple false.
             ("false", "false"),
+            // simple nil.
             ("nil", "nil"),
+            // simple group.
             ("(1 + 1)", "(group (+ 1 1))"),
-            // Unary.
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.primary().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_primary_unclosed_parentheses() {
+        let tests: Vec<(&str, ParseError)> = vec![
+            (
+                "(1 + 1",
+                ParseError::ExpectTokenNotFound(
+                    ")".to_owned(),
+                    CodePoint::new(0, 6),
+                )
+            ),
+            (
+                "(1 + 2}",
+                ParseError::ExpectTokenMismatch(
+                    ")".to_owned(),
+                    CodeSpan::new(
+                        CodePoint::new(0, 6),
+                        CodePoint::new(0, 7),
+                    ),
+                )
+            )
+        ];
+        for (src, err) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.primary().unwrap_err(), err);
+        }
+    }
+
+    #[test]
+    fn test_primary_unexpected_end() {
+        let ts = "".scan().0;
+        let mut p = Parser::new(&ts);
+        assert_eq!(
+            p.primary().unwrap_err(),
+            ParseError::UnexpectedEnd(CodePoint::new(0, 0))
+        );
+        let ts: Vec<Token> = vec![];
+        let mut p = Parser::new(&ts);
+        assert_eq!(
+            p.primary().unwrap_err(),
+            ParseError::UnexpectedEnd(CodePoint::new(0, 0))
+        );
+    }
+
+    #[test]
+    fn test_primary_unexpected_token() {
+        let ts = "!".scan().0;
+        let mut p = Parser::new(&ts);
+        assert_eq!(
+            p.primary().unwrap_err(),
+            ParseError::UnexpectedToken(
+                CodeSpan::new(
+                    CodePoint::new(0, 0),
+                    CodePoint::new(0, 1),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_call() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("hello()", "(call hello )"),
+            ("hello()()", "(call (call hello ) )"),
+            ("hello(name, \"123\")", "(call hello name \"123\")"),
+            ("hello(name)(\"123\")", "(call (call hello name) \"123\")"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.call().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_call_unclosed_parentheses() {
+        let tests: Vec<(&str, ParseError)> = vec![
+            (
+                "hello(",
+                ParseError::UnexpectedEnd(
+                    CodePoint::new(0, 6),
+                )
+            ),
+            (
+                "hello(}",
+                ParseError::UnexpectedToken(
+                    CodeSpan::new(
+                        CodePoint::new(0, 6),
+                        CodePoint::new(0, 7),
+                    ),
+                )
+            ),
+            (
+                "hello(123",
+                ParseError::ExpectTokenNotFound(
+                    ")".to_owned(),
+                    CodePoint::new(0, 9),
+                )
+            ),
+            (
+                "hello(123}",
+                ParseError::ExpectTokenMismatch(
+                    ")".to_owned(),
+                    CodeSpan::new(
+                        CodePoint::new(0, 9),
+                        CodePoint::new(0, 10),
+                    ),
+                )
+            )
+        ];
+        for (src, err) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.call().unwrap_err(), err);
+        }
+    }
+
+    #[test]
+    fn test_unary() {
+        let tests: Vec<(&str, &str)> = vec![
             ("!1", "(! 1)"),
             ("!!1", "(! (! 1))"),
             ("-1", "(- 1)"),
-            ("--1", "(- (- 1))"),
-            ("-(1 + 2)", "(- (group (+ 1 2)))"),
-            // Factor.
+            ("-!1", "(- (! 1))"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.unary().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_unary_unexpected_end() {
+        let ts = "".scan().0;
+        let mut p = Parser::new(&ts);
+        assert_eq!(
+            p.unary().unwrap_err(),
+            ParseError::UnexpectedEnd(
+                CodePoint::new(0, 0),
+            )
+        );
+    }
+
+    #[test]
+    fn test_factor() {
+        let tests: Vec<(&str, &str)> = vec![
             ("1 * 2", "(* 1 2)"),
             ("1 / 2", "(/ 1 2)"),
             ("1 * 2 / 3", "(/ (* 1 2) 3)"),
             ("1 * -2", "(* 1 (- 2))"),
-            // Term.
+            ("-2 * 3", "(* (- 2) 3)"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.factor().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_term() {
+        let tests: Vec<(&str, &str)> = vec![
             ("1 + 2", "(+ 1 2)"),
             ("1 + 2 + 3", "(+ (+ 1 2) 3)"),
             ("1 - 2", "(- 1 2)"),
             ("1 - 2 - 3", "(- (- 1 2) 3)"),
             ("1 + 2 * 3", "(+ 1 (* 2 3))"),
-            // Comparison.
+            ("1 * 2 - 3", "(- (* 1 2) 3)"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.term().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_comparison() {
+        let tests: Vec<(&str, &str)> = vec![
             ("1 < 2", "(< 1 2)"),
             ("1 <= 2", "(<= 1 2)"),
             ("1 > 2", "(> 1 2)"),
             ("1 >= 2", "(>= 1 2)"),
+            ("1 > 2 > 3", "(> (> 1 2) 3)"),
+            ("1 + 2 > 3", "(> (+ 1 2) 3)"),
             ("1 > 2 + 3", "(> 1 (+ 2 3))"),
-            ("1 > 2 + 3 > 4", "(> (> 1 (+ 2 3)) 4)"),
-            ("1 + 2 > 3 + 4", "(> (+ 1 2) (+ 3 4))"),
-            // Equality.
-            ("1 == 2", "(== 1 2)"),
-            ("1 != 2", "(!= 1 2)"),
-            ("1 == 2 + 3", "(== 1 (+ 2 3))"),
-            ("1 + 2 == 3 + 4", "(== (+ 1 2) (+ 3 4))"),
-            ("1 == 2 + 3 == 4", "(== (== 1 (+ 2 3)) 4)"),
-            // Assignment.
-            ("foo = true", "(= foo true)"),
-            ("foo = bar = true", "(= foo (= bar true))"),
-            // Logical.
-            ("x or y", "(or x y)"),
-            ("x and y", "(and x y)"),
-            ("x or y and z", "(or x (and y z))"),
-            ("w and x or y and z", "(or (and w x) (and y z))"),
         ];
         for (src, ast) in tests {
-            let tokens = src.scan().0;
-            let mut parser = Parser::new(&tokens);
-            assert_eq!(parser.expression().unwrap().print(), ast);
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.comparison().unwrap().print(), ast);
         }
     }
 
     #[test]
-    fn test_unexpected_end() {
-        let tokens = "".scan().0;
-        let mut parser = Parser::new(&tokens);
-        parser.synchronize();
-        match parser.expression().err().unwrap() {
-            Error::UnexpectedEnd(cp) => {
-                assert_eq!(cp.line(), 0);
-                assert_eq!(cp.char(), 0);
-            },
-            _ => panic!("Should be UnexpectedEnd error.")
+    fn test_equality() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("1 == 2", "(== 1 2)"),
+            ("1 != 2", "(!= 1 2)"),
+            ("1 == 2 != 3", "(!= (== 1 2) 3)"),
+            ("1 == 2 > 3", "(== 1 (> 2 3))"),
+            ("1 < 2 != 3", "(!= (< 1 2) 3)"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.equality().unwrap().print(), ast);
         }
     }
 
     #[test]
-    fn test_unexpected_token() {
-        let tokens = "print".scan().0;
-        let mut parser = Parser::new(&tokens);
-        match parser.expression().err().unwrap() {
-            Error::UnexpectedToken(s) => {
-                assert_eq!(s.start().line(), 0);
-                assert_eq!(s.start().char(), 0);
-                assert_eq!(s.end().line(), 0);
-                assert_eq!(s.end().char(), 5);
-            },
-            _ => panic!("Should be UnexpectedEnd error.")
+    fn test_logicala_and() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("1 and 2", "(and 1 2)"),
+            ("1 and 2 and 3", "(and (and 1 2) 3)"),
+            ("1 == 2 and 3", "(and (== 1 2) 3)"),
+            ("1 and 2 == 3", "(and 1 (== 2 3))"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.logical_and().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_logicala_or() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("1 or 2", "(or 1 2)"),
+            ("1 or 2 or 3", "(or (or 1 2) 3)"),
+            ("1 or 2 and 3", "(or 1 (and 2 3))"),
+            ("1 and 2 or 3", "(or (and 1 2) 3)"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.logical_or().unwrap().print(), ast);
+        }
+    }
+
+    #[test]
+    fn test_assignment() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("foo = true", "(= foo true)"),
+            ("foo = bar = true", "(= foo (= bar true))"),
+            ("foo = x or y", "(= foo (or x y))"),
+        ];
+        for (src, ast) in tests {
+            let ts = src.scan().0;
+            let mut p = Parser::new(&ts);
+            assert_eq!(p.assignment().unwrap().print(), ast);
         }
     }
 
@@ -836,7 +1087,7 @@ mod tests {
         let tokens = "(1 + 1}".scan().0;
         let mut parser = Parser::new(&tokens);
         match parser.expression().err().unwrap() {
-            Error::ExpectTokenMismatch(ts, s) => {
+            ParseError::ExpectTokenMismatch(ts, s) => {
                 assert_eq!(ts, ")");
                 assert_eq!(s.start().line(), 0);
                 assert_eq!(s.start().char(), 6);
@@ -848,22 +1099,8 @@ mod tests {
     }
 
     #[test]
-    fn test_unary_unexpected_end() {
-        let tokens = "".scan().0;
-        let mut parser = Parser::new(&tokens);
-        parser.synchronize();
-        match parser.unary().err().unwrap() {
-            Error::UnexpectedEnd(cp) => {
-                assert_eq!(cp.line(), 0);
-                assert_eq!(cp.char(), 0);
-            },
-            _ => panic!("Should be UnexpectedEnd error.")
-        }
-    }
-
-    #[test]
     fn test_statement() {
-        let tests: Vec<(&str, Result<&str, Error>)> = vec![
+        let tests: Vec<(&str, Result<&str, ParseError>)> = vec![
             // Variable declaration statement.
             (
                 "var foo;",
@@ -875,15 +1112,15 @@ mod tests {
             ),
             (
                 "var true;",
-                Err(Error::ExpectIdentifier(CodeSpan::new(CodePoint::new(0, 4), CodePoint::new(0, 8))))
+                Err(ParseError::ExpectIdentifier(CodeSpan::new(CodePoint::new(0, 4), CodePoint::new(0, 8))))
             ),
             (
                 "var foo =",
-                Err(Error::UnexpectedEnd(CodePoint::new(0, 9)))
+                Err(ParseError::UnexpectedEnd(CodePoint::new(0, 9)))
             ),
             (
                 "var foo = true",
-                Err(Error::ExpectTokenNotFound(";".to_owned(), CodePoint::new(0, 14)))
+                Err(ParseError::ExpectTokenNotFound(";".to_owned(), CodePoint::new(0, 14)))
             ),
             // Block statement.
             (
@@ -893,7 +1130,7 @@ mod tests {
             (
                 "{var foo}",
                 Err(
-                    Error::ExpectTokenMismatch(
+                    ParseError::ExpectTokenMismatch(
                         ";".to_owned(),
                         CodeSpan::new(CodePoint::new(0, 8), CodePoint::new(0, 9)),
                     )
@@ -901,7 +1138,7 @@ mod tests {
             ),
             (
                 "{var foo;",
-                Err(Error::ExpectTokenNotFound("}".to_owned(), CodePoint::new(0, 9)))
+                Err(ParseError::ExpectTokenNotFound("}".to_owned(), CodePoint::new(0, 9)))
             ),
             // Ifelse.
             (
@@ -911,7 +1148,7 @@ mod tests {
             (
                 "if true) print \"hello\"; else print \"oops\";",
                 Err(
-                    Error::ExpectTokenMismatch(
+                    ParseError::ExpectTokenMismatch(
                         "(".to_owned(),
                         CodeSpan::new(CodePoint::new(0, 3), CodePoint::new(0, 7)),
                     )
@@ -920,7 +1157,7 @@ mod tests {
             (
                 "if (true print \"hello\"; else print \"oops\";",
                 Err(
-                    Error::ExpectTokenMismatch(
+                    ParseError::ExpectTokenMismatch(
                         ")".to_owned(),
                         CodeSpan::new(CodePoint::new(0, 9), CodePoint::new(0, 14)),
                     )
@@ -933,15 +1170,15 @@ mod tests {
             ),
             (
                 "print",
-                Err(Error::UnexpectedEnd(CodePoint::new(0, 5))),
+                Err(ParseError::UnexpectedEnd(CodePoint::new(0, 5))),
             ),
             (
                 "print fun",
-                Err(Error::UnexpectedToken(CodeSpan::new(CodePoint::new(0, 6), CodePoint::new(0, 9)))),
+                Err(ParseError::UnexpectedToken(CodeSpan::new(CodePoint::new(0, 6), CodePoint::new(0, 9)))),
             ),
             (
                 "print \"hello\"",
-                Err(Error::ExpectTokenNotFound(";".to_owned(), CodePoint::new(0, 13))),
+                Err(ParseError::ExpectTokenNotFound(";".to_owned(), CodePoint::new(0, 13))),
             ),
             // Expression statement.
             (
@@ -950,11 +1187,11 @@ mod tests {
             ),
             (
                 "",
-                Err(Error::UnexpectedEnd(CodePoint::new(0, 0))),
+                Err(ParseError::UnexpectedEnd(CodePoint::new(0, 0))),
             ),
             (
                 "true",
-                Err(Error::ExpectTokenNotFound(";".to_owned(), CodePoint::new(0, 4))),
+                Err(ParseError::ExpectTokenNotFound(";".to_owned(), CodePoint::new(0, 4))),
             ),
             // While statement.
             (
@@ -964,7 +1201,7 @@ mod tests {
             (
                 "while foo) print 1;",
                 Err(
-                    Error::ExpectTokenMismatch(
+                    ParseError::ExpectTokenMismatch(
                         "(".to_owned(),
                         CodeSpan::new(CodePoint::new(0, 6), CodePoint::new(0, 9)),
                     )
@@ -973,7 +1210,7 @@ mod tests {
             (
                 "while (foo print 1;",
                 Err(
-                    Error::ExpectTokenMismatch(
+                    ParseError::ExpectTokenMismatch(
                         ")".to_owned(),
                         CodeSpan::new(CodePoint::new(0, 11), CodePoint::new(0, 16)),
                     )

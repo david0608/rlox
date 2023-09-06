@@ -16,6 +16,7 @@ use simple::{
 pub mod string;
 use string:: StringToken;
 
+#[derive(Debug)]
 pub enum Token {
     Identifier(IdentifierToken),
     Number(NumberToken),

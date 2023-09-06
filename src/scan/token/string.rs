@@ -1,7 +1,7 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct StringToken {
     literal: String,
     lexeme: String,
