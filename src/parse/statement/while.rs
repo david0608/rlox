@@ -1,12 +1,10 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use crate::parse::expression::BoxedExpression;
 use super::{
     Statement,
     BoxedStatement,
 };
-use crate::impl_debug_for_printable;
 
 pub struct WhileStatement {
     condition: Option<BoxedExpression>,
@@ -54,8 +52,6 @@ impl Statement for WhileStatement {
         )
     }
 }
-
-impl_debug_for_printable!(WhileStatement);
 
 #[macro_export]
 macro_rules! while_statement {

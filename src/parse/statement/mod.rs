@@ -1,6 +1,6 @@
 use crate::code::Code;
-use crate::visitor::print::Printable;
 use crate::visitor::execute::Executable;
+use crate::print::Print;
 
 pub mod block;
 pub mod expression;
@@ -13,7 +13,7 @@ pub mod r#while;
 pub trait Statement
     where
     Self: Code
-        + Printable
+        + Print
         + Executable
         + std::fmt::Debug
 {

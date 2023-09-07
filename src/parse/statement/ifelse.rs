@@ -1,12 +1,10 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use crate::parse::expression::BoxedExpression;
 use super::{
     Statement,
     BoxedStatement,
 };
-use crate::impl_debug_for_printable;
 
 pub struct IfStatement {
     condition: BoxedExpression,
@@ -62,8 +60,6 @@ impl Statement for IfStatement {
         )
     }
 }
-
-impl_debug_for_printable!(IfStatement);
 
 #[macro_export]
 macro_rules! if_statement {

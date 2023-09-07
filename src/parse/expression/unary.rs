@@ -1,11 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 #[derive(Clone, Copy)]
 pub enum UnaryExpressionEnum {
@@ -59,8 +57,6 @@ impl Expression for UnaryExpression {
         )
     }
 }
-
-impl_debug_for_printable!(UnaryExpression);
 
 #[macro_export]
 macro_rules! unary_expression {

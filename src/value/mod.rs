@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::scope::Scope;
-use crate::r#trait::call::{
+use crate::traits::call::{
     Call,
     CallResult,
     CallError,

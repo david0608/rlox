@@ -2,8 +2,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use crate::scope::Scope;
 
-pub mod print;
-
 pub mod evaluate;
 
 pub mod execute;

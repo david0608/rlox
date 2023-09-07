@@ -1,11 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 #[derive(Clone, Copy)]
 pub enum LogicalExpressionEnum {
@@ -67,8 +65,6 @@ impl Expression for LogicalExpression {
         )
     }
 }
-
-impl_debug_for_printable!(LogicalExpression);
 
 #[macro_export]
 macro_rules! logical_expression {

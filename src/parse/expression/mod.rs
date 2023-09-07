@@ -1,6 +1,6 @@
 use crate::code::Code;
-use crate::visitor::print::Printable;
 use crate::visitor::evaluate::Evaluable;
+use crate::print::Print;
 
 pub mod assign;
 pub mod binary;
@@ -14,7 +14,7 @@ pub mod variable;
 pub trait Expression
     where
     Self: Code
-        + Printable
+        + Print
         + Evaluable
         + std::fmt::Debug
 {

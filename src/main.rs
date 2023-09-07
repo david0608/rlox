@@ -3,10 +3,11 @@ use std::io::Write;
 mod code;
 mod parse;
 mod scan;
-mod r#trait;
+mod traits;
 mod value;
 mod visitor;
 mod error;
+mod print;
 mod scope;
 
 type Result = std::result::Result<(), Box<dyn std::error::Error>>;

@@ -8,7 +8,7 @@ use std::iter::zip;
 use crate::scope::Scope;
 use crate::scan::token::identifier::IdentifierToken;
 use crate::parse::statement::BoxedStatement;
-use crate::r#trait::call::{
+use crate::traits::call::{
     Call,
     CallResult,
     CallError,

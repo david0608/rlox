@@ -1,13 +1,13 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::scan::token::number::NumberToken;
-use crate::scan::token::string::StringToken;
-use crate::visitor::print::Printable;
+use crate::scan::token::{
+    number::NumberToken,
+    string::StringToken,
+};
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 #[derive(Clone)]
 pub enum LiteralExpressionEnum {
@@ -52,8 +52,6 @@ impl Expression for LiteralExpression {
         )
     }
 }
-
-impl_debug_for_printable!(LiteralExpression);
 
 #[macro_export]
 macro_rules! literal_expression {

@@ -1,12 +1,10 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use crate::parse::expression::BoxedExpression;
 use super::{
     Statement,
     BoxedStatement,
 };
-use crate::impl_debug_for_printable;
 
 pub struct ForStatement {
     initializer: Option<BoxedStatement>,
@@ -70,8 +68,6 @@ impl Statement for ForStatement {
         )
     }
 }
-
-impl_debug_for_printable!(ForStatement);
 
 #[macro_export]
 macro_rules! for_statement {

@@ -1,11 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 pub struct VariableExpression {
     name: String,
@@ -41,8 +39,6 @@ impl Expression for VariableExpression {
         )
     }
 }
-
-impl_debug_for_printable!(VariableExpression);
 
 #[macro_export]
 macro_rules! variable_expression {

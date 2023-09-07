@@ -1,11 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 #[derive(Clone, Copy)]
 pub enum BinaryExpressionEnum {
@@ -75,8 +73,6 @@ impl Expression for BinaryExpression {
         )
     }
 }
-
-impl_debug_for_printable!(BinaryExpression);
 
 #[macro_export]
 macro_rules! binary_expression {

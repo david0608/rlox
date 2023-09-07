@@ -27,7 +27,7 @@ use crate::parse::expression::unary::{
     UnaryExpressionEnum,
 };
 use crate::parse::expression::variable::VariableExpression;
-use crate::r#trait::call::{
+use crate::traits::call::{
     Call,
     CallError,
 };

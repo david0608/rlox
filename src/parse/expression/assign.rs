@@ -1,11 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 pub struct AssignExpression {
     name: String,
@@ -48,8 +46,6 @@ impl Expression for AssignExpression {
         )
     }
 }
-
-impl_debug_for_printable!(AssignExpression);
 
 #[macro_export]
 macro_rules! assign_expression {

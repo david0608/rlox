@@ -1,11 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::visitor::print::Printable;
 use super::{
     Expression,
     BoxedExpression,
 };
-use crate::impl_debug_for_printable;
 
 pub struct CallExpression {
     callee: BoxedExpression,
@@ -53,8 +51,6 @@ impl Expression for CallExpression {
         )
     }
 }
-
-impl_debug_for_printable!(CallExpression);
 
 #[macro_export]
 macro_rules! call_expression {
