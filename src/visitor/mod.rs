@@ -2,13 +2,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use crate::scope::Scope;
 
-pub mod evaluate;
-
 pub mod execute;
-
-pub mod scan;
-
-pub mod parse;
 
 pub trait Accept<'this, V, R> {
     fn accept(&'this self, visitor: V) -> R;

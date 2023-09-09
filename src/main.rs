@@ -1,10 +1,9 @@
 use std::io::Write;
 
 mod code;
+mod evaluate;
 mod parse;
 mod scan;
-mod traits;
-mod value;
 mod visitor;
 mod error;
 mod print;

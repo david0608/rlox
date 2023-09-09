@@ -1,22 +1,19 @@
-use core::sync::atomic::{
-    self,
-    AtomicUsize,
-};
+use core::sync::atomic;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::iter::zip;
-use crate::scope::Scope;
-use crate::scan::token::identifier::IdentifierToken;
-use crate::parse::statement::BoxedStatement;
-use crate::traits::call::{
+use super::call::{
     Call,
     CallResult,
     CallError,
 };
+use super::value::Value;
+use crate::parse::statement::BoxedStatement;
+use crate::scan::token::identifier::IdentifierToken;
 use crate::visitor::execute::ExecuteOk;
-use super::Value;
+use crate::scope::Scope;
 
-static FUNCTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
+static FUNCTION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
 
 pub fn function_id() -> usize {
     FUNCTION_COUNTER.fetch_add(1, atomic::Ordering::Relaxed)

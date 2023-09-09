@@ -796,7 +796,7 @@ mod tests {
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
     use crate::scan::token::Token;
-    use crate::visitor::scan::Scannable;
+    use crate::scan::Scan;
     use super::{
         Parser,
         ParseError,

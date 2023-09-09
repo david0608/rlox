@@ -1,8 +1,8 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::value::Value;
-use crate::scope::Scope;
+use super::value::Value;
 use crate::visitor::execute::ExecuteError;
+use crate::scope::Scope;
 
 pub enum CallError {
     ArgumentNumberMismatch(usize, usize),

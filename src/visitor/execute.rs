@@ -3,7 +3,8 @@ use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::scope::Scope;
-use crate::value::Value;
+use crate::evaluate::evaluate::EvaluateError;
+use crate::evaluate::value::value::Value;
 use crate::parse::statement::block::BlockStatement;
 use crate::parse::statement::expression::ExpressionStatement;
 use crate::parse::statement::r#for::ForStatement;
@@ -11,7 +12,6 @@ use crate::parse::statement::ifelse::IfStatement;
 use crate::parse::statement::print::PrintStatement;
 use crate::parse::statement::var_declare::VarDeclareStatement;
 use crate::parse::statement::r#while::WhileStatement;
-use crate::visitor::evaluate::EvaluateError;
 use super::{
     ScopeVisit,
     ScopeAccept,
@@ -206,12 +206,12 @@ impl<'that> ScopeVisit<'that, WhileStatement, ExecuteResult> for Execute {
 
 #[cfg(test)]
 mod tests {
-    use crate::value::Value;
+    use crate::evaluate::value::value::Value;
     use crate::scope::Scope;
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
-    use crate::visitor::scan::Scannable;
-    use crate::visitor::parse::Parsable;
+    use crate::scan::Scan;
+    use crate::parse::Parse;
     use super::{
         ExecuteError,
         EvaluateError,

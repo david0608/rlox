@@ -252,7 +252,7 @@ impl_debug_for_printable!(WhileStatement);
 
 #[cfg(test)]
 mod tests {
-    use crate::visitor::scan::Scannable;
+    use crate::scan::Scan;
     use crate::parse::parser::Parser;
 
     #[test]

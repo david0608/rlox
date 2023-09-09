@@ -1,14 +1,12 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::scope::Scope;
-use crate::traits::call::{
+use super::call::{
     Call,
     CallResult,
     CallError,
 };
-
-pub mod function;
-use function::Function;
+use super::function::Function;
+use crate::scope::Scope;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Value {

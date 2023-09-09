@@ -1,5 +1,5 @@
 use crate::code::Code;
-use crate::visitor::evaluate::Evaluable;
+use crate::evaluate::evaluate::Evaluate;
 use crate::print::Print;
 
 pub mod assign;
@@ -15,7 +15,7 @@ pub trait Expression
     where
     Self: Code
         + Print
-        + Evaluable
+        + Evaluate
         + std::fmt::Debug
 {
     fn box_clone(&self) -> BoxedExpression;

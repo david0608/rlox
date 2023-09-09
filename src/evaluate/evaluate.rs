@@ -2,11 +2,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::value::Value;
-use crate::scope::{
-    Scope,
-    ScopeError,
+use super::value::call::{
+    Call,
+    CallError,
 };
+use super::value::value::Value;
 use crate::parse::expression::assign::AssignExpression;
 use crate::parse::expression::binary::{
     BinaryExpression,
@@ -27,14 +27,10 @@ use crate::parse::expression::unary::{
     UnaryExpressionEnum,
 };
 use crate::parse::expression::variable::VariableExpression;
-use crate::traits::call::{
-    Call,
-    CallError,
-};
 use crate::visitor::execute::ExecuteError;
-use super::{
-    ScopeVisit,
-    ScopeAccept,
+use crate::scope::{
+    Scope,
+    ScopeError,
 };
 
 #[derive(Debug, PartialEq)]
@@ -53,57 +49,39 @@ pub enum EvaluateError {
 
 pub type EvaluateResult = std::result::Result<Value, EvaluateError>;
 
-pub struct Evaluate;
-
-pub trait Evaluable
-    where
-    Self: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult>
-{
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        self.accept(Evaluate, scope)
-    }
+pub trait Evaluate {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult;
 }
 
-impl<T> Evaluable for T
-    where
-    T: for<'this> ScopeAccept<'this, Evaluate, EvaluateResult>
-{ }
-
-impl<'that> ScopeVisit<'that, UnaryExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that UnaryExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        match e.variant() {
-            UnaryExpressionEnum::Negative => {
-                let rhs = e.rhs().evaluate(s)?;
-                match rhs {
-                    Value::Nil => {
-                        Err(EvaluateError::InvalidNegate(e.code_span(), rhs))
+impl Evaluate for AssignExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        let v = self.value().evaluate(scope)?;
+        match scope.borrow_mut().set_value(self.name(), v.clone()) {
+            Ok(_) => {
+                Ok(v)
+            }
+            Err(err) => {
+                match err {
+                    ScopeError::NotDeclared => {
+                        Err(EvaluateError::VariableNotDeclared(self.code_span()))
                     }
-                    Value::Bool(_) => {
-                        Err(EvaluateError::InvalidNegate(e.code_span(), rhs))
+                    ScopeError::GlobalVariableMutationNotSupport => {
+                        Err(EvaluateError::GlobalVariableMutation(self.code_span()))
                     }
-                    Value::Number(rhs) => {
-                        Ok(Value::Number(-rhs))
-                    }
-                    Value::String(_) => {
-                        Err(EvaluateError::InvalidNegate(e.code_span(), rhs))
-                    }
-                    Value::Function(_) => {
-                        unreachable!()
+                    _ => {
+                        Err(EvaluateError::Unknown(self.code_span()))
                     }
                 }
-            }
-            UnaryExpressionEnum::Not => {
-                Ok(Value::Bool(!e.rhs().evaluate(s)?.is_truthy()))
             }
         }
     }
 }
 
-impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that BinaryExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let lhs = e.lhs().evaluate(s)?;
-        let rhs = e.rhs().evaluate(s)?;
-        match e.variant() {
+impl Evaluate for BinaryExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        let lhs = self.lhs().evaluate(scope)?;
+        let rhs = self.rhs().evaluate(scope)?;
+        match self.variant() {
             BinaryExpressionEnum::Equal => {
                 Ok(Value::Bool(lhs == rhs))
             }
@@ -119,7 +97,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l < r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -132,7 +110,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l <= r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -145,7 +123,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l > r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -158,7 +136,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Bool(l >= r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidCompare(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidCompare(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -171,7 +149,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::String(l.to_owned() + r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -181,7 +159,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Number(l - r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -191,7 +169,7 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                         Ok(Value::Number(l * r))
                     }
                     _ => {
-                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -199,14 +177,14 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
                 match (&lhs, &rhs) {
                     (Value::Number(l), Value::Number(r)) => {
                         if *r == 0.0 {
-                            Err(EvaluateError::DivideByZero(e.code_span(), lhs, rhs))
+                            Err(EvaluateError::DivideByZero(self.code_span(), lhs, rhs))
                         }
                         else {
                             Ok(Value::Number(l / r))
                         }
                     }
                     _ => {
-                        Err(EvaluateError::InvalidArithmetic(e.code_span(), lhs, rhs))
+                        Err(EvaluateError::InvalidArithmetic(self.code_span(), lhs, rhs))
                     }
                 }
             }
@@ -214,85 +192,11 @@ impl<'that> ScopeVisit<'that, BinaryExpression, EvaluateResult> for Evaluate {
     }
 }
 
-impl<'that> ScopeVisit<'that, LiteralExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that LiteralExpression, _s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        match e.variant() {
-            LiteralExpressionEnum::Nil => Ok(Value::Nil),
-            LiteralExpressionEnum::True => Ok(Value::Bool(true)),
-            LiteralExpressionEnum::False => Ok(Value::Bool(false)),
-            LiteralExpressionEnum::Number(t) => Ok(Value::Number(t.literal())),
-            LiteralExpressionEnum::String(t) => Ok(Value::String(t.literal().to_string())),
-        }
-    }
-}
-
-impl<'that> ScopeVisit<'that, GroupingExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that GroupingExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        e.expression().evaluate(s)
-    }
-}
-
-impl<'that> ScopeVisit<'that, VariableExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that VariableExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        s.borrow().get_value(e.name())
-            .map_err(|_| EvaluateError::VariableNotDeclared(e.code_span()))
-    }
-}
-
-impl<'that> ScopeVisit<'that, AssignExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that AssignExpression, s: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let v = e.value().evaluate(s)?;
-        match s.borrow_mut().set_value(e.name(), v.clone()) {
-            Ok(_) => {
-                Ok(v)
-            }
-            Err(err) => {
-                match err {
-                    ScopeError::NotDeclared => {
-                        Err(EvaluateError::VariableNotDeclared(e.code_span()))
-                    }
-                    ScopeError::GlobalVariableMutationNotSupport => {
-                        Err(EvaluateError::GlobalVariableMutation(e.code_span()))
-                    }
-                    _ => {
-                        Err(EvaluateError::Unknown(e.code_span()))
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl<'that> ScopeVisit<'that, LogicalExpression, EvaluateResult> for Evaluate {
-    fn visit(e: &'that LogicalExpression, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        match e.variant() {
-            LogicalExpressionEnum::And => {
-                let lv = e.lhs().evaluate(scope)?;
-                if !lv.is_truthy() {
-                    return Ok(lv);
-                }
-                else {
-                    return Ok(e.rhs().evaluate(scope)?);
-                }
-            }
-            LogicalExpressionEnum::Or => {
-                let lv = e.lhs().evaluate(scope)?;
-                if lv.is_truthy() {
-                    return Ok(lv);
-                }
-                else {
-                    return Ok(e.rhs().evaluate(scope)?);
-                }
-            }
-        }
-    }
-}
-
-impl<'that> ScopeVisit<'that, CallExpression, EvaluateResult> for Evaluate {
-    fn visit(ce: &'that CallExpression, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let callee = ce.callee().evaluate(scope)?;
+impl Evaluate for CallExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        let callee = self.callee().evaluate(scope)?;
         let mut arguments = Vec::new();
-        for a in ce.arguments() {
+        for a in self.arguments() {
             arguments.push(a.evaluate(scope)?);
         }
         match callee.call(scope, arguments) {
@@ -302,13 +206,13 @@ impl<'that> ScopeVisit<'that, CallExpression, EvaluateResult> for Evaluate {
             Err(err) => {
                 match err {
                     CallError::ArgumentNumberMismatch(ec, pc) => {
-                        return Err(EvaluateError::ArgumentNumberMismatch(ce.code_span(), ec, pc));
+                        return Err(EvaluateError::ArgumentNumberMismatch(self.code_span(), ec, pc));
                     }
                     CallError::NotCallable => {
-                        return Err(EvaluateError::NotCallable(ce.code_span(), callee));
+                        return Err(EvaluateError::NotCallable(self.code_span(), callee));
                     }
                     CallError::ExecuteError(err) => {
-                        return Err(EvaluateError::ExecuteError(ce.code_span(), Box::new(err)));
+                        return Err(EvaluateError::ExecuteError(self.code_span(), Box::new(err)));
                     }
                 }
             }
@@ -316,14 +220,94 @@ impl<'that> ScopeVisit<'that, CallExpression, EvaluateResult> for Evaluate {
     }
 }
 
+impl Evaluate for GroupingExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        self.expression().evaluate(scope)
+    }
+}
+
+impl Evaluate for LiteralExpression {
+    fn evaluate(&self, _scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        match self.variant() {
+            LiteralExpressionEnum::Nil => Ok(Value::Nil),
+            LiteralExpressionEnum::True => Ok(Value::Bool(true)),
+            LiteralExpressionEnum::False => Ok(Value::Bool(false)),
+            LiteralExpressionEnum::Number(t) => Ok(Value::Number(t.literal())),
+            LiteralExpressionEnum::String(t) => Ok(Value::String(t.literal().to_string())),
+        }
+    }
+}
+
+impl Evaluate for LogicalExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        match self.variant() {
+            LogicalExpressionEnum::And => {
+                let lv = self.lhs().evaluate(scope)?;
+                if !lv.is_truthy() {
+                    return Ok(lv);
+                }
+                else {
+                    return Ok(self.rhs().evaluate(scope)?);
+                }
+            }
+            LogicalExpressionEnum::Or => {
+                let lv = self.lhs().evaluate(scope)?;
+                if lv.is_truthy() {
+                    return Ok(lv);
+                }
+                else {
+                    return Ok(self.rhs().evaluate(scope)?);
+                }
+            }
+        }
+    }
+}
+
+impl Evaluate for UnaryExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        match self.variant() {
+            UnaryExpressionEnum::Negative => {
+                let rhs = self.rhs().evaluate(scope)?;
+                match rhs {
+                    Value::Nil => {
+                        Err(EvaluateError::InvalidNegate(self.code_span(), rhs))
+                    }
+                    Value::Bool(_) => {
+                        Err(EvaluateError::InvalidNegate(self.code_span(), rhs))
+                    }
+                    Value::Number(rhs) => {
+                        Ok(Value::Number(-rhs))
+                    }
+                    Value::String(_) => {
+                        Err(EvaluateError::InvalidNegate(self.code_span(), rhs))
+                    }
+                    Value::Function(_) => {
+                        unreachable!()
+                    }
+                }
+            }
+            UnaryExpressionEnum::Not => {
+                Ok(Value::Bool(!self.rhs().evaluate(scope)?.is_truthy()))
+            }
+        }
+    }
+}
+
+impl Evaluate for VariableExpression {
+    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+        scope.borrow().get_value(self.name())
+            .map_err(|_| EvaluateError::VariableNotDeclared(self.code_span()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::value::Value;
     use crate::scope::Scope;
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
     use crate::parse::parser::Parser;
-    use crate::visitor::scan::Scannable;
+    use crate::scan::Scan;
+    use crate::evaluate::value::value::Value;
     use super::EvaluateError;
 
     fn src_span(src: &str) -> CodeSpan {

@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::value::Value;
+use crate::evaluate::value::value::Value;
 
 #[derive(PartialEq, Debug)]
 pub enum ScopeError {
@@ -160,7 +160,7 @@ impl<'stmt> Scope {
 
 #[cfg(test)]
 mod tests {
-    use crate::value::Value;
+    use crate::evaluate::value::value::Value;
     use super::{
         Scope,
         ScopeError
