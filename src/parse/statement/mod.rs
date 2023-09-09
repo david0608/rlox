@@ -1,5 +1,5 @@
 use crate::code::Code;
-use crate::visitor::execute::Executable;
+use crate::execute::Execute;
 use crate::print::Print;
 
 pub mod block;
@@ -14,7 +14,7 @@ pub trait Statement
     where
     Self: Code
         + Print
-        + Executable
+        + Execute
         + std::fmt::Debug
 {
     fn box_clone(&self) -> BoxedStatement;

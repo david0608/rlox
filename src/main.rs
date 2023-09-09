@@ -4,8 +4,8 @@ mod code;
 mod evaluate;
 mod parse;
 mod scan;
-mod visitor;
 mod error;
+mod execute;
 mod print;
 mod scope;
 

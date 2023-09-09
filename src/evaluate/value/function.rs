@@ -10,7 +10,7 @@ use super::call::{
 use super::value::Value;
 use crate::parse::statement::BoxedStatement;
 use crate::scan::token::identifier::IdentifierToken;
-use crate::visitor::execute::ExecuteOk;
+use crate::execute::ExecuteOk;
 use crate::scope::Scope;
 
 static FUNCTION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);

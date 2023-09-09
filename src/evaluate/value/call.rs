@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use super::value::Value;
-use crate::visitor::execute::ExecuteError;
+use crate::execute::ExecuteError;
 use crate::scope::Scope;
 
 pub enum CallError {

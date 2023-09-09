@@ -2,9 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::scope::Scope;
-use crate::evaluate::evaluate::EvaluateError;
 use crate::evaluate::value::value::Value;
+use crate::evaluate::evaluate::EvaluateError;
 use crate::parse::statement::block::BlockStatement;
 use crate::parse::statement::expression::ExpressionStatement;
 use crate::parse::statement::r#for::ForStatement;
@@ -12,10 +11,7 @@ use crate::parse::statement::ifelse::IfStatement;
 use crate::parse::statement::print::PrintStatement;
 use crate::parse::statement::var_declare::VarDeclareStatement;
 use crate::parse::statement::r#while::WhileStatement;
-use super::{
-    ScopeVisit,
-    ScopeAccept,
-};
+use crate::scope::Scope;
 
 #[derive(PartialEq, Debug)]
 pub enum ExecuteOk {
@@ -32,26 +28,14 @@ pub enum ExecuteError {
 
 pub type ExecuteResult = std::result::Result<ExecuteOk, ExecuteError>;
 
-pub struct Execute;
-
-pub trait Executable
-    where
-    Self: for<'this> ScopeAccept<'this, Execute, ExecuteResult>
-{
-    fn execute<'this>(&'this self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        self.accept(Execute, scope)
-    }
+pub trait Execute {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult;
 }
 
-impl<T> Executable for T
-    where
-    T: for<'this> ScopeAccept<'this, Execute, ExecuteResult>
-{ }
-
-impl<'that> ScopeVisit<'that, BlockStatement, ExecuteResult> for Execute {
-    fn visit(bs: &'that BlockStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+impl Execute for BlockStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let scope = Scope::new_child(scope).as_rc();
-        for statement in bs.statements() {
+        for statement in self.statements() {
             let ok = statement.execute(&scope)?;
             match ok {
                 ExecuteOk::KeepGoing => {
@@ -69,9 +53,9 @@ impl<'that> ScopeVisit<'that, BlockStatement, ExecuteResult> for Execute {
     }
 }
 
-impl<'that> ScopeVisit<'that, ExpressionStatement, ExecuteResult> for Execute {
-    fn visit(es: &'that ExpressionStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        if let Err(e) = es.expression().evaluate(scope) {
+impl Execute for ExpressionStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        if let Err(e) = self.expression().evaluate(scope) {
             return Err(ExecuteError::EvaluateError(e));
         }
         else {
@@ -80,16 +64,16 @@ impl<'that> ScopeVisit<'that, ExpressionStatement, ExecuteResult> for Execute {
     }
 }
 
-impl<'that> ScopeVisit<'that, ForStatement, ExecuteResult> for Execute {
-    fn visit(fs: &'that ForStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+impl Execute for ForStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let scope = Scope::new_child(scope).as_rc();
 
-        if let Some(initializer) = fs.initializer() {
+        if let Some(initializer) = self.initializer() {
             initializer.execute(&scope)?;
         }
 
         loop {
-            if let Some(condition) = fs.condition() {
+            if let Some(condition) = self.condition() {
                 match condition.evaluate(&scope) {
                     Ok(v) => {
                         if !v.is_truthy() {
@@ -102,7 +86,7 @@ impl<'that> ScopeVisit<'that, ForStatement, ExecuteResult> for Execute {
                 }
             }
 
-            let ok = fs.body().execute(&scope)?;
+            let ok = self.body().execute(&scope)?;
             match ok {
                 ExecuteOk::KeepGoing => {
                     // do nothing.
@@ -115,7 +99,7 @@ impl<'that> ScopeVisit<'that, ForStatement, ExecuteResult> for Execute {
                 }
             }
 
-            if let Some(increment) = fs.increment() {
+            if let Some(increment) = self.increment() {
                 if let Err(e) = increment.evaluate(&scope) {
                     return Err(ExecuteError::EvaluateError(e));
                 }
@@ -124,25 +108,25 @@ impl<'that> ScopeVisit<'that, ForStatement, ExecuteResult> for Execute {
     }
 }
 
-impl<'that> ScopeVisit<'that, IfStatement, ExecuteResult> for Execute {
-    fn visit(ifs: &'that IfStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        let condition = ifs.condition().evaluate(scope)
+impl Execute for IfStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        let condition = self.condition().evaluate(scope)
             .map(|v| v.is_truthy())
             .map_err(|e| ExecuteError::EvaluateError(e))?;
         let scope = Scope::new_child(scope).as_rc();
         if condition {
-            return ifs.then_statement().execute(&scope);
+            return self.then_statement().execute(&scope);
         }
-        else if let Some(else_statement) = ifs.else_statement() {
+        else if let Some(else_statement) = self.else_statement() {
             return else_statement.execute(&scope);
         }
         return Ok(ExecuteOk::KeepGoing);
     }
 }
 
-impl<'that> ScopeVisit<'that, PrintStatement, ExecuteResult> for Execute {
-    fn visit(ps: &'that PrintStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        match ps.value().evaluate(scope) {
+impl Execute for PrintStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        match self.value().evaluate(scope) {
             Ok(v) => {
                 println!("{}", v);
                 return Ok(ExecuteOk::KeepGoing);
@@ -154,10 +138,10 @@ impl<'that> ScopeVisit<'that, PrintStatement, ExecuteResult> for Execute {
     }
 }
 
-impl<'that> ScopeVisit<'that, VarDeclareStatement, ExecuteResult> for Execute {
-    fn visit(vds: &'that VarDeclareStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+impl Execute for VarDeclareStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         let mut value = Value::Nil;
-        if let Some(i) = vds.initializer() {
+        if let Some(i) = self.initializer() {
             match i.evaluate(scope) {
                 Ok(v) => value = v,
                 Err(e) => {
@@ -165,17 +149,17 @@ impl<'that> ScopeVisit<'that, VarDeclareStatement, ExecuteResult> for Execute {
                 }
             }
         };
-        if scope.borrow_mut().declare(vds.name(), value).is_err() {
-            return Err(ExecuteError::MultipleDeclaration(vds.code_span()));
+        if scope.borrow_mut().declare(self.name(), value).is_err() {
+            return Err(ExecuteError::MultipleDeclaration(self.code_span()));
         }
         return Ok(ExecuteOk::KeepGoing);
     }
 }
 
-impl<'that> ScopeVisit<'that, WhileStatement, ExecuteResult> for Execute {
-    fn visit(ws: &'that WhileStatement, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+impl Execute for WhileStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         loop {
-            if let Some(condition) = ws.condition() {
+            if let Some(condition) = self.condition() {
                 match condition.evaluate(scope) {
                     Ok(v) => {
                         if !v.is_truthy() {
@@ -188,7 +172,7 @@ impl<'that> ScopeVisit<'that, WhileStatement, ExecuteResult> for Execute {
                 }
             }
 
-            let ok = ws.body().execute(scope)?;
+            let ok = self.body().execute(scope)?;
             match ok {
                 ExecuteOk::KeepGoing => {
                     // do nothing
