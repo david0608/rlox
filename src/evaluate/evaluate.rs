@@ -282,7 +282,10 @@ impl Evaluate for UnaryExpression {
                         Err(EvaluateError::InvalidNegate(self.code_span(), rhs))
                     }
                     Value::Function(_) => {
-                        unreachable!()
+                        Err(EvaluateError::InvalidNegate(self.code_span(), rhs))
+                    }
+                    Value::NativeFunction(_) => {
+                        Err(EvaluateError::InvalidNegate(self.code_span(), rhs))
                     }
                 }
             }
@@ -302,13 +305,13 @@ impl Evaluate for VariableExpression {
 
 #[cfg(test)]
 mod tests {
-    use crate::scope::Scope;
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
-    use crate::parse::parser::Parser;
-    use crate::scan::Scan;
     use crate::evaluate::value::value::Value;
     use super::EvaluateError;
+    use crate::parse::parser::Parser;
+    use crate::scan::Scan;
+    use crate::scope::Scope;
 
     fn src_span(src: &str) -> CodeSpan {
         CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, src.len()))

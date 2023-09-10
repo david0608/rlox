@@ -6,6 +6,7 @@ use super::call::{
     CallError,
 };
 use super::function::Function;
+use crate::native::function::NativeFunction;
 use crate::scope::Scope;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -15,6 +16,7 @@ pub enum Value {
     Number(f64),
     String(String),
     Function(Function),
+    NativeFunction(NativeFunction),
 }
 
 impl Value {
@@ -25,6 +27,7 @@ impl Value {
             Value::Number(v) => *v != 0.0,
             Value::String(v) => v.len() != 0,
             Value::Function(_) => true,
+            Value::NativeFunction(_) => true,
         }
     }
 }
@@ -37,6 +40,7 @@ impl std::fmt::Display for Value {
             Value::Number(v) => write!(f, "{}", v),
             Value::String(v) => write!(f, "{}", v),
             Value::Function(v) => write!(f, "{:?}", v),
+            Value::NativeFunction(v) => write!(f, "{:?}", v),
         }
     }
 }
@@ -45,6 +49,9 @@ impl Call for Value {
     fn call(&self, scope: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
         match self {
             Value::Function(f) => {
+                return f.call(scope, arguments);
+            }
+            Value::NativeFunction(f) => {
                 return f.call(scope, arguments);
             }
             _ => {

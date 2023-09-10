@@ -6,6 +6,7 @@ mod parse;
 mod scan;
 mod error;
 mod execute;
+mod native;
 mod print;
 mod scope;
 
