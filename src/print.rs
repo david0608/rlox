@@ -25,6 +25,7 @@ use crate::parse::{
         block::BlockStatement,
         expression::ExpressionStatement,
         r#for::ForStatement,
+        fun_declare::FunDeclareStatement,
         ifelse::IfStatement,
         print::PrintStatement,
         var_declare::VarDeclareStatement,
@@ -193,6 +194,19 @@ impl Print for ForStatement {
 }
 
 impl_debug_for_printable!(ForStatement);
+
+impl Print for FunDeclareStatement {
+    fn print(&self) -> String {
+        return format!(
+            "fun {}({}) {{{}}}",
+            self.name().name(),
+            self.parameters().iter().map(|i| i.name().to_owned()).collect::<Vec<String>>().join(", "),
+            self.body().iter().map(|s| s.print()).collect::<Vec<String>>().join(" "),
+        );
+    }
+}
+
+impl_debug_for_printable!(FunDeclareStatement);
 
 impl Print for IfStatement {
     fn print(&self) -> String {
@@ -394,6 +408,19 @@ mod tests {
             ("for (;; i = i + 1) print i;", "for (;; (= i (+ i 1))) print i;"),
             ("for (var i; i < 10; i = i + 1) print i;", "for (var i; (< i 10); (= i (+ i 1))) print i;"),
             ("for (var i; i < 10;) { print i; i = i + 1; }", "for (var i; (< i 10);) {print i; (= i (+ i 1));}"),
+        ];
+        for (src, expect) in tests {
+            let tokens = src.scan().0;
+            let statement = Parser::new(&tokens).statement().unwrap();
+            assert_eq!(statement.print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_print_fun_declare_statement() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("fun foo() {print \"hello\";}", "fun foo() {print \"hello\";}"),
+            ("fun bar(a, b) {var c = a + b; print c;}", "fun bar(a, b) {var c = (+ a b); print c;}"),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

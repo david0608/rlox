@@ -5,6 +5,7 @@ use crate::print::Print;
 pub mod block;
 pub mod expression;
 pub mod r#for;
+pub mod fun_declare;
 pub mod ifelse;
 pub mod print;
 pub mod var_declare;

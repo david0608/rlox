@@ -27,6 +27,39 @@ pub struct Function {
     body: Vec<BoxedStatement>,
 }
 
+impl Function {
+    pub fn new(
+        id: usize,
+        name: IdentifierToken,
+        parameters: Vec<IdentifierToken>,
+        body: Vec<BoxedStatement>,
+    ) -> Function
+    {
+        Function {
+            id,
+            name,
+            parameters,
+            body,
+        }
+    }
+
+    pub fn id(&self) -> usize {
+        return self.id;
+    }
+
+    pub fn name(&self) -> &str {
+        return self.name.name();
+    }
+
+    pub fn parameters(&self) -> &Vec<IdentifierToken> {
+        return &self.parameters;
+    }
+
+    pub fn body(&self) -> &Vec<BoxedStatement> {
+        return &self.body;
+    }
+}
+
 impl std::cmp::PartialEq for Function {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
