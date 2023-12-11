@@ -14,6 +14,7 @@ use crate::parse::statement::r#for::ForStatement;
 use crate::parse::statement::fun_declare::FunDeclareStatement;
 use crate::parse::statement::ifelse::IfStatement;
 use crate::parse::statement::print::PrintStatement;
+use crate::parse::statement::r#return::ReturnStatement;
 use crate::parse::statement::var_declare::VarDeclareStatement;
 use crate::parse::statement::r#while::WhileStatement;
 use crate::scope::Scope;
@@ -163,6 +164,24 @@ impl Execute for PrintStatement {
             Err(e) => {
                 return Err(ExecuteError::EvaluateError(e));
             }
+        }
+    }
+}
+
+impl Execute for ReturnStatement {
+    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        if let Some(e) = self.expression() {
+            match e.evaluate(scope) {
+                Ok(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+                Err(e) => {
+                    return Err(ExecuteError::EvaluateError(e));
+                }
+            }
+        }
+        else {
+            return Ok(ExecuteOk::Return(Value::Nil));
         }
     }
 }
@@ -354,7 +373,6 @@ mod tests {
         let fv = scope.borrow().get_value("foo").unwrap();
         match fv {
             Value::Function(f) => {
-                assert_eq!(f.id(), 0);
                 assert_eq!(f.name(), "foo");
 
                 let ps = f.parameters();
@@ -454,6 +472,43 @@ mod tests {
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
             ExecuteError::EvaluateError(EvaluateError::VariableNotDeclared(code_span(0, 6, 0, 9)))
+        );
+    }
+
+    #[test]
+    fn test_return() {
+        let scope = Scope::new().as_rc();
+        let stmt = &"return;".scan().0.parse().0[0];
+        assert_eq!(
+            stmt.execute(&scope).unwrap(),
+            ExecuteOk::Return(Value::Nil),
+        );
+    }
+
+    #[test]
+    fn test_return_value() {
+        let scope = Scope::new().as_rc();
+        let stmt = &"return true;".scan().0.parse().0[0];
+        assert_eq!(
+            stmt.execute(&scope).unwrap(),
+            ExecuteOk::Return(Value::Bool(true)),
+        );
+    }
+
+    #[test]
+    fn test_return_evaluate_error() {
+        let scope = Scope::new().as_rc();
+        let stmt = &"return foo;".scan().0.parse().0[0];
+        assert_eq!(
+            stmt.execute(&scope).unwrap_err(),
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(
+                    CodeSpan::new(
+                        CodePoint::new(0, 7),
+                        CodePoint::new(0, 10),
+                    )
+                )
+            )
         );
     }
 

@@ -8,6 +8,7 @@ pub mod r#for;
 pub mod fun_declare;
 pub mod ifelse;
 pub mod print;
+pub mod r#return;
 pub mod var_declare;
 pub mod r#while;
 

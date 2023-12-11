@@ -28,6 +28,7 @@ use crate::parse::{
         fun_declare::FunDeclareStatement,
         ifelse::IfStatement,
         print::PrintStatement,
+        r#return::ReturnStatement,
         var_declare::VarDeclareStatement,
         r#while::WhileStatement,
     },
@@ -38,6 +39,7 @@ use crate::scan::token::simple::{
     NIL_LEXEME,
     VAR_LEXEME,
     PRINT_LEXEME,
+    RETURN_LEXEME,
 };
 
 pub trait Print {
@@ -237,6 +239,19 @@ impl Print for PrintStatement {
 }
 
 impl_debug_for_printable!(PrintStatement);
+
+impl Print for ReturnStatement {
+    fn print(&self) -> String {
+        if let Some(e) = self.expression() {
+            format!("{} {};", RETURN_LEXEME, e.print())
+        }
+        else {
+            format!("{};", RETURN_LEXEME)
+        }
+    }
+}
+
+impl_debug_for_printable!(ReturnStatement);
 
 impl Print for VarDeclareStatement {
     fn print(&self) -> String {
@@ -447,6 +462,22 @@ mod tests {
         let tests: Vec<(&str, &str)> = vec![
             ("print foo;", "print foo;"),
             ("print 1 + 1;", "print (+ 1 1);"),
+        ];
+        for (src, expect) in tests {
+            let tokens = src.scan().0;
+            let statement = Parser::new(&tokens).statement().unwrap();
+            assert_eq!(statement.print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_print_return_statement() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("return;", "return;"),
+            ("return true;", "return true;"),
+            ("return foo;", "return foo;"),
+            ("return 1 + 1;", "return (+ 1 1);"),
+            ("return bar();", "return (call bar );"),
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;

@@ -37,6 +37,7 @@ use crate::parse::statement::r#for::ForStatement;
 use crate::parse::statement::fun_declare::FunDeclareStatement;
 use crate::parse::statement::ifelse::IfStatement;
 use crate::parse::statement::print::PrintStatement;
+use crate::parse::statement::r#return::ReturnStatement;
 use crate::parse::statement::var_declare::VarDeclareStatement;
 use crate::parse::statement::r#while::WhileStatement;
 use crate::{
@@ -54,6 +55,7 @@ use crate::{
     fun_declare_statement,
     if_statement,
     print_statement,
+    return_statement,
     var_declare_statement,
     while_statement,
 };
@@ -562,6 +564,10 @@ impl<'tokens> Parser<'tokens> {
                         self.advance();
                         self.print_statement()
                     }
+                    SimpleTokenEnum::Return => {
+                        self.advance();
+                        self.return_statement()
+                    }
                     _ => {
                         self.expression_statement()
                     }
@@ -599,6 +605,10 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Print => {
                         self.advance();
                         self.print_statement()
+                    }
+                    SimpleTokenEnum::Return => {
+                        self.advance();
+                        self.return_statement()
                     }
                     _ => {
                         self.expression_statement()
@@ -799,6 +809,20 @@ impl<'tokens> Parser<'tokens> {
         let cp_end = self.peek_last().code_span().end();
         Ok(print_statement!(
             value,
+            CodeSpan::new(cp_start, cp_end)
+        ))
+    }
+
+    fn return_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+        let cp_start = self.peek_last().code_span().start();
+        let mut e = Option::None;
+        if self.peek_simple(SimpleTokenEnum::Semicolon).is_none() {
+            e = Option::Some(self.expression()?);
+        }
+        self.consume(SimpleTokenEnum::Semicolon)?;
+        let cp_end = self.peek_last().code_span().end();
+        Ok(return_statement!(
+            e,
             CodeSpan::new(cp_start, cp_end)
         ))
     }
@@ -1665,6 +1689,57 @@ mod tests {
                 CodePoint::new(0, 9),
             )
         );
+    }
+
+    #[test]
+    fn test_return_statement() {
+        let tests: Vec<(&str, &str)> = vec![
+            (
+                "return;",
+                "return;"
+            ),
+            (
+                "return true;",
+                "return true;"
+            ),
+            (
+                "return 1 + 1;",
+                "return (+ 1 1);"
+            ),
+            (
+                "return foo(a, b);",
+                "return (call foo a b);"
+            ),
+        ];
+        for (src, expect) in tests {
+            let tokens = src.scan().0;
+            let mut parser = Parser::new(&tokens);
+            assert_eq!(parser.statement().unwrap().print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_return_statement_missing_semicolon_error() {
+        let tests: Vec<(&str, ParseError)> = vec![
+            (
+                "return",
+                ParseError::UnexpectedEnd(
+                    CodePoint::new(0, 6),
+                ),
+            ),
+            (
+                "return true",
+                ParseError::ExpectTokenNotFound(
+                    ";".to_owned(),
+                    CodePoint::new(0, 11),
+                ),
+            ),
+        ];
+        for (src, error) in tests {
+            let tokens = src.scan().0;
+            let mut parser = Parser::new(&tokens);
+            assert_eq!(parser.statement().unwrap_err(), error);
+        }
     }
 
     #[test]
