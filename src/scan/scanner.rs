@@ -249,6 +249,7 @@ impl<'src> Scanner<'src> {
             "var" => self.simple_token(SimpleTokenEnum::Var),
             "fun" => self.simple_token(SimpleTokenEnum::Fun),
             "return" => self.simple_token(SimpleTokenEnum::Return),
+            "break" => self.simple_token(SimpleTokenEnum::Break),
             "class" => self.simple_token(SimpleTokenEnum::Class),
             "super" => self.simple_token(SimpleTokenEnum::Super),
             "this" => self.simple_token(SimpleTokenEnum::This),

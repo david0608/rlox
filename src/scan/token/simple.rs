@@ -27,6 +27,7 @@ pub const WHILE_LEXEME: &str = "while";
 pub const VAR_LEXEME: &str = "var";
 pub const FUN_LEXEME: &str = "fun";
 pub const RETURN_LEXEME: &str = "return";
+pub const BREAK_LEXEME: &str = "break";
 pub const CLASS_LEXEME: &str = "class";
 pub const SUPER_LEXEME: &str = "super";
 pub const THIS_LEXEME: &str = "this";
@@ -66,6 +67,7 @@ pub enum SimpleTokenEnum {
     Var,
     Fun,
     Return,
+    Break,
     Class,
     Super,
     This,
@@ -107,6 +109,7 @@ impl SimpleTokenEnum {
             SimpleTokenEnum::Var => VAR_LEXEME,
             SimpleTokenEnum::Fun => FUN_LEXEME,
             SimpleTokenEnum::Return => RETURN_LEXEME,
+            SimpleTokenEnum::Break => BREAK_LEXEME,
             SimpleTokenEnum::Class => CLASS_LEXEME,
             SimpleTokenEnum::Super => SUPER_LEXEME,
             SimpleTokenEnum::This => THIS_LEXEME,

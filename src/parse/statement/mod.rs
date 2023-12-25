@@ -3,6 +3,7 @@ use crate::execute::Execute;
 use crate::print::Print;
 
 pub mod block;
+pub mod r#break;
 pub mod expression;
 pub mod r#for;
 pub mod fun_declare;

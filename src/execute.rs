@@ -9,6 +9,7 @@ use crate::evaluate::value::function::{
 use crate::evaluate::value::value::Value;
 use crate::evaluate::evaluate::EvaluateError;
 use crate::parse::statement::block::BlockStatement;
+use crate::parse::statement::r#break::BreakStatement;
 use crate::parse::statement::expression::ExpressionStatement;
 use crate::parse::statement::r#for::ForStatement;
 use crate::parse::statement::fun_declare::FunDeclareStatement;
@@ -56,6 +57,12 @@ impl Execute for BlockStatement {
             }
         }
         return Ok(ExecuteOk::KeepGoing);
+    }
+}
+
+impl Execute for BreakStatement {
+    fn execute(&self, _: &Rc<RefCell<Scope>>) -> ExecuteResult {
+        return Ok(ExecuteOk::Break);
     }
 }
 
@@ -244,6 +251,7 @@ mod tests {
     use crate::code::code_span::CodeSpan;
     use crate::scan::Scan;
     use crate::parse::Parse;
+    use crate::parse::parser::Parser;
     use super::{
         ExecuteOk,
         ExecuteError,
@@ -256,38 +264,98 @@ mod tests {
 
     #[test]
     fn test_block() {
-        let src = "
+        let (tokens, errors) =
+            "
             var foo = 1;
             {
                 var bar = 2;
                 foo = bar;
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        for stmt in stmts {
-            assert_eq!(stmt.execute(&scope).is_ok(), true);
-        }
+        assert_eq!(stmts.len(), 2);
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope).is_ok(), true);
+        assert_eq!(stmts[1].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
         assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(2.0));
     }
 
     #[test]
+    fn test_block_break() {
+        let (tokens, errors) =
+            "
+            var foo = 1;
+            {
+                foo = 2;
+                break;
+                foo = 3;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let mut parser = Parser::new(&tokens);
+        let scope = Scope::new().as_rc();
+        assert_eq!(
+            parser.statement(true).unwrap().execute(&scope).is_ok(),
+            true
+        );
+        assert_eq!(
+            parser.statement(true).unwrap().execute(&scope).unwrap(),
+            ExecuteOk::Break
+        );
+        assert_eq!(
+            scope.borrow().get_value("foo").unwrap(),
+            Value::Number(2.0),
+        );
+    }
+
+    #[test]
+    fn test_block_return() {
+        let (tokens, errors) =
+            "
+            var foo = 1;
+            {
+                foo = 2;
+                return foo;
+                foo = 3;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let mut parser = Parser::new(&tokens);
+        let scope = Scope::new().as_rc();
+        assert_eq!(
+            parser.statement(true).unwrap().execute(&scope).is_ok(),
+            true
+        );
+        assert_eq!(
+            parser.statement(true).unwrap().execute(&scope).unwrap(),
+            ExecuteOk::Return(Value::Number(2.0))
+        );
+        assert_eq!(
+            scope.borrow().get_value("foo").unwrap(),
+            Value::Number(2.0),
+        );
+    }
+
+    #[test]
     fn test_block_shadow() {
-        let src = "
+        let (tokens, errors) =
+            "
             var foo = 1;
             {
                 var foo = 2;
                 foo = 3;
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
         for stmt in stmts {
             assert_eq!(stmt.execute(&scope).is_ok(), true);
         }
@@ -296,17 +364,18 @@ mod tests {
 
     #[test]
     fn test_block_execute_error() {
-        let src = "
+        let (tokens, errors) =
+            "
             {
                 var foo;
                 foo = bar;
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
             ExecuteError::EvaluateError(
@@ -316,11 +385,23 @@ mod tests {
     }
 
     #[test]
+    fn test_break() {
+        let tokens = "break;".scan().0;
+        let mut p = Parser::new(&tokens);
+        let stmt = p.statement(true).unwrap();
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmt.execute(&scope).unwrap(), ExecuteOk::Break);
+    }
+
+    #[test]
     fn test_expression() {
         let scope = Scope::new().as_rc();
         let tokens = "true;".scan().0;
         let stmt = &tokens.parse().0[0];
-        assert_eq!(stmt.execute(&scope).is_ok(), true);
+        assert_eq!(
+            stmt.execute(&scope).unwrap(),
+            ExecuteOk::KeepGoing
+        );
     }
 
     #[test]
@@ -355,59 +436,205 @@ mod tests {
     }
 
     #[test]
+    fn test_for_break() {
+        let (tokens, errors) =
+            "
+            var num = 0;
+            for (var i = 0; i < 10; i = i + 1) {
+                num = num + 1;
+                if (num >= 5) {
+                    break;
+                }
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(stmts[1].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(scope.borrow().get_value("num").unwrap(), Value::Number(5.0));
+    }
+
+    #[test]
+    fn test_for_return() {
+        let (tokens, errors) =
+            "
+            var num = 0;
+            for (var i = 0; i < 10; i = i + 1) {
+                num = num + 1;
+                if (num >= 5) {
+                    return num;
+                }
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(stmts[1].execute(&scope).unwrap(), ExecuteOk::Return(Value::Number(5.0)));
+        assert_eq!(scope.borrow().get_value("num").unwrap(), Value::Number(5.0));
+    }
+
+    #[test]
+    fn test_for_initializer_execute_error() {
+        let (tokens, errors) =
+            "
+            for (var i = foo; i < 10; i = i + 1) {
+                print i;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(
+            stmts[0].execute(&scope).unwrap_err(),
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(
+                    CodeSpan::new(
+                        CodePoint::new(1, 13),
+                        CodePoint::new(1, 16),
+                    )
+                )
+            ),
+        );
+    }
+
+    #[test]
+    fn test_for_confition_evaluate_error() {
+        let (tokens, errors) =
+            "
+            for (var i = 0; i < true; i = i + 1) {
+                print i;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(
+            stmts[0].execute(&scope).unwrap_err(),
+            ExecuteError::EvaluateError(
+                EvaluateError::InvalidCompare(
+                    CodeSpan::new(
+                        CodePoint::new(1, 16),
+                        CodePoint::new(1, 24),
+                    ),
+                    Value::Number(0.0),
+                    Value::Bool(true),
+                )
+            ),
+        );
+    }
+
+    #[test]
+    fn test_for_body_execute_error() {
+        let (tokens, errors) =
+            "
+            for (var i = 0; i < 10; i = i + 1) {
+                print foo;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(
+            stmts[0].execute(&scope).unwrap_err(),
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(
+                    CodeSpan::new(
+                        CodePoint::new(2, 6),
+                        CodePoint::new(2, 9),
+                    ),
+                )
+            ),
+        );
+    }
+
+    #[test]
+    fn test_for_increment_evaluate_error() {
+        let (tokens, errors) =
+            "
+            for (var i = 0; i < 10; i = j + 1) {
+                print i;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(
+            stmts[0].execute(&scope).unwrap_err(),
+            ExecuteError::EvaluateError(
+                EvaluateError::VariableNotDeclared(
+                    CodeSpan::new(
+                        CodePoint::new(1, 28),
+                        CodePoint::new(1, 29),
+                    ),
+                )
+            ),
+        );
+    }
+
+    #[test]
     fn test_fun_declare() {
-        let src = "
+        let (tokens, errors) =
+            "
             fun foo(a, b) {
                 var c = a + b;
                 print c;
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        assert_eq!(stmts.len(), 1);
-        assert_eq!(stmts.get(0).unwrap().execute(&scope), Ok(ExecuteOk::KeepGoing));
-
-        let fv = scope.borrow().get_value("foo").unwrap();
-        match fv {
-            Value::Function(f) => {
-                assert_eq!(f.name(), "foo");
-
-                let ps = f.parameters();
-                assert_eq!(ps.len(), 2);
-                assert_eq!(ps.get(0).unwrap().name(), "a");
-                assert_eq!(ps.get(1).unwrap().name(), "b");
-
-                let b = f.body();
-                assert_eq!(b.len(), 2);
-                assert_eq!(b.get(0).unwrap().print(), "var c = (+ a b);");
-                assert_eq!(b.get(1).unwrap().print(), "print c;");
-            }
-            _ => {
-                panic!("Value should be function.");
-            }
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        let f = if let Value::Function(f) = scope.borrow().get_value("foo").unwrap() {
+            f
         }
+        else {
+            panic!("Value should be function.");
+        };
+        assert_eq!(f.name(), "foo");
+        let params = f.parameters();
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].name(), "a");
+        assert_eq!(params[1].name(), "b");
+        let body = f.body();
+        assert_eq!(body.len(), 2);
+        assert_eq!(body[0].print(), "var c = (+ a b);");
+        assert_eq!(body[1].print(), "print c;");
     }
 
     #[test]
     fn test_fun_declare_multiple_declaration_error() {
-        let src = "
+        let (tokens, errors) =
+            "
             var foo = true;
             fun foo(a, b) {
                 print \"foo\";
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 2);
-        assert_eq!(stmts.get(0).unwrap().execute(&scope), Ok(ExecuteOk::KeepGoing));
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
         assert_eq!(
-            stmts.get(1).unwrap().execute(&scope),
+            stmts[1].execute(&scope),
             Err(
                 ExecuteError::MultipleDeclaration(
                     CodeSpan::new(
@@ -421,39 +648,39 @@ mod tests {
 
     #[test]
     fn test_if() {
-        let src = "
+        let (tokens, errors) =
+            "
             var foo = 1;
             if (true) foo = 2;
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        for stmt in stmts {
-            assert_eq!(stmt.execute(&scope).is_ok(), true);
-        }
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
         assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(2.0));
     } 
 
     #[test]
     fn test_if_else() {
-        let src = "
+        let (tokens, errors) =
+            "
             var foo = 1;
             if (false) {
                 foo = 2;
             } else {
                 foo = 3;
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        for stmt in stmts {
-            assert_eq!(stmt.execute(&scope).is_ok(), true);
-        }
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
         assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(3.0));
     }
 
@@ -559,22 +786,73 @@ mod tests {
 
     #[test]
     fn test_while() {
-        let src = "
+        let (tokens, errors) =
+            "
             var sum = 0;
             var i = 3;
             while (i > 0) {
                 sum = sum + i;
                 i = i - 1;
             }
-        ";
-        let scope = Scope::new().as_rc();
-        let (tokens, errors) = src.scan();
+            "
+            .scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        for stmt in stmts {
-            assert_eq!(stmt.execute(&scope).is_ok(), true);
-        }
+        let scope = Scope::new().as_rc();
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[2].execute(&scope), Ok(ExecuteOk::KeepGoing));
         assert_eq!(scope.borrow().get_value("sum").unwrap(), Value::Number(6.0));
+    }
+
+    #[test]
+    fn test_while_break() {
+        let (tokens, errors) =
+            "
+            var i = 0;
+            while (i <= 3) {
+                if (i == 2) {
+                    break;
+                }
+                else {
+                    i = i + 1;
+                }
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(scope.borrow().get_value("i").unwrap(), Value::Number(2.0));
+    }
+
+    #[test]
+    fn test_while_return() {
+        let (tokens, errors) =
+            "
+            var i = 0;
+            while (i <= 3) {
+                if (i == 2) {
+                    return i;
+                }
+                else {
+                    i = i + 1;
+                }
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        let scope = Scope::new().as_rc();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::Return(Value::Number(2.0))));
+        assert_eq!(scope.borrow().get_value("i").unwrap(), Value::Number(2.0));
     }
 }

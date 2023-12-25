@@ -23,6 +23,7 @@ use crate::parse::{
     },
     statement::{
         block::BlockStatement,
+        r#break::BreakStatement,
         expression::ExpressionStatement,
         r#for::ForStatement,
         fun_declare::FunDeclareStatement,
@@ -160,6 +161,14 @@ impl Print for BlockStatement {
 }
 
 impl_debug_for_printable!(BlockStatement);
+
+impl Print for BreakStatement {
+    fn print(&self) -> String {
+        "break;".to_owned()
+    }
+}
+
+impl_debug_for_printable!(BreakStatement);
 
 impl Print for ExpressionStatement {
     fn print(&self) -> String {
@@ -396,8 +405,20 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_print_break_statement() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("break;", "break;"),
+        ];
+        for (src, expect) in tests {
+            let tokens = src.scan().0;
+            let stmt = Parser::new(&tokens).statement(true).unwrap();
+            assert_eq!(stmt.print(), expect);
         }
     }
 
@@ -409,7 +430,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -426,7 +447,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -439,7 +460,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -452,7 +473,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -465,7 +486,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -481,7 +502,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -495,7 +516,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
@@ -508,7 +529,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             let tokens = src.scan().0;
-            let statement = Parser::new(&tokens).statement().unwrap();
+            let statement = Parser::new(&tokens).statement(false).unwrap();
             assert_eq!(statement.print(), expect);
         }
     }
