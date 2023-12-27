@@ -1,12 +1,14 @@
 use std::io::Write;
 
 mod code;
-mod evaluate;
+mod native;
 mod parse;
 mod scan;
+mod value;
+mod call;
 mod error;
+mod evaluate;
 mod execute;
-mod native;
 mod print;
 mod scope;
 

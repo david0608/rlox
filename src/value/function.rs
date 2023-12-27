@@ -2,14 +2,14 @@ use core::sync::atomic;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::iter::zip;
-use super::call::{
+use crate::parse::statement::BoxedStatement;
+use crate::scan::token::identifier::IdentifierToken;
+use crate::value::Value;
+use crate::call::{
     Call,
     CallResult,
     CallError,
 };
-use super::value::Value;
-use crate::parse::statement::BoxedStatement;
-use crate::scan::token::identifier::IdentifierToken;
 use crate::execute::ExecuteOk;
 use crate::scope::Scope;
 

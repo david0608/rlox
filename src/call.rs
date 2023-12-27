@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use super::value::Value;
+use crate::value::Value;
 use crate::execute::ExecuteError;
 use crate::scope::Scope;
 

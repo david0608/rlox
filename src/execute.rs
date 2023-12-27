@@ -2,12 +2,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::evaluate::value::function::{
-    Function,
-    function_id,
-};
-use crate::evaluate::value::value::Value;
-use crate::evaluate::evaluate::EvaluateError;
 use crate::parse::statement::block::BlockStatement;
 use crate::parse::statement::r#break::BreakStatement;
 use crate::parse::statement::expression::ExpressionStatement;
@@ -18,6 +12,12 @@ use crate::parse::statement::print::PrintStatement;
 use crate::parse::statement::r#return::ReturnStatement;
 use crate::parse::statement::var_declare::VarDeclareStatement;
 use crate::parse::statement::r#while::WhileStatement;
+use crate::value::Value;
+use crate::value::function::{
+    Function,
+    function_id,
+};
+use crate::evaluate::EvaluateError;
 use crate::scope::Scope;
 
 #[derive(PartialEq, Debug)]
@@ -245,7 +245,7 @@ impl Execute for WhileStatement {
 
 #[cfg(test)]
 mod tests {
-    use crate::evaluate::value::value::Value;
+    use crate::value::Value;
     use crate::scope::Scope;
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;

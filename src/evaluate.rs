@@ -2,11 +2,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use super::value::call::{
+use crate::value::Value;
+use crate::call::{
     Call,
     CallError,
 };
-use super::value::value::Value;
 use crate::parse::expression::assign::AssignExpression;
 use crate::parse::expression::binary::{
     BinaryExpression,
@@ -307,7 +307,7 @@ impl Evaluate for VariableExpression {
 mod tests {
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
-    use crate::evaluate::value::value::Value;
+    use crate::value::Value;
     use super::EvaluateError;
     use crate::parse::parser::Parser;
     use crate::scan::Scan;

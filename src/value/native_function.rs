@@ -1,11 +1,13 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::evaluate::value::call::{
+use crate::value::{
+    Value,
+    function::function_id,
+};
+use crate::call::{
     Call,
     CallResult,
 };
-use crate::evaluate::value::function::function_id;
-use crate::evaluate::value::value::Value;
 use crate::scope::Scope;
 
 pub type NativeFunctionHandler = fn(&Rc<RefCell<Scope>>, Vec<Value>) -> CallResult;

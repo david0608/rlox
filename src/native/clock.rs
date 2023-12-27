@@ -4,9 +4,11 @@ use std::time::{
     UNIX_EPOCH,
     SystemTime,
 };
-use crate::evaluate::value::call::CallResult;
-use crate::evaluate::value::value::Value;
-use super::function::NativeFunction;
+use crate::value::{
+    Value,
+    native_function::NativeFunction,
+};
+use crate::call::CallResult;
 use crate::scope::Scope;
 
 pub fn add_native_clock(scope: &Rc<RefCell<Scope>>) {
