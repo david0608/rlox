@@ -8,7 +8,10 @@ use crate::value::{
     Value,
     native_function::NativeFunction,
 };
-use crate::call::CallResult;
+use crate::call::{
+    CallResult,
+    CallError,
+};
 use crate::scope::Scope;
 
 pub fn add_native_clock(scope: &Rc<RefCell<Scope>>) {
@@ -22,7 +25,12 @@ pub fn add_native_clock(scope: &Rc<RefCell<Scope>>) {
         .expect("Declare native function clock.");
 }
 
-fn native_function_clock_handler(_: &Rc<RefCell<Scope>>, _: Vec<Value>) -> CallResult {
+fn native_function_clock_handler(_: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
+    let argn = arguments.len();
+    if argn != 0 {
+        return Err(CallError::ArgumentNumberMismatch(0, argn));
+    }
+
     return Ok(
         Value::Number(
             SystemTime::now()
@@ -38,31 +46,49 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
     use super::*;
-    use crate::parse::parser::Parser;
-    use crate::scan::Scan;
+    use crate::value::Value;
+    use crate::call::{
+        Call,
+        CallError,
+    };
     use crate::scope::Scope;
 
     #[test]
-    fn test_add_native_clock() {
-        let scope = Scope::new().as_rc();
-        add_native_clock(&scope);
-        assert_eq!(scope.borrow().get_value("clock").is_ok(), true);
+    fn test_native_function_clock() {
+        let s = Scope::new().as_rc();
+        add_native_clock(&s);
+        let nf = if let Ok(Value::NativeFunction(nf)) = s.borrow().get_value("clock") {
+            nf
+        }
+        else {
+            panic!("Native function clock should be declared.");
+        };
+        let start = if let Ok(Value::Number(ms)) = nf.call(&s, vec![]) {
+            ms
+        }
+        else {
+            panic!("Call on native function clock should return timestamp number.");
+        };
+        sleep(Duration::from_millis(100));
+        let end = if let Ok(Value::Number(ms)) = nf.call(&s, vec![]) {
+            ms
+        }
+        else {
+            panic!("Call on native function clock should return timestamp number.");
+        };
+        assert_eq!((end - start) >= 100.0, true);
     }
 
     #[test]
-    fn test_native_function_clock() {
-        let scope = Scope::new().as_rc();
-        add_native_clock(&scope);
-        let tokens = "clock()".scan().0;
-        let expression = Parser::new(&tokens).expression().unwrap();
-        let start = expression.evaluate(&scope).unwrap();
-        sleep(Duration::from_millis(100));
-        let end = expression.evaluate(&scope).unwrap();
-        if let (Value::Number(s), Value::Number(e)) = (start, end) {
-            assert_eq!((e - s) >= 100.0, true);
-        }
-        else {
-            panic!("Return value of native function clock should be type of Number.");
-        }
+    fn test_native_function_clock_call_argument_number_mismatch_error() {
+        assert_eq!(
+            native_function_clock_handler(
+                &Scope::new().as_rc(),
+                vec![Value::Bool(true)],
+            ),
+            Err(
+                CallError::ArgumentNumberMismatch(0, 1)
+            )
+        );
     }
 }

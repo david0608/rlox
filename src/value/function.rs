@@ -81,7 +81,7 @@ impl Call for Function {
         }
 
         for stmt in &self.body {
-            match stmt.execute(scope) {
+            match stmt.execute(&fscope) {
                 Ok(ExecuteOk::KeepGoing) => {
                     continue;
                 }
@@ -98,5 +98,162 @@ impl Call for Function {
         }
 
         Ok(Value::Nil)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::code::code_span::CodeSpan;
+    use crate::code::code_point::CodePoint;
+    use crate::parse::Parse;
+    use crate::scan::Scan;
+    use crate::value::Value;
+    use crate::call::{
+        Call,
+        CallError,
+    };
+    use crate::evaluate::EvaluateError;
+    use crate::execute::{
+        ExecuteOk,
+        ExecuteError,
+    };
+    use crate::scope::Scope;
+
+    #[test]
+    fn test_function_call() {
+        let (tokens, errors) =
+            "
+            fun foo(a, b) {
+                return a + b;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(stmts.len(), 1);
+        let s = Scope::new().as_rc();
+        stmts[0].execute(&s).expect("function declare");
+        let f = s.borrow().get_value("foo").unwrap();
+        assert_eq!(
+            f.call(
+                &Scope::new().as_rc(),
+                vec![
+                    Value::Number(1.0),
+                    Value::Number(2.0),
+                ]
+            ),
+            Ok(Value::Number(3.0)),
+        );
+    }
+
+    #[test]
+    fn test_function_call_argument_number_mismatch_error() {
+        let (tokens, errors) =
+            "
+            fun foo(a, b) {
+                return a + b;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(stmts.len(), 1);
+        let s = Scope::new().as_rc();
+        stmts[0].execute(&s).expect("function declare");
+        let f = s.borrow().get_value("foo").unwrap();
+        assert_eq!(
+            f.call(
+                &Scope::new().as_rc(),
+                vec![
+                    Value::Number(1.0),
+                ]
+            ),
+            Err(CallError::ArgumentNumberMismatch(2, 1)),
+        );
+    }
+
+    #[test]
+    fn test_function_call_execute_error() {
+        let (tokens, errors) =
+            "
+            fun foo() {
+                return bar;
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(stmts.len(), 1);
+        let s = Scope::new().as_rc();
+        stmts[0].execute(&s).expect("function declare");
+        let f = s.borrow().get_value("foo").unwrap();
+        assert_eq!(
+            f.call(
+                &Scope::new().as_rc(),
+                vec![],
+            ),
+            Err(
+                CallError::ExecuteError(
+                    ExecuteError::EvaluateError(
+                        EvaluateError::VariableNotDeclared(
+                            CodeSpan::new(
+                                CodePoint::new(2, 7),
+                                CodePoint::new(2, 10),
+                            )
+                        )
+                    )
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_function_call_scope_isolation() {
+        let (tokens, errors) =
+            "
+            fun foo() {
+                return bar;
+            }
+            {
+                var bar = true;
+                print foo();
+            }
+            "
+            .scan();
+        assert_eq!(errors.len(), 0);
+        let (stmts, errors) = &tokens.parse();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(stmts.len(), 2);
+        let s = Scope::new().as_rc();
+        assert_eq!(
+            stmts[0].execute(&s),
+            Ok(ExecuteOk::KeepGoing),
+        );
+        assert_eq!(
+            stmts[1].execute(&s),
+            Err(
+                ExecuteError::EvaluateError(
+                    EvaluateError::ExecuteError(
+                        CodeSpan::new(
+                            CodePoint::new(6, 6),
+                            CodePoint::new(6, 11),
+                        ),
+                        Box::new(
+                            ExecuteError::EvaluateError(
+                                EvaluateError::VariableNotDeclared(
+                                    CodeSpan::new(
+                                        CodePoint::new(2, 7),
+                                        CodePoint::new(2, 10),
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        );
     }
 }
