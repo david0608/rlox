@@ -92,7 +92,7 @@ impl Call for Function {
                     return Ok(v);
                 }
                 Err(err) => {
-                    return Err(CallError::ExecuteError(err));
+                    return Err(CallError::RuntimeError(err));
                 }
             }
         }
@@ -112,12 +112,13 @@ mod tests {
         Call,
         CallError,
     };
-    use crate::evaluate::EvaluateError;
-    use crate::execute::{
-        ExecuteOk,
-        ExecuteError,
+    use crate::error::{
+        RuntimeError,
+        RuntimeErrorEnum,
     };
+    use crate::execute::ExecuteOk;
     use crate::scope::Scope;
+    use crate::runtime_error;
 
     #[test]
     fn test_function_call() {
@@ -196,13 +197,19 @@ mod tests {
                 vec![],
             ),
             Err(
-                CallError::ExecuteError(
-                    ExecuteError::EvaluateError(
-                        EvaluateError::VariableNotDeclared(
+                CallError::RuntimeError(
+                    runtime_error!(
+                        RuntimeErrorEnum::RuntimeError,
+                        CodeSpan::new(
+                            CodePoint::new(2, 0),
+                            CodePoint::new(2, 11),
+                        ),
+                        runtime_error!(
+                            RuntimeErrorEnum::VariableNotDeclared,
                             CodeSpan::new(
                                 CodePoint::new(2, 7),
                                 CodePoint::new(2, 10),
-                            )
+                            ),
                         )
                     )
                 )
@@ -235,20 +242,30 @@ mod tests {
         assert_eq!(
             stmts[1].execute(&s),
             Err(
-                ExecuteError::EvaluateError(
-                    EvaluateError::ExecuteError(
+                runtime_error!(
+                    RuntimeErrorEnum::RuntimeError,
+                    CodeSpan::new(
+                        CodePoint::new(6, 0),
+                        CodePoint::new(6, 12),
+                    ),
+                    runtime_error!(
+                        RuntimeErrorEnum::RuntimeError,
                         CodeSpan::new(
                             CodePoint::new(6, 6),
                             CodePoint::new(6, 11),
                         ),
-                        Box::new(
-                            ExecuteError::EvaluateError(
-                                EvaluateError::VariableNotDeclared(
-                                    CodeSpan::new(
-                                        CodePoint::new(2, 7),
-                                        CodePoint::new(2, 10),
-                                    )
-                                )
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            CodeSpan::new(
+                                CodePoint::new(2, 0),
+                                CodePoint::new(2, 11),
+                            ),
+                            runtime_error!(
+                                RuntimeErrorEnum::VariableNotDeclared,
+                                CodeSpan::new(
+                                    CodePoint::new(2, 7),
+                                    CodePoint::new(2, 10),
+                                ),
                             )
                         )
                     )

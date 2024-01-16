@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use crate::code::Code;
-use crate::code::code_span::CodeSpan;
 use crate::parse::statement::block::BlockStatement;
 use crate::parse::statement::r#break::BreakStatement;
 use crate::parse::statement::expression::ExpressionStatement;
@@ -17,8 +16,12 @@ use crate::value::function::{
     Function,
     function_id,
 };
-use crate::evaluate::EvaluateError;
+use crate::error::{
+    RuntimeError,
+    RuntimeErrorEnum,
+};
 use crate::scope::Scope;
+use crate::runtime_error;
 
 #[derive(PartialEq, Debug)]
 pub enum ExecuteOk {
@@ -27,13 +30,7 @@ pub enum ExecuteOk {
     Return(Value),
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ExecuteError {
-    EvaluateError(EvaluateError),
-    MultipleDeclaration(CodeSpan),
-}
-
-pub type ExecuteResult = std::result::Result<ExecuteOk, ExecuteError>;
+pub type ExecuteResult = std::result::Result<ExecuteOk, RuntimeError>;
 
 pub trait Execute {
     fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult;
@@ -69,7 +66,13 @@ impl Execute for BreakStatement {
 impl Execute for ExpressionStatement {
     fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
         if let Err(e) = self.expression().evaluate(scope) {
-            return Err(ExecuteError::EvaluateError(e));
+            return Err(
+                runtime_error!(
+                    RuntimeErrorEnum::RuntimeError,
+                    self.code_span(),
+                    e
+                )
+            );
         }
         else {
             return Ok(ExecuteOk::KeepGoing);
@@ -82,7 +85,15 @@ impl Execute for ForStatement {
         let scope = Scope::new_child(scope).as_rc();
 
         if let Some(initializer) = self.initializer() {
-            initializer.execute(&scope)?;
+            if let Err(e) = initializer.execute(&scope) {
+                return Err(
+                    runtime_error!(
+                        RuntimeErrorEnum::RuntimeError,
+                        self.code_span(),
+                        e
+                    )
+                );
+            }
         }
 
         loop {
@@ -94,27 +105,47 @@ impl Execute for ForStatement {
                         }
                     }
                     Err(e) => {
-                        return Err(ExecuteError::EvaluateError(e));
+                        return Err(
+                            runtime_error!(
+                                RuntimeErrorEnum::RuntimeError,
+                                self.code_span(),
+                                e
+                            )
+                        );
                     }
                 }
             }
 
-            let ok = self.body().execute(&scope)?;
-            match ok {
-                ExecuteOk::KeepGoing => {
-                    // do nothing.
+            match self.body().execute(&scope) {
+                Ok(ExecuteOk::KeepGoing) => {
+                    // donothing.
                 }
-                ExecuteOk::Break => {
+                Ok(ExecuteOk::Break) => {
                     return Ok(ExecuteOk::KeepGoing);
                 }
-                ExecuteOk::Return(v) => {
+                Ok(ExecuteOk::Return(v)) => {
                     return Ok(ExecuteOk::Return(v));
+                }
+                Err(e) => {
+                    return Err(
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            self.code_span(),
+                            e
+                        )
+                    );
                 }
             }
 
             if let Some(increment) = self.increment() {
                 if let Err(e) = increment.evaluate(&scope) {
-                    return Err(ExecuteError::EvaluateError(e));
+                    return Err(
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            self.code_span(),
+                            e
+                        )
+                    );
                 }
             }
         }
@@ -137,7 +168,12 @@ impl Execute for FunDeclareStatement {
             )
             .is_err()
         {
-            return Err(ExecuteError::MultipleDeclaration(self.code_span()));
+            return Err(
+                runtime_error!(
+                    RuntimeErrorEnum::MultipleDeclaration,
+                    self.code_span(),
+                )
+            );
         }
         else {
             return Ok(ExecuteOk::KeepGoing);
@@ -147,15 +183,40 @@ impl Execute for FunDeclareStatement {
 
 impl Execute for IfStatement {
     fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        let condition = self.condition().evaluate(scope)
-            .map(|v| v.is_truthy())
-            .map_err(|e| ExecuteError::EvaluateError(e))?;
-        let scope = Scope::new_child(scope).as_rc();
-        if condition {
-            return self.then_statement().execute(&scope);
+        let condition = match self.condition().evaluate(scope) {
+            Ok(val) => val.is_truthy(),
+            Err(err) => {
+                return Err(
+                    runtime_error!(
+                        RuntimeErrorEnum::RuntimeError,
+                        self.code_span(),
+                        err
+                    )
+                );
+            }
+        };
+        let statement = if condition {
+            Some(self.then_statement())
         }
-        else if let Some(else_statement) = self.else_statement() {
-            return else_statement.execute(&scope);
+        else {
+            self.else_statement()
+        };
+        let scope = Scope::new_child(scope).as_rc();
+        if let Some(stmt) = statement {
+            match stmt.execute(&scope) {
+                Err(err) => {
+                    return Err(
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            self.code_span(),
+                            err
+                        )
+                    );
+                }
+                Ok(ok) => {
+                    return Ok(ok);
+                }
+            }
         }
         return Ok(ExecuteOk::KeepGoing);
     }
@@ -169,7 +230,13 @@ impl Execute for PrintStatement {
                 return Ok(ExecuteOk::KeepGoing);
             }
             Err(e) => {
-                return Err(ExecuteError::EvaluateError(e));
+                return Err(
+                    runtime_error!(
+                        RuntimeErrorEnum::RuntimeError,
+                        self.code_span(),
+                        e
+                    )
+                );
             }
         }
     }
@@ -183,7 +250,13 @@ impl Execute for ReturnStatement {
                     return Ok(ExecuteOk::Return(v));
                 }
                 Err(e) => {
-                    return Err(ExecuteError::EvaluateError(e));
+                    return Err(
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            self.code_span(),
+                            e
+                        )
+                    );
                 }
             }
         }
@@ -200,12 +273,23 @@ impl Execute for VarDeclareStatement {
             match i.evaluate(scope) {
                 Ok(v) => value = v,
                 Err(e) => {
-                    return Err(ExecuteError::EvaluateError(e));
+                    return Err(
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            self.code_span(),
+                            e
+                        )
+                    );
                 }
             }
         };
         if scope.borrow_mut().declare(self.name(), value).is_err() {
-            return Err(ExecuteError::MultipleDeclaration(self.code_span()));
+            return Err(
+                runtime_error!(
+                    RuntimeErrorEnum::MultipleDeclaration,
+                    self.code_span(),
+                )
+            );
         }
         return Ok(ExecuteOk::KeepGoing);
     }
@@ -222,21 +306,35 @@ impl Execute for WhileStatement {
                         }
                     }
                     Err(e) => {
-                        return Err(ExecuteError::EvaluateError(e));
+                        return Err(
+                            runtime_error!(
+                                RuntimeErrorEnum::RuntimeError,
+                                self.code_span(),
+                                e
+                            )
+                        );
                     }
                 }
             }
 
-            let ok = self.body().execute(scope)?;
-            match ok {
-                ExecuteOk::KeepGoing => {
-                    // do nothing
+            match self.body().execute(scope) {
+                Ok(ExecuteOk::KeepGoing) => {
+                    // do nothing.
                 }
-                ExecuteOk::Break => {
+                Ok(ExecuteOk::Break) => {
                     return Ok(ExecuteOk::KeepGoing);
                 }
-                ExecuteOk::Return(v) => {
+                Ok(ExecuteOk::Return(v)) => {
                     return Ok(ExecuteOk::Return(v));
+                }
+                Err(err) => {
+                    return Err(
+                        runtime_error!(
+                            RuntimeErrorEnum::RuntimeError,
+                            self.code_span(),
+                            err
+                        )
+                    );
                 }
             }
         }
@@ -245,18 +343,19 @@ impl Execute for WhileStatement {
 
 #[cfg(test)]
 mod tests {
-    use crate::value::Value;
-    use crate::scope::Scope;
     use crate::code::code_point::CodePoint;
     use crate::code::code_span::CodeSpan;
-    use crate::scan::Scan;
     use crate::parse::Parse;
     use crate::parse::parser::Parser;
-    use super::{
-        ExecuteOk,
-        ExecuteError,
-        EvaluateError,
+    use crate::scan::Scan;
+    use crate::value::Value;
+    use crate::error::{
+        RuntimeError,
+        RuntimeErrorEnum,
     };
+    use crate::execute::ExecuteOk;
+    use crate::scope::Scope;
+    use crate::runtime_error;
 
     fn code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
         CodeSpan::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
@@ -378,9 +477,18 @@ mod tests {
         let scope = Scope::new().as_rc();
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(code_span(3, 6, 3, 9))
-            )
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(3, 0, 3, 10),
+                runtime_error!(
+                    RuntimeErrorEnum::RuntimeError,
+                    code_span(3, 0, 3, 9),
+                    runtime_error!(
+                        RuntimeErrorEnum::VariableNotDeclared,
+                        code_span(3, 6, 3, 9),
+                    )
+                )
+            ),
         );
     }
 
@@ -410,8 +518,13 @@ mod tests {
         let stmt = &"foo;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(code_span(0, 0, 0, 3))
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(0, 0, 0, 4),
+                runtime_error!(
+                    RuntimeErrorEnum::VariableNotDeclared,
+                    code_span(0, 0, 0, 3),
+                )
             )
         );
     }
@@ -494,19 +607,23 @@ mod tests {
         let scope = Scope::new().as_rc();
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(
-                    CodeSpan::new(
-                        CodePoint::new(1, 13),
-                        CodePoint::new(1, 16),
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(1, 0, 3, 1),
+                runtime_error!(
+                    RuntimeErrorEnum::RuntimeError,
+                    code_span(1, 5, 1, 17),
+                    runtime_error!(
+                        RuntimeErrorEnum::VariableNotDeclared,
+                        code_span(1, 13, 1, 16),
                     )
                 )
-            ),
+            )
         );
     }
 
     #[test]
-    fn test_for_confition_evaluate_error() {
+    fn test_for_condition_evaluate_error() {
         let (tokens, errors) =
             "
             for (var i = 0; i < true; i = i + 1) {
@@ -520,16 +637,14 @@ mod tests {
         let scope = Scope::new().as_rc();
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::InvalidCompare(
-                    CodeSpan::new(
-                        CodePoint::new(1, 16),
-                        CodePoint::new(1, 24),
-                    ),
-                    Value::Number(0.0),
-                    Value::Bool(true),
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(1, 0, 3, 1),
+                runtime_error!(
+                    RuntimeErrorEnum::InvalidCompare(Value::Number(0.0), Value::Bool(true)),
+                    code_span(1, 16, 1, 24),
                 )
-            ),
+            )
         );
     }
 
@@ -548,14 +663,18 @@ mod tests {
         let scope = Scope::new().as_rc();
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(
-                    CodeSpan::new(
-                        CodePoint::new(2, 6),
-                        CodePoint::new(2, 9),
-                    ),
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(1, 0, 3, 1),
+                runtime_error!(
+                    RuntimeErrorEnum::RuntimeError,
+                    code_span(2, 0, 2, 10),
+                    runtime_error!(
+                        RuntimeErrorEnum::VariableNotDeclared,
+                        code_span(2, 6, 2, 9),
+                    )
                 )
-            ),
+            )
         );
     }
 
@@ -574,14 +693,22 @@ mod tests {
         let scope = Scope::new().as_rc();
         assert_eq!(
             stmts[0].execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(
-                    CodeSpan::new(
-                        CodePoint::new(1, 28),
-                        CodePoint::new(1, 29),
-                    ),
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(1, 0, 3, 1),
+                runtime_error!(
+                    RuntimeErrorEnum::RuntimeError,
+                    code_span(1, 24, 1, 33),
+                    runtime_error!(
+                        RuntimeErrorEnum::RuntimeError,
+                        code_span(1, 28, 1, 33),
+                        runtime_error!(
+                            RuntimeErrorEnum::VariableNotDeclared,
+                            code_span(1, 28, 1, 29),
+                        )
+                    )
                 )
-            ),
+            )
         );
     }
 
@@ -636,11 +763,9 @@ mod tests {
         assert_eq!(
             stmts[1].execute(&scope),
             Err(
-                ExecuteError::MultipleDeclaration(
-                    CodeSpan::new(
-                        CodePoint::new(2, 0),
-                        CodePoint::new(4, 1),
-                    )
+                runtime_error!(
+                    RuntimeErrorEnum::MultipleDeclaration,
+                    code_span(2, 0, 4, 1),
                 )
             )
         );
@@ -698,7 +823,14 @@ mod tests {
         let stmt = &"print foo;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(EvaluateError::VariableNotDeclared(code_span(0, 6, 0, 9)))
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(0, 0, 0, 10),
+                runtime_error!(
+                    RuntimeErrorEnum::VariableNotDeclared,
+                    code_span(0, 6, 0, 9),
+                )
+            )
         );
     }
 
@@ -728,12 +860,12 @@ mod tests {
         let stmt = &"return foo;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(
-                    CodeSpan::new(
-                        CodePoint::new(0, 7),
-                        CodePoint::new(0, 10),
-                    )
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(0, 0, 0, 11),
+                runtime_error!(
+                    RuntimeErrorEnum::VariableNotDeclared,
+                    code_span(0, 7, 0, 10),
                 )
             )
         );
@@ -767,7 +899,10 @@ mod tests {
         assert_eq!(stmt.execute(&scope).is_ok(), true);
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            ExecuteError::MultipleDeclaration(code_span(0, 0, 0, 8))
+            runtime_error!(
+                RuntimeErrorEnum::MultipleDeclaration,
+                code_span(0, 0, 0, 8),
+            )
         );
     }
 
@@ -778,8 +913,13 @@ mod tests {
         let stmt = &tokens.parse().0[0];
         assert_eq!(
             stmt.execute(&scope).unwrap_err(),
-            ExecuteError::EvaluateError(
-                EvaluateError::VariableNotDeclared(code_span(0, 10, 0, 13))
+            runtime_error!(
+                RuntimeErrorEnum::RuntimeError,
+                code_span(0, 0, 0, 14),
+                runtime_error!(
+                    RuntimeErrorEnum::VariableNotDeclared,
+                    code_span(0, 10, 0, 13),
+                )
             )
         );
     }
