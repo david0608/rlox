@@ -12,20 +12,23 @@ use crate::call::{
     CallResult,
     CallError,
 };
-use crate::scope::Scope;
+use crate::environment::{
+    Environment,
+    environment_declare,
+};
 
-pub fn add_native_clock(scope: &Rc<RefCell<Scope>>) {
-    scope.borrow_mut()
-        .declare(
-            "clock",
-            Value::NativeFunction(
-                NativeFunction::new("clock", native_function_clock_handler),
-            )
+pub fn add_native_clock(env: &Rc<RefCell<Environment>>) {
+    environment_declare(
+        env,
+        "clock",
+        Value::NativeFunction(
+            NativeFunction::new("clock", native_function_clock_handler),
         )
+    )
         .expect("Declare native function clock.");
 }
 
-fn native_function_clock_handler(_: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
+fn native_function_clock_handler(arguments: Vec<Value>) -> CallResult {
     let argn = arguments.len();
     if argn != 0 {
         return Err(CallError::ArgumentNumberMismatch(0, argn));
@@ -51,26 +54,29 @@ mod tests {
         Call,
         CallError,
     };
-    use crate::scope::Scope;
+    use crate::environment::{
+        new_environment,
+        environment_get_value,
+    };
 
     #[test]
     fn test_native_function_clock() {
-        let s = Scope::new().as_rc();
-        add_native_clock(&s);
-        let nf = if let Ok(Value::NativeFunction(nf)) = s.borrow().get_value("clock") {
+        let env = new_environment();
+        add_native_clock(&env);
+        let nf = if let Ok(Value::NativeFunction(nf)) = environment_get_value(&env, "clock") {
             nf
         }
         else {
             panic!("Native function clock should be declared.");
         };
-        let start = if let Ok(Value::Number(ms)) = nf.call(&s, vec![]) {
+        let start = if let Ok(Value::Number(ms)) = nf.call(vec![]) {
             ms
         }
         else {
             panic!("Call on native function clock should return timestamp number.");
         };
         sleep(Duration::from_millis(100));
-        let end = if let Ok(Value::Number(ms)) = nf.call(&s, vec![]) {
+        let end = if let Ok(Value::Number(ms)) = nf.call(vec![]) {
             ms
         }
         else {
@@ -82,10 +88,7 @@ mod tests {
     #[test]
     fn test_native_function_clock_call_argument_number_mismatch_error() {
         assert_eq!(
-            native_function_clock_handler(
-                &Scope::new().as_rc(),
-                vec![Value::Bool(true)],
-            ),
+            native_function_clock_handler(vec![Value::Bool(true)]),
             Err(
                 CallError::ArgumentNumberMismatch(0, 1)
             )

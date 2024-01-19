@@ -30,21 +30,23 @@ use crate::parse::expression::unary::{
     UnaryExpressionEnum,
 };
 use crate::parse::expression::variable::VariableExpression;
-use crate::scope::{
-    Scope,
-    ScopeError,
+use crate::environment::{
+    Environment,
+    EnvironmentError,
+    environment_get_value,
+    environment_set_value,
 };
 use crate::runtime_error;
 
 pub type EvaluateResult = std::result::Result<Value, RuntimeError>;
 
 pub trait Evaluate {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult;
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult;
 }
 
 impl Evaluate for AssignExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let v = match self.value().evaluate(scope) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        let v = match self.value().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -56,24 +58,16 @@ impl Evaluate for AssignExpression {
                 );
             }
         };
-        match scope.borrow_mut().set_value(self.name(), v.clone()) {
+        match environment_set_value(env, self.name(), v.clone()) {
             Ok(_) => {
                 Ok(v)
             }
             Err(err) => {
                 match err {
-                    ScopeError::NotDeclared => {
+                    EnvironmentError::NotDeclared => {
                         Err(
                             runtime_error!(
                                 RuntimeErrorEnum::VariableNotDeclared,
-                                self.code_span(),
-                            )
-                        )
-                    }
-                    ScopeError::GlobalVariableMutationNotSupport => {
-                        Err(
-                            runtime_error!(
-                                RuntimeErrorEnum::GlobalVariableMutation,
                                 self.code_span(),
                             )
                         )
@@ -93,8 +87,8 @@ impl Evaluate for AssignExpression {
 }
 
 impl Evaluate for BinaryExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let lhs = match self.lhs().evaluate(scope) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        let lhs = match self.lhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -106,7 +100,7 @@ impl Evaluate for BinaryExpression {
                 );
             }
         };
-        let rhs = match self.rhs().evaluate(scope) {
+        let rhs = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -275,8 +269,8 @@ impl Evaluate for BinaryExpression {
 }
 
 impl Evaluate for CallExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let callee = match self.callee().evaluate(scope) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        let callee = match self.callee().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -291,7 +285,7 @@ impl Evaluate for CallExpression {
         let mut arguments = Vec::new();
         for a in self.arguments() {
             arguments.push(
-                match a.evaluate(scope) {
+                match a.evaluate(env) {
                     Ok(val) => val,
                     Err(err) => {
                         return Err(
@@ -305,7 +299,7 @@ impl Evaluate for CallExpression {
                 }
             );
         }
-        match callee.call(scope, arguments) {
+        match callee.call(arguments) {
             Ok(v) => {
                 return Ok(v);
             }
@@ -343,13 +337,13 @@ impl Evaluate for CallExpression {
 }
 
 impl Evaluate for GroupingExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        self.expression().evaluate(scope)
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        self.expression().evaluate(env)
     }
 }
 
 impl Evaluate for LiteralExpression {
-    fn evaluate(&self, _scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> EvaluateResult {
         match self.variant() {
             LiteralExpressionEnum::Nil => Ok(Value::Nil),
             LiteralExpressionEnum::True => Ok(Value::Bool(true)),
@@ -361,8 +355,8 @@ impl Evaluate for LiteralExpression {
 }
 
 impl Evaluate for LogicalExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let lv = match self.lhs().evaluate(scope) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        let lv = match self.lhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -388,7 +382,7 @@ impl Evaluate for LogicalExpression {
             }
         }
 
-        let rv = match self.rhs().evaluate(scope) {
+        let rv = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -406,8 +400,8 @@ impl Evaluate for LogicalExpression {
 }
 
 impl Evaluate for UnaryExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        let rhs = match self.rhs().evaluate(scope) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        let rhs = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
                 return Err(
@@ -447,8 +441,8 @@ impl Evaluate for UnaryExpression {
 }
 
 impl Evaluate for VariableExpression {
-    fn evaluate(&self, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
-        match scope.borrow().get_value(self.name()) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
+        match environment_get_value(env, self.name()) {
             Ok(val) => {
                 Ok(val)
             }
@@ -475,54 +469,54 @@ mod tests {
     use crate::parse::Parse;
     use crate::parse::parser::Parser;
     use crate::scan::Scan;
+    use crate::environment::{
+        Environment,
+        new_environment,
+        environment_get_value,
+    };
     use crate::error::{
         RuntimeError,
         RuntimeErrorEnum,
     };
     use crate::evaluate::EvaluateResult;
-    use crate::scope::Scope;
     use crate::runtime_error;
 
     fn code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
         CodeSpan::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
     }
 
-    fn create_scope() -> Rc<RefCell<Scope>> {
-        Scope::new().as_rc()
-    }
-
-    fn execute_src(src: &str, scope: &Rc<RefCell<Scope>>) {
+    fn execute_src(src: &str, env: &Rc<RefCell<Environment>>) {
         let (tokens, errors) = src.scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         for stmt in stmts {
-            stmt.execute(scope).unwrap();
+            stmt.execute(env).unwrap();
         }
     }
 
-    fn evaluate_expression(src: &str, scope: &Rc<RefCell<Scope>>) -> EvaluateResult {
+    fn evaluate_expression(src: &str, env: &Rc<RefCell<Environment>>) -> EvaluateResult {
         let (tokens, errors) = src.scan();
         assert_eq!(errors.len(), 0);
-        Parser::new(&tokens).expression().unwrap().evaluate(scope)
+        Parser::new(&tokens).expression().unwrap().evaluate(env)
     }
 
 
     #[test]
     fn test_assign_expression() {
-        let scope = create_scope();
-        execute_src("var foo = false;", &scope);
+        let env = new_environment();
+        execute_src("var foo = false;", &env);
         assert_eq!(
-            evaluate_expression("foo = true", &scope),
+            evaluate_expression("foo = true", &env),
             Ok(Value::Bool(true))
         );
     }
 
     #[test]
     fn test_assign_expression_evaluate_error() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("foo = bar", &scope),
+            evaluate_expression("foo = bar", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -538,9 +532,9 @@ mod tests {
 
     #[test]
     fn test_assign_expression_variable_not_declared_error() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("foo = true", &scope),
+            evaluate_expression("foo = true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::VariableNotDeclared,
@@ -551,28 +545,11 @@ mod tests {
     }
 
     #[test]
-    fn test_assign_expression_global_variable_mutation_not_support_error() {
-        let scope = create_scope();
-        execute_src("var foo = false;", &scope);
-        let scope = Scope::new_isolate_child(&scope).as_rc();
-        execute_src("print foo;", &scope);
-        assert_eq!(
-            evaluate_expression("foo = true", &scope),
-            Err(
-                runtime_error!(
-                    RuntimeErrorEnum::GlobalVariableMutation,
-                    code_span(0, 0, 0, 10),
-                )
-            )
-        );
-    }
-
-    #[test]
     fn test_binary_expression_operand_evaluate_error() {
-        let scope = create_scope();
-        execute_src("var foo = true;", &scope);
+        let env = new_environment();
+        execute_src("var foo = true;", &env);
         assert_eq!(
-            evaluate_expression("bar == foo", &scope),
+            evaluate_expression("bar == foo", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -585,7 +562,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("foo == bar", &scope),
+            evaluate_expression("foo == bar", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -601,117 +578,117 @@ mod tests {
 
     #[test]
     fn test_binary_expression_equal() {
-        let scope = create_scope();
-        assert_eq!(evaluate_expression("nil == nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("nil == true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("nil == false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("nil == 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("nil == 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("nil == \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("nil == \"\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true == nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true == true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true == false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true == 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true == 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true == \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true == \"\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false == nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false == true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false == false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false == 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false == 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false == \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false == \"\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 == nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 == true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 == false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 == 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 == 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 == \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 == \"\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 == nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 == true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 == false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 == 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 == 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 == \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 == \"\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" == nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" == true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" == false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" == 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" == 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" == \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" == \"\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"\" == \"\"", &scope), Ok(Value::Bool(true)));
+        let env = new_environment();
+        assert_eq!(evaluate_expression("nil == nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("nil == true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("nil == false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("nil == 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("nil == 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("nil == \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("nil == \"\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true == nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true == true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true == false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true == 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true == 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true == \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true == \"\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false == nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false == true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false == false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false == 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false == 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false == \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false == \"\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 == nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 == true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 == false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 == 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 == 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 == \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 == \"\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 == nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 == true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 == false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 == 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 == 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 == \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 == \"\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" == nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" == true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" == false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" == 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" == 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" == \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" == \"\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"\" == \"\"", &env), Ok(Value::Bool(true)));
     }
 
     #[test]
     fn test_binary_expression_not_equal() {
-        let scope = create_scope();
-        assert_eq!(evaluate_expression("nil != nil", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("nil != true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("nil != false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("nil != 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("nil != 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("nil != \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("nil != \"\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true != nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true != true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("true != false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true != 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true != 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true != \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("true != \"\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false != nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false != true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false != false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false != 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false != 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false != \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false != \"\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 != nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 != true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 != false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 != 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 != 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 != \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 != \"\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 != nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 != true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 != false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 != 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 != 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("0 != \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("0 != \"\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" != nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" != true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" != false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" != 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" != 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" != \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" != \"\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"\" != \"\"", &scope), Ok(Value::Bool(false)));
+        let env = new_environment();
+        assert_eq!(evaluate_expression("nil != nil", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("nil != true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("nil != false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("nil != 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("nil != 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("nil != \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("nil != \"\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true != nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true != true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("true != false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true != 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true != 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true != \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("true != \"\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false != nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false != true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false != false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false != 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false != 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false != \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false != \"\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 != nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 != true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 != false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 != 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 != 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 != \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 != \"\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 != nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 != true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 != false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 != 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 != 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("0 != \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("0 != \"\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" != nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" != true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" != false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" != 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" != 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" != \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" != \"\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"\" != \"\"", &env), Ok(Value::Bool(false)));
     }
 
     #[test]
     fn test_binary_expression_less() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil < nil", &scope),
+            evaluate_expression("nil < nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
@@ -720,7 +697,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil < true", &scope),
+            evaluate_expression("nil < true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
@@ -729,7 +706,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil < 1", &scope),
+            evaluate_expression("nil < 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
@@ -738,7 +715,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil < \"hello\"", &scope),
+            evaluate_expression("nil < \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
@@ -747,7 +724,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true < nil", &scope),
+            evaluate_expression("true < nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
@@ -756,7 +733,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true < true", &scope),
+            evaluate_expression("true < true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
@@ -765,7 +742,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true < 1", &scope),
+            evaluate_expression("true < 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
@@ -774,7 +751,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true < \"hello\"", &scope),
+            evaluate_expression("true < \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
@@ -783,7 +760,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 < nil", &scope),
+            evaluate_expression("1 < nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
@@ -792,7 +769,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 < true", &scope),
+            evaluate_expression("1 < true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
@@ -800,11 +777,11 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("1 < 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 < 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 < 2", &scope), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 < 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 < 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 < 2", &env), Ok(Value::Bool(true)));
         assert_eq!(
-            evaluate_expression("1 < \"hello\"", &scope),
+            evaluate_expression("1 < \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -813,7 +790,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" < nil", &scope),
+            evaluate_expression("\"hello\" < nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
@@ -822,7 +799,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" < true", &scope),
+            evaluate_expression("\"hello\" < true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -831,7 +808,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" < 1", &scope),
+            evaluate_expression("\"hello\" < 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -839,16 +816,16 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("\"hello\" < \"gello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" < \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" < \"iello\"", &scope), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" < \"gello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" < \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" < \"iello\"", &env), Ok(Value::Bool(true)));
     }
 
     #[test]
     fn test_binary_expression_less_equal() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil <= nil", &scope),
+            evaluate_expression("nil <= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
@@ -857,7 +834,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil <= true", &scope),
+            evaluate_expression("nil <= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
@@ -866,7 +843,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil <= 1", &scope),
+            evaluate_expression("nil <= 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
@@ -875,7 +852,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil <= \"hello\"", &scope),
+            evaluate_expression("nil <= \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
@@ -884,7 +861,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true <= nil", &scope),
+            evaluate_expression("true <= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
@@ -893,7 +870,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true <= true", &scope),
+            evaluate_expression("true <= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
@@ -902,7 +879,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true <= 1", &scope),
+            evaluate_expression("true <= 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
@@ -911,7 +888,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true <= \"hello\"", &scope),
+            evaluate_expression("true <= \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
@@ -920,7 +897,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 <= nil", &scope),
+            evaluate_expression("1 <= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
@@ -929,7 +906,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 <= true", &scope),
+            evaluate_expression("1 <= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
@@ -937,11 +914,11 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("1 <= 0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 <= 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 <= 2", &scope), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 <= 0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 <= 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 <= 2", &env), Ok(Value::Bool(true)));
         assert_eq!(
-            evaluate_expression("1 <= \"hello\"", &scope),
+            evaluate_expression("1 <= \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -950,7 +927,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" <= nil", &scope),
+            evaluate_expression("\"hello\" <= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
@@ -959,7 +936,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" <= true", &scope),
+            evaluate_expression("\"hello\" <= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -968,7 +945,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" <= 1", &scope),
+            evaluate_expression("\"hello\" <= 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -976,16 +953,16 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("\"hello\" <= \"gello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" <= \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" <= \"iello\"", &scope), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" <= \"gello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" <= \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" <= \"iello\"", &env), Ok(Value::Bool(true)));
     }
 
     #[test]
     fn test_binary_expression_greater() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil > nil", &scope),
+            evaluate_expression("nil > nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
@@ -994,7 +971,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil > true", &scope),
+            evaluate_expression("nil > true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
@@ -1003,7 +980,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil > 1", &scope),
+            evaluate_expression("nil > 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
@@ -1012,7 +989,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil > \"hello\"", &scope),
+            evaluate_expression("nil > \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
@@ -1021,7 +998,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true > nil", &scope),
+            evaluate_expression("true > nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
@@ -1030,7 +1007,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true > true", &scope),
+            evaluate_expression("true > true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
@@ -1039,7 +1016,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true > 1", &scope),
+            evaluate_expression("true > 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
@@ -1048,7 +1025,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true > \"hello\"", &scope),
+            evaluate_expression("true > \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
@@ -1057,7 +1034,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 > nil", &scope),
+            evaluate_expression("1 > nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
@@ -1066,7 +1043,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 > true", &scope),
+            evaluate_expression("1 > true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
@@ -1074,11 +1051,11 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("1 > 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 > 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("1 > 2", &scope), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 > 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 > 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 > 2", &env), Ok(Value::Bool(false)));
         assert_eq!(
-            evaluate_expression("1 > \"hello\"", &scope),
+            evaluate_expression("1 > \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -1087,7 +1064,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" > nil", &scope),
+            evaluate_expression("\"hello\" > nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
@@ -1096,7 +1073,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" > true", &scope),
+            evaluate_expression("\"hello\" > true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -1105,7 +1082,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" > 1", &scope),
+            evaluate_expression("\"hello\" > 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -1113,16 +1090,16 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("\"hello\" > \"gello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" > \"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("\"hello\" > \"iello\"", &scope), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" > \"gello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" > \"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" > \"iello\"", &env), Ok(Value::Bool(false)));
     }
 
     #[test]
     fn test_binary_expression_greater_equal() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil >= nil", &scope),
+            evaluate_expression("nil >= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
@@ -1131,7 +1108,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil >= true", &scope),
+            evaluate_expression("nil >= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
@@ -1140,7 +1117,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil >= 1", &scope),
+            evaluate_expression("nil >= 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
@@ -1149,7 +1126,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil >= \"hello\"", &scope),
+            evaluate_expression("nil >= \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
@@ -1158,7 +1135,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true >= nil", &scope),
+            evaluate_expression("true >= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
@@ -1167,7 +1144,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true >= true", &scope),
+            evaluate_expression("true >= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
@@ -1176,7 +1153,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true >= 1", &scope),
+            evaluate_expression("true >= 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
@@ -1185,7 +1162,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true >= \"hello\"", &scope),
+            evaluate_expression("true >= \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
@@ -1194,7 +1171,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 >= nil", &scope),
+            evaluate_expression("1 >= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
@@ -1203,7 +1180,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 >= true", &scope),
+            evaluate_expression("1 >= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
@@ -1211,11 +1188,11 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("1 >= 0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 >= 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 >= 2", &scope), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("1 >= 0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 >= 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 >= 2", &env), Ok(Value::Bool(false)));
         assert_eq!(
-            evaluate_expression("1 >= \"hello\"", &scope),
+            evaluate_expression("1 >= \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -1224,7 +1201,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" >= nil", &scope),
+            evaluate_expression("\"hello\" >= nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
@@ -1233,7 +1210,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" >= true", &scope),
+            evaluate_expression("\"hello\" >= true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -1242,7 +1219,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" >= 1", &scope),
+            evaluate_expression("\"hello\" >= 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -1250,16 +1227,16 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("\"hello\" >= \"gello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" >= \"hello\"", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"hello\" >= \"iello\"", &scope), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("\"hello\" >= \"gello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" >= \"hello\"", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"hello\" >= \"iello\"", &env), Ok(Value::Bool(false)));
     }
 
     #[test]
     fn test_binary_expression_plus() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil + nil", &scope),
+            evaluate_expression("nil + nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
@@ -1268,7 +1245,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil + true", &scope),
+            evaluate_expression("nil + true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
@@ -1277,7 +1254,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil + 1", &scope),
+            evaluate_expression("nil + 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
@@ -1286,7 +1263,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil + \"hello\"", &scope),
+            evaluate_expression("nil + \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
@@ -1295,7 +1272,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true + nil", &scope),
+            evaluate_expression("true + nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
@@ -1304,7 +1281,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true + true", &scope),
+            evaluate_expression("true + true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
@@ -1313,7 +1290,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true + 1", &scope),
+            evaluate_expression("true + 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
@@ -1322,7 +1299,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true + \"hello\"", &scope),
+            evaluate_expression("true + \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
@@ -1331,7 +1308,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 + nil", &scope),
+            evaluate_expression("1 + nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
@@ -1340,7 +1317,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 + true", &scope),
+            evaluate_expression("1 + true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
@@ -1348,9 +1325,9 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("1 + 1", &scope), Ok(Value::Number(2.0)));
+        assert_eq!(evaluate_expression("1 + 1", &env), Ok(Value::Number(2.0)));
         assert_eq!(
-            evaluate_expression("1 + \"hello\"", &scope),
+            evaluate_expression("1 + \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -1359,7 +1336,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" + nil", &scope),
+            evaluate_expression("\"hello\" + nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
@@ -1368,7 +1345,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" + true", &scope),
+            evaluate_expression("\"hello\" + true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -1377,7 +1354,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" + 1", &scope),
+            evaluate_expression("\"hello\" + 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -1385,14 +1362,14 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("\"hello\" + \"hello\"", &scope), Ok(Value::String("hellohello".to_owned())));
+        assert_eq!(evaluate_expression("\"hello\" + \"hello\"", &env), Ok(Value::String("hellohello".to_owned())));
     }
 
     #[test]
     fn test_binary_expression_minus() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil - nil", &scope),
+            evaluate_expression("nil - nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
@@ -1401,7 +1378,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil - true", &scope),
+            evaluate_expression("nil - true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
@@ -1410,7 +1387,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil - 1", &scope),
+            evaluate_expression("nil - 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
@@ -1419,7 +1396,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil - \"hello\"", &scope),
+            evaluate_expression("nil - \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
@@ -1428,7 +1405,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true - nil", &scope),
+            evaluate_expression("true - nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
@@ -1437,7 +1414,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true - true", &scope),
+            evaluate_expression("true - true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
@@ -1446,7 +1423,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true - 1", &scope),
+            evaluate_expression("true - 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
@@ -1455,7 +1432,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true - \"hello\"", &scope),
+            evaluate_expression("true - \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
@@ -1464,7 +1441,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 - nil", &scope),
+            evaluate_expression("1 - nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
@@ -1473,7 +1450,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 - true", &scope),
+            evaluate_expression("1 - true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
@@ -1481,9 +1458,9 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("1 - 1", &scope), Ok(Value::Number(0.0)));
+        assert_eq!(evaluate_expression("1 - 1", &env), Ok(Value::Number(0.0)));
         assert_eq!(
-            evaluate_expression("1 - \"hello\"", &scope),
+            evaluate_expression("1 - \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -1492,7 +1469,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" - nil", &scope),
+            evaluate_expression("\"hello\" - nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
@@ -1501,7 +1478,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" - true", &scope),
+            evaluate_expression("\"hello\" - true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -1510,7 +1487,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" - 1", &scope),
+            evaluate_expression("\"hello\" - 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -1519,7 +1496,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" - \"hello\"", &scope),
+            evaluate_expression("\"hello\" - \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::String("hello".to_owned())),
@@ -1531,9 +1508,9 @@ mod tests {
 
     #[test]
     fn test_binary_expression_multiply() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil * nil", &scope),
+            evaluate_expression("nil * nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
@@ -1542,7 +1519,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil * true", &scope),
+            evaluate_expression("nil * true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
@@ -1551,7 +1528,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil * 1", &scope),
+            evaluate_expression("nil * 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
@@ -1560,7 +1537,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil * \"hello\"", &scope),
+            evaluate_expression("nil * \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
@@ -1569,7 +1546,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true * nil", &scope),
+            evaluate_expression("true * nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
@@ -1578,7 +1555,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true * true", &scope),
+            evaluate_expression("true * true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
@@ -1587,7 +1564,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true * 1", &scope),
+            evaluate_expression("true * 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
@@ -1596,7 +1573,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true * \"hello\"", &scope),
+            evaluate_expression("true * \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
@@ -1605,7 +1582,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 * nil", &scope),
+            evaluate_expression("1 * nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
@@ -1614,7 +1591,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 * true", &scope),
+            evaluate_expression("1 * true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
@@ -1622,9 +1599,9 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("2 * 2", &scope), Ok(Value::Number(4.0)));
+        assert_eq!(evaluate_expression("2 * 2", &env), Ok(Value::Number(4.0)));
         assert_eq!(
-            evaluate_expression("1 * \"hello\"", &scope),
+            evaluate_expression("1 * \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -1633,7 +1610,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" * nil", &scope),
+            evaluate_expression("\"hello\" * nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
@@ -1642,7 +1619,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" * true", &scope),
+            evaluate_expression("\"hello\" * true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -1651,7 +1628,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" * 1", &scope),
+            evaluate_expression("\"hello\" * 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -1660,7 +1637,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" * \"hello\"", &scope),
+            evaluate_expression("\"hello\" * \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::String("hello".to_owned())),
@@ -1672,9 +1649,9 @@ mod tests {
 
     #[test]
     fn test_binary_expression_divide() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("nil / nil", &scope),
+            evaluate_expression("nil / nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
@@ -1683,7 +1660,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil / true", &scope),
+            evaluate_expression("nil / true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
@@ -1692,7 +1669,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil / 1", &scope),
+            evaluate_expression("nil / 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
@@ -1701,7 +1678,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("nil / \"hello\"", &scope),
+            evaluate_expression("nil / \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
@@ -1710,7 +1687,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true / nil", &scope),
+            evaluate_expression("true / nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
@@ -1719,7 +1696,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true / true", &scope),
+            evaluate_expression("true / true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
@@ -1728,7 +1705,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true / 1", &scope),
+            evaluate_expression("true / 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
@@ -1737,7 +1714,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("true / \"hello\"", &scope),
+            evaluate_expression("true / \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
@@ -1746,7 +1723,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 / nil", &scope),
+            evaluate_expression("1 / nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
@@ -1755,7 +1732,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 / true", &scope),
+            evaluate_expression("1 / true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
@@ -1763,9 +1740,9 @@ mod tests {
                 )
             )
         );
-        assert_eq!(evaluate_expression("2 / 2", &scope), Ok(Value::Number(1.0)));
+        assert_eq!(evaluate_expression("2 / 2", &env), Ok(Value::Number(1.0)));
         assert_eq!(
-            evaluate_expression("1 / 0", &scope),
+            evaluate_expression("1 / 0", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::DivideByZero(Value::Number(1.0), Value::Number(0.0)),
@@ -1774,7 +1751,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("1 / \"hello\"", &scope),
+            evaluate_expression("1 / \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
@@ -1783,7 +1760,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" / nil", &scope),
+            evaluate_expression("\"hello\" / nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
@@ -1792,7 +1769,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" / true", &scope),
+            evaluate_expression("\"hello\" / true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
@@ -1801,7 +1778,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" / 1", &scope),
+            evaluate_expression("\"hello\" / 1", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
@@ -1810,7 +1787,7 @@ mod tests {
             )
         );
         assert_eq!(
-            evaluate_expression("\"hello\" / \"hello\"", &scope),
+            evaluate_expression("\"hello\" / \"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::String("hello".to_owned())),
@@ -1822,26 +1799,26 @@ mod tests {
 
     #[test]
     fn test_call_expression() {
-        let scope = create_scope();
+        let env = new_environment();
         execute_src(
             "
             fun foo(a, b) {
                 return a + b;
             }
             ",
-            &scope,
+            &env,
         );
         assert_eq!(
-            evaluate_expression("foo(1, 2)", &scope),
+            evaluate_expression("foo(1, 2)", &env),
             Ok(Value::Number(3.0)),
         );
     }
 
     #[test]
     fn test_call_expression_callee_evaluate_error() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("foo(1, 2)", &scope),
+            evaluate_expression("foo(1, 2)", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -1857,17 +1834,17 @@ mod tests {
 
     #[test]
     fn test_call_expression_argument_evaluate_error() {
-        let scope = create_scope();
+        let env = new_environment();
         execute_src(
             "
             fun foo(a, b) {
                 return a + b;
             }
             ",
-            &scope,
+            &env,
         );
         assert_eq!(
-            evaluate_expression("foo(a, b)", &scope),
+            evaluate_expression("foo(a, b)", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -1883,17 +1860,17 @@ mod tests {
 
     #[test]
     fn test_call_expression_argument_number_mismatch_error() {
-        let scope = create_scope();
+        let env = new_environment();
         execute_src(
             "
             fun foo(a, b) {
                 return a + b;
             }
             ",
-            &scope,
+            &env,
         );
         assert_eq!(
-            evaluate_expression("foo(1, 2, 3)", &scope),
+            evaluate_expression("foo(1, 2, 3)", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::ArgumentNumberMismatch(2, 3),
@@ -1905,15 +1882,15 @@ mod tests {
 
     #[test]
     fn test_call_expression_not_callable_error() {
-        let scope = create_scope();
+        let env = new_environment();
         execute_src(
             "
             var foo = true;
             ",
-            &scope,
+            &env,
         );
         assert_eq!(
-            evaluate_expression("foo()", &scope),
+            evaluate_expression("foo()", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::NotCallable(Value::Bool(true)),
@@ -1925,17 +1902,17 @@ mod tests {
 
     #[test]
     fn test_call_expression_runtime_error() {
-        let scope = create_scope();
+        let env = new_environment();
         execute_src(
             "
             fun foo() {
                 return bar;
             }
             ",
-            &scope,
+            &env,
         );
         assert_eq!(
-            evaluate_expression("foo()", &scope),
+            evaluate_expression("foo()", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -1955,14 +1932,14 @@ mod tests {
 
     #[test]
     fn test_grouping_expression() {
-        let scope = create_scope();
-        assert_eq!(evaluate_expression("(nil)", &scope), Ok(Value::Nil));
-        assert_eq!(evaluate_expression("(true)", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("(123)", &scope), Ok(Value::Number(123.0)));
-        assert_eq!(evaluate_expression("(\"hello\")", &scope), Ok(Value::String("hello".to_owned())));
-        assert_eq!(evaluate_expression("2 * (3 - 1)", &scope), Ok(Value::Number(4.0)));
+        let env = new_environment();
+        assert_eq!(evaluate_expression("(nil)", &env), Ok(Value::Nil));
+        assert_eq!(evaluate_expression("(true)", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("(123)", &env), Ok(Value::Number(123.0)));
+        assert_eq!(evaluate_expression("(\"hello\")", &env), Ok(Value::String("hello".to_owned())));
+        assert_eq!(evaluate_expression("2 * (3 - 1)", &env), Ok(Value::Number(4.0)));
         assert_eq!(
-            evaluate_expression("(true + 1)", &scope),
+            evaluate_expression("(true + 1)", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
@@ -1974,20 +1951,20 @@ mod tests {
 
     #[test]
     fn test_literal_expression() {
-        let scope = create_scope();
-        assert_eq!(evaluate_expression("nil", &scope), Ok(Value::Nil));
-        assert_eq!(evaluate_expression("true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("123", &scope), Ok(Value::Number(123.0)));
-        assert_eq!(evaluate_expression("1.23", &scope), Ok(Value::Number(1.23)));
-        assert_eq!(evaluate_expression("\"hello\"", &scope), Ok(Value::String("hello".to_owned())));
+        let env = new_environment();
+        assert_eq!(evaluate_expression("nil", &env), Ok(Value::Nil));
+        assert_eq!(evaluate_expression("true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("123", &env), Ok(Value::Number(123.0)));
+        assert_eq!(evaluate_expression("1.23", &env), Ok(Value::Number(1.23)));
+        assert_eq!(evaluate_expression("\"hello\"", &env), Ok(Value::String("hello".to_owned())));
     }
 
     #[test]
     fn test_logical_expression_left_evaluate_error() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("foo or true", &scope),
+            evaluate_expression("foo or true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -2003,9 +1980,9 @@ mod tests {
 
     #[test]
     fn test_logical_expression_right_evaluate_error() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("true and foo", &scope),
+            evaluate_expression("true and foo", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -2021,28 +1998,28 @@ mod tests {
 
     #[test]
     fn test_logical_expression() {
-        let scope = create_scope();
-        assert_eq!(evaluate_expression("nil and \"foo\"", &scope), Ok(Value::Nil));
-        assert_eq!(evaluate_expression("nil or \"foo\"", &scope), Ok(Value::String("foo".to_owned())));
-        assert_eq!(evaluate_expression("true and 1", &scope), Ok(Value::Number(1.0)));
-        assert_eq!(evaluate_expression("true or 1", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("false and 1", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("false or 1", &scope), Ok(Value::Number(1.0)));
-        assert_eq!(evaluate_expression("1 and true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("1 or true", &scope), Ok(Value::Number(1.0)));
-        assert_eq!(evaluate_expression("0 and true", &scope), Ok(Value::Number(0.0)));
-        assert_eq!(evaluate_expression("0 or true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"foo\" and true", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("\"foo\" or true", &scope), Ok(Value::String("foo".to_owned())));
-        assert_eq!(evaluate_expression("\"\" and true", &scope), Ok(Value::String("".to_owned())));
-        assert_eq!(evaluate_expression("\"\" or true", &scope), Ok(Value::Bool(true)));
+        let env = new_environment();
+        assert_eq!(evaluate_expression("nil and \"foo\"", &env), Ok(Value::Nil));
+        assert_eq!(evaluate_expression("nil or \"foo\"", &env), Ok(Value::String("foo".to_owned())));
+        assert_eq!(evaluate_expression("true and 1", &env), Ok(Value::Number(1.0)));
+        assert_eq!(evaluate_expression("true or 1", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("false and 1", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("false or 1", &env), Ok(Value::Number(1.0)));
+        assert_eq!(evaluate_expression("1 and true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("1 or true", &env), Ok(Value::Number(1.0)));
+        assert_eq!(evaluate_expression("0 and true", &env), Ok(Value::Number(0.0)));
+        assert_eq!(evaluate_expression("0 or true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"foo\" and true", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("\"foo\" or true", &env), Ok(Value::String("foo".to_owned())));
+        assert_eq!(evaluate_expression("\"\" and true", &env), Ok(Value::String("".to_owned())));
+        assert_eq!(evaluate_expression("\"\" or true", &env), Ok(Value::Bool(true)));
     }
 
     #[test]
     fn test_unary_expression_right_evaluate_error() {
-        let scope = create_scope();
+        let env = new_environment();
         assert_eq!(
-            evaluate_expression("!foo", &scope),
+            evaluate_expression("!foo", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -2058,18 +2035,18 @@ mod tests {
 
     #[test]
     fn test_unary_expression() {
-        let scope = create_scope();
-        add_native_clock(&scope);
+        let env = new_environment();
+        add_native_clock(&env);
         execute_src(
             "
             fun foo() {
                 print \"hello\";
             }
             ",
-            &scope
+            &env
         );
         assert_eq!(
-            evaluate_expression("-nil", &scope),
+            evaluate_expression("-nil", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidNegate(Value::Nil),
@@ -2078,7 +2055,7 @@ mod tests {
             ),
         );
         assert_eq!(
-            evaluate_expression("-true", &scope),
+            evaluate_expression("-true", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidNegate(Value::Bool(true)),
@@ -2087,7 +2064,7 @@ mod tests {
             ),
         );
         assert_eq!(
-            evaluate_expression("-\"hello\"", &scope),
+            evaluate_expression("-\"hello\"", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::InvalidNegate(Value::String("hello".to_owned())),
@@ -2096,40 +2073,40 @@ mod tests {
             ),
         );
         assert_eq!(
-            evaluate_expression("-foo", &scope),
+            evaluate_expression("-foo", &env),
             Err(
                 runtime_error!(
-                    RuntimeErrorEnum::InvalidNegate(scope.borrow().get_value("foo").unwrap()),
+                    RuntimeErrorEnum::InvalidNegate(environment_get_value(&env, "foo").unwrap()),
                     code_span(0, 0, 0, 4),
                 )
             ),
         );
         assert_eq!(
-            evaluate_expression("-clock", &scope),
+            evaluate_expression("-clock", &env),
             Err(
                 runtime_error!(
-                    RuntimeErrorEnum::InvalidNegate(scope.borrow().get_value("clock").unwrap()),
+                    RuntimeErrorEnum::InvalidNegate(environment_get_value(&env, "clock").unwrap()),
                     code_span(0, 0, 0, 6),
                 )
             ),
         );
-        assert_eq!(evaluate_expression("-1.0", &scope), Ok(Value::Number(-1.0)));
-        assert_eq!(evaluate_expression("!nil", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("!true", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("!false", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("!1.0", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("!0.0", &scope), Ok(Value::Bool(true)));
-        assert_eq!(evaluate_expression("!\"hello\"", &scope), Ok(Value::Bool(false)));
-        assert_eq!(evaluate_expression("!\"\"", &scope), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("-1.0", &env), Ok(Value::Number(-1.0)));
+        assert_eq!(evaluate_expression("!nil", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("!true", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("!false", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("!1.0", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("!0.0", &env), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_expression("!\"hello\"", &env), Ok(Value::Bool(false)));
+        assert_eq!(evaluate_expression("!\"\"", &env), Ok(Value::Bool(true)));
     }
 
     #[test]
     fn test_variable_expression() {
-        let scope = create_scope();
-        execute_src("var foo = true;", &scope);
-        assert_eq!(evaluate_expression("foo", &scope), Ok(Value::Bool(true)));
+        let env = new_environment();
+        execute_src("var foo = true;", &env);
+        assert_eq!(evaluate_expression("foo", &env), Ok(Value::Bool(true)));
         assert_eq!(
-            evaluate_expression("bar", &scope),
+            evaluate_expression("bar", &env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::VariableNotDeclared,

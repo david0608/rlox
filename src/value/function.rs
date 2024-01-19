@@ -10,8 +10,12 @@ use crate::call::{
     CallResult,
     CallError,
 };
+use crate::environment::{
+    Environment,
+    new_child_environment,
+    environment_declare,
+};
 use crate::execute::ExecuteOk;
-use crate::scope::Scope;
 
 static FUNCTION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
 
@@ -25,6 +29,7 @@ pub struct Function {
     name: IdentifierToken,
     parameters: Vec<IdentifierToken>,
     body: Vec<BoxedStatement>,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Function {
@@ -33,6 +38,7 @@ impl Function {
         name: IdentifierToken,
         parameters: Vec<IdentifierToken>,
         body: Vec<BoxedStatement>,
+        environment: &Rc<RefCell<Environment>>,
     ) -> Function
     {
         Function {
@@ -40,6 +46,7 @@ impl Function {
             name,
             parameters,
             body,
+            environment: Rc::clone(environment),
         }
     }
 
@@ -58,6 +65,10 @@ impl Function {
     pub fn body(&self) -> &Vec<BoxedStatement> {
         return &self.body;
     }
+
+    pub fn environment(&self) -> &Rc<RefCell<Environment>> {
+        return &self.environment;
+    }
 }
 
 impl std::cmp::PartialEq for Function {
@@ -67,21 +78,21 @@ impl std::cmp::PartialEq for Function {
 }
 
 impl Call for Function {
-    fn call(&self, scope: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
+    fn call(&self, arguments: Vec<Value>) -> CallResult {
         let argn_expect = self.parameters.len();
         let argn_found = arguments.len();
         if argn_expect != argn_found {
             return Err(CallError::ArgumentNumberMismatch(argn_expect, argn_found));
         }
-        let fscope = Scope::new_isolate_child(scope).as_rc();
+        let env = new_child_environment(self.environment());
         for (p, v) in zip(&self.parameters, arguments) {
-            if fscope.borrow_mut().declare(p.name(), v).is_err() {
+            if environment_declare(&env, p.name(), v).is_err() {
                 unreachable!();
             }
         }
 
         for stmt in &self.body {
-            match stmt.execute(&fscope) {
+            match stmt.execute(&env) {
                 Ok(ExecuteOk::KeepGoing) => {
                     continue;
                 }
@@ -112,12 +123,15 @@ mod tests {
         Call,
         CallError,
     };
+    use crate::environment::{
+        new_environment,
+        environment_get_value,
+    };
     use crate::error::{
         RuntimeError,
         RuntimeErrorEnum,
     };
     use crate::execute::ExecuteOk;
-    use crate::scope::Scope;
     use crate::runtime_error;
 
     #[test]
@@ -133,17 +147,11 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 1);
-        let s = Scope::new().as_rc();
-        stmts[0].execute(&s).expect("function declare");
-        let f = s.borrow().get_value("foo").unwrap();
+        let env = new_environment();
+        stmts[0].execute(&env).expect("function declare");
+        let f = environment_get_value(&env, "foo").unwrap();
         assert_eq!(
-            f.call(
-                &Scope::new().as_rc(),
-                vec![
-                    Value::Number(1.0),
-                    Value::Number(2.0),
-                ]
-            ),
+            f.call(vec![Value::Number(1.0), Value::Number(2.0)]),
             Ok(Value::Number(3.0)),
         );
     }
@@ -161,16 +169,11 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 1);
-        let s = Scope::new().as_rc();
-        stmts[0].execute(&s).expect("function declare");
-        let f = s.borrow().get_value("foo").unwrap();
+        let env = new_environment();
+        stmts[0].execute(&env).expect("function declare");
+        let f = environment_get_value(&env, "foo").unwrap();
         assert_eq!(
-            f.call(
-                &Scope::new().as_rc(),
-                vec![
-                    Value::Number(1.0),
-                ]
-            ),
+            f.call(vec![Value::Number(1.0)]),
             Err(CallError::ArgumentNumberMismatch(2, 1)),
         );
     }
@@ -188,14 +191,11 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 1);
-        let s = Scope::new().as_rc();
-        stmts[0].execute(&s).expect("function declare");
-        let f = s.borrow().get_value("foo").unwrap();
+        let env = new_environment();
+        stmts[0].execute(&env).expect("function declare");
+        let f = environment_get_value(&env, "foo").unwrap();
         assert_eq!(
-            f.call(
-                &Scope::new().as_rc(),
-                vec![],
-            ),
+            f.call(vec![]),
             Err(
                 CallError::RuntimeError(
                     runtime_error!(
@@ -234,13 +234,13 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 2);
-        let s = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            stmts[0].execute(&s),
+            stmts[0].execute(&env),
             Ok(ExecuteOk::KeepGoing),
         );
         assert_eq!(
-            stmts[1].execute(&s),
+            stmts[1].execute(&env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,

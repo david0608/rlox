@@ -16,11 +16,15 @@ use crate::value::function::{
     Function,
     function_id,
 };
+use crate::environment::{
+    Environment,
+    new_child_environment,
+    environment_declare,
+};
 use crate::error::{
     RuntimeError,
     RuntimeErrorEnum,
 };
-use crate::scope::Scope;
 use crate::runtime_error;
 
 #[derive(PartialEq, Debug)]
@@ -33,14 +37,14 @@ pub enum ExecuteOk {
 pub type ExecuteResult = std::result::Result<ExecuteOk, RuntimeError>;
 
 pub trait Execute {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult;
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult;
 }
 
 impl Execute for BlockStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        let scope = Scope::new_child(scope).as_rc();
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+        let env = new_child_environment(env);
         for statement in self.statements() {
-            let ok = statement.execute(&scope)?;
+            let ok = statement.execute(&env)?;
             match ok {
                 ExecuteOk::KeepGoing => {
                     // do nothing.
@@ -58,14 +62,14 @@ impl Execute for BlockStatement {
 }
 
 impl Execute for BreakStatement {
-    fn execute(&self, _: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn execute(&self, _: &Rc<RefCell<Environment>>) -> ExecuteResult {
         return Ok(ExecuteOk::Break);
     }
 }
 
 impl Execute for ExpressionStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        if let Err(e) = self.expression().evaluate(scope) {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+        if let Err(e) = self.expression().evaluate(env) {
             return Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
@@ -81,11 +85,11 @@ impl Execute for ExpressionStatement {
 }
 
 impl Execute for ForStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        let scope = Scope::new_child(scope).as_rc();
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+        let env = new_child_environment(env);
 
         if let Some(initializer) = self.initializer() {
-            if let Err(e) = initializer.execute(&scope) {
+            if let Err(e) = initializer.execute(&env) {
                 return Err(
                     runtime_error!(
                         RuntimeErrorEnum::RuntimeError,
@@ -98,7 +102,7 @@ impl Execute for ForStatement {
 
         loop {
             if let Some(condition) = self.condition() {
-                match condition.evaluate(&scope) {
+                match condition.evaluate(&env) {
                     Ok(v) => {
                         if !v.is_truthy() {
                             return Ok(ExecuteOk::KeepGoing);
@@ -116,7 +120,7 @@ impl Execute for ForStatement {
                 }
             }
 
-            match self.body().execute(&scope) {
+            match self.body().execute(&env) {
                 Ok(ExecuteOk::KeepGoing) => {
                     // donothing.
                 }
@@ -138,7 +142,7 @@ impl Execute for ForStatement {
             }
 
             if let Some(increment) = self.increment() {
-                if let Err(e) = increment.evaluate(&scope) {
+                if let Err(e) = increment.evaluate(&env) {
                     return Err(
                         runtime_error!(
                             RuntimeErrorEnum::RuntimeError,
@@ -153,19 +157,20 @@ impl Execute for ForStatement {
 }
 
 impl Execute for FunDeclareStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        if scope.borrow_mut()
-            .declare(
-                self.name().name(),
-                Value::Function(
-                    Function::new(
-                        function_id(),
-                        self.name().clone(),
-                        self.parameters().clone(),
-                        self.body().clone(),
-                    )
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+        if environment_declare(
+            env,
+            self.name().name(),
+            Value::Function(
+                Function::new(
+                    function_id(),
+                    self.name().clone(),
+                    self.parameters().clone(),
+                    self.body().clone(),
+                    env,
                 )
             )
+        )
             .is_err()
         {
             return Err(
@@ -182,8 +187,8 @@ impl Execute for FunDeclareStatement {
 }
 
 impl Execute for IfStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        let condition = match self.condition().evaluate(scope) {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+        let condition = match self.condition().evaluate(env) {
             Ok(val) => val.is_truthy(),
             Err(err) => {
                 return Err(
@@ -201,9 +206,9 @@ impl Execute for IfStatement {
         else {
             self.else_statement()
         };
-        let scope = Scope::new_child(scope).as_rc();
+        let cenv = new_child_environment(env);
         if let Some(stmt) = statement {
-            match stmt.execute(&scope) {
+            match stmt.execute(&cenv) {
                 Err(err) => {
                     return Err(
                         runtime_error!(
@@ -223,8 +228,8 @@ impl Execute for IfStatement {
 }
 
 impl Execute for PrintStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
-        match self.value().evaluate(scope) {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+        match self.value().evaluate(env) {
             Ok(v) => {
                 println!("{}", v);
                 return Ok(ExecuteOk::KeepGoing);
@@ -243,9 +248,9 @@ impl Execute for PrintStatement {
 }
 
 impl Execute for ReturnStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
         if let Some(e) = self.expression() {
-            match e.evaluate(scope) {
+            match e.evaluate(env) {
                 Ok(v) => {
                     return Ok(ExecuteOk::Return(v));
                 }
@@ -267,10 +272,10 @@ impl Execute for ReturnStatement {
 }
 
 impl Execute for VarDeclareStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
         let mut value = Value::Nil;
         if let Some(i) = self.initializer() {
-            match i.evaluate(scope) {
+            match i.evaluate(env) {
                 Ok(v) => value = v,
                 Err(e) => {
                     return Err(
@@ -283,7 +288,7 @@ impl Execute for VarDeclareStatement {
                 }
             }
         };
-        if scope.borrow_mut().declare(self.name(), value).is_err() {
+        if environment_declare(env, self.name(), value).is_err() {
             return Err(
                 runtime_error!(
                     RuntimeErrorEnum::MultipleDeclaration,
@@ -296,10 +301,10 @@ impl Execute for VarDeclareStatement {
 }
 
 impl Execute for WhileStatement {
-    fn execute(&self, scope: &Rc<RefCell<Scope>>) -> ExecuteResult {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
         loop {
             if let Some(condition) = self.condition() {
-                match condition.evaluate(scope) {
+                match condition.evaluate(env) {
                     Ok(v) => {
                         if !v.is_truthy() {
                             return Ok(ExecuteOk::KeepGoing);
@@ -317,7 +322,7 @@ impl Execute for WhileStatement {
                 }
             }
 
-            match self.body().execute(scope) {
+            match self.body().execute(env) {
                 Ok(ExecuteOk::KeepGoing) => {
                     // do nothing.
                 }
@@ -349,12 +354,16 @@ mod tests {
     use crate::parse::parser::Parser;
     use crate::scan::Scan;
     use crate::value::Value;
+    use crate::environment::{
+        new_environment,
+        environment_has_name,
+        environment_get_value,
+    };
     use crate::error::{
         RuntimeError,
         RuntimeErrorEnum,
     };
     use crate::execute::ExecuteOk;
-    use crate::scope::Scope;
     use crate::runtime_error;
 
     fn code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
@@ -376,10 +385,10 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 2);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope).is_ok(), true);
-        assert_eq!(stmts[1].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(2.0));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env).is_ok(), true);
+        assert_eq!(stmts[1].execute(&env).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(2.0));
     }
 
     #[test]
@@ -396,17 +405,17 @@ mod tests {
             .scan();
         assert_eq!(errors.len(), 0);
         let mut parser = Parser::new(&tokens);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            parser.statement(true).unwrap().execute(&scope).is_ok(),
+            parser.statement(true).unwrap().execute(&env).is_ok(),
             true
         );
         assert_eq!(
-            parser.statement(true).unwrap().execute(&scope).unwrap(),
+            parser.statement(true).unwrap().execute(&env).unwrap(),
             ExecuteOk::Break
         );
         assert_eq!(
-            scope.borrow().get_value("foo").unwrap(),
+            environment_get_value(&env, "foo").unwrap(),
             Value::Number(2.0),
         );
     }
@@ -425,17 +434,17 @@ mod tests {
             .scan();
         assert_eq!(errors.len(), 0);
         let mut parser = Parser::new(&tokens);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            parser.statement(true).unwrap().execute(&scope).is_ok(),
+            parser.statement(true).unwrap().execute(&env).is_ok(),
             true
         );
         assert_eq!(
-            parser.statement(true).unwrap().execute(&scope).unwrap(),
+            parser.statement(true).unwrap().execute(&env).unwrap(),
             ExecuteOk::Return(Value::Number(2.0))
         );
         assert_eq!(
-            scope.borrow().get_value("foo").unwrap(),
+            environment_get_value(&env, "foo").unwrap(),
             Value::Number(2.0),
         );
     }
@@ -454,11 +463,11 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         for stmt in stmts {
-            assert_eq!(stmt.execute(&scope).is_ok(), true);
+            assert_eq!(stmt.execute(&env).is_ok(), true);
         }
-        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(1.0));
+        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(1.0));
     }
 
     #[test]
@@ -474,9 +483,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            stmts[0].execute(&scope).unwrap_err(),
+            stmts[0].execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(3, 0, 3, 10),
@@ -497,27 +506,27 @@ mod tests {
         let tokens = "break;".scan().0;
         let mut p = Parser::new(&tokens);
         let stmt = p.statement(true).unwrap();
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmt.execute(&scope).unwrap(), ExecuteOk::Break);
+        let env = new_environment();
+        assert_eq!(stmt.execute(&env).unwrap(), ExecuteOk::Break);
     }
 
     #[test]
     fn test_expression() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let tokens = "true;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap(),
+            stmt.execute(&env).unwrap(),
             ExecuteOk::KeepGoing
         );
     }
 
     #[test]
     fn test_expression_evaluate_error() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let stmt = &"foo;".scan().0.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap_err(),
+            stmt.execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(0, 0, 0, 4),
@@ -537,15 +546,15 @@ mod tests {
                 sum = sum + i;
             }
         ";
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let (tokens, errors) = src.scan();
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         for stmt in stmts {
-            assert_eq!(stmt.execute(&scope).is_ok(), true);
+            assert_eq!(stmt.execute(&env).is_ok(), true);
         }
-        assert_eq!(scope.borrow().get_value("sum").unwrap(), Value::Number(55.0));
+        assert_eq!(environment_get_value(&env, "sum").unwrap(), Value::Number(55.0));
     }
 
     #[test]
@@ -564,10 +573,10 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(stmts[1].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(scope.borrow().get_value("num").unwrap(), Value::Number(5.0));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(stmts[1].execute(&env).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(environment_get_value(&env, "num").unwrap(), Value::Number(5.0));
     }
 
     #[test]
@@ -586,10 +595,10 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(stmts[1].execute(&scope).unwrap(), ExecuteOk::Return(Value::Number(5.0)));
-        assert_eq!(scope.borrow().get_value("num").unwrap(), Value::Number(5.0));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env).unwrap(), ExecuteOk::KeepGoing);
+        assert_eq!(stmts[1].execute(&env).unwrap(), ExecuteOk::Return(Value::Number(5.0)));
+        assert_eq!(environment_get_value(&env, "num").unwrap(), Value::Number(5.0));
     }
 
     #[test]
@@ -604,9 +613,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            stmts[0].execute(&scope).unwrap_err(),
+            stmts[0].execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(1, 0, 3, 1),
@@ -634,9 +643,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            stmts[0].execute(&scope).unwrap_err(),
+            stmts[0].execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(1, 0, 3, 1),
@@ -660,9 +669,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            stmts[0].execute(&scope).unwrap_err(),
+            stmts[0].execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(1, 0, 3, 1),
@@ -690,9 +699,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(
-            stmts[0].execute(&scope).unwrap_err(),
+            stmts[0].execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(1, 0, 3, 1),
@@ -725,9 +734,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        let f = if let Value::Function(f) = scope.borrow().get_value("foo").unwrap() {
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
+        let f = if let Value::Function(f) = environment_get_value(&env, "foo").unwrap() {
             f
         }
         else {
@@ -758,10 +767,10 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 2);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
         assert_eq!(
-            stmts[1].execute(&scope),
+            stmts[1].execute(&env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::MultipleDeclaration,
@@ -782,10 +791,10 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(2.0));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(2.0));
     } 
 
     #[test]
@@ -803,26 +812,26 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(scope.borrow().get_value("foo").unwrap(), Value::Number(3.0));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(3.0));
     }
 
     #[test]
     fn test_print() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let tokens = "print true;".scan().0;
         let stmt = &tokens.parse().0[0];
-        assert_eq!(stmt.execute(&scope).is_ok(), true);
+        assert_eq!(stmt.execute(&env).is_ok(), true);
     }
 
     #[test]
     fn test_print_evaluate_error() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let stmt = &"print foo;".scan().0.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap_err(),
+            stmt.execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(0, 0, 0, 10),
@@ -836,30 +845,30 @@ mod tests {
 
     #[test]
     fn test_return() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let stmt = &"return;".scan().0.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap(),
+            stmt.execute(&env).unwrap(),
             ExecuteOk::Return(Value::Nil),
         );
     }
 
     #[test]
     fn test_return_value() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let stmt = &"return true;".scan().0.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap(),
+            stmt.execute(&env).unwrap(),
             ExecuteOk::Return(Value::Bool(true)),
         );
     }
 
     #[test]
     fn test_return_evaluate_error() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let stmt = &"return foo;".scan().0.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap_err(),
+            stmt.execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(0, 0, 0, 11),
@@ -873,32 +882,32 @@ mod tests {
 
     #[test]
     fn test_var_declare() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let tokens = "var foo;".scan().0;
         let stmt = &tokens.parse().0[0];
-        assert_eq!(stmt.execute(&scope).is_ok(), true);
-        assert_eq!(scope.borrow().has_name("foo"), true);
-        assert_eq!(scope.borrow().get_value("foo"), Ok(Value::Nil));
+        assert_eq!(stmt.execute(&env).is_ok(), true);
+        assert_eq!(environment_has_name(&env, "foo"), true);
+        assert_eq!(environment_get_value(&env, "foo"), Ok(Value::Nil));
     }
 
     #[test]
     fn test_var_declare_initializer() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let tokens = "var foo = 1 + 1;".scan().0;
         let stmt = &tokens.parse().0[0];
-        assert_eq!(stmt.execute(&scope).is_ok(), true);
-        assert_eq!(scope.borrow().has_name("foo"), true);
-        assert_eq!(scope.borrow().get_value("foo"), Ok(Value::Number(2.0)));
+        assert_eq!(stmt.execute(&env).is_ok(), true);
+        assert_eq!(environment_has_name(&env, "foo"), true);
+        assert_eq!(environment_get_value(&env, "foo"), Ok(Value::Number(2.0)));
     }
 
     #[test]
     fn test_var_declare_multiple_declare() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let tokens = "var foo;".scan().0;
         let stmt = &tokens.parse().0[0];
-        assert_eq!(stmt.execute(&scope).is_ok(), true);
+        assert_eq!(stmt.execute(&env).is_ok(), true);
         assert_eq!(
-            stmt.execute(&scope).unwrap_err(),
+            stmt.execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::MultipleDeclaration,
                 code_span(0, 0, 0, 8),
@@ -908,11 +917,11 @@ mod tests {
 
     #[test]
     fn test_var_declare_initializer_evaluate_error() {
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         let tokens = "var foo = bar;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(
-            stmt.execute(&scope).unwrap_err(),
+            stmt.execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::RuntimeError,
                 code_span(0, 0, 0, 14),
@@ -939,11 +948,11 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[2].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(scope.borrow().get_value("sum").unwrap(), Value::Number(6.0));
+        let env = new_environment();
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[2].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(environment_get_value(&env, "sum").unwrap(), Value::Number(6.0));
     }
 
     #[test]
@@ -964,11 +973,11 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(errors.len(), 0);
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(scope.borrow().get_value("i").unwrap(), Value::Number(2.0));
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(environment_get_value(&env, "i").unwrap(), Value::Number(2.0));
     }
 
     #[test]
@@ -989,10 +998,10 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let scope = Scope::new().as_rc();
+        let env = new_environment();
         assert_eq!(errors.len(), 0);
-        assert_eq!(stmts[0].execute(&scope), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&scope), Ok(ExecuteOk::Return(Value::Number(2.0))));
-        assert_eq!(scope.borrow().get_value("i").unwrap(), Value::Number(2.0));
+        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
+        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::Return(Value::Number(2.0))));
+        assert_eq!(environment_get_value(&env, "i").unwrap(), Value::Number(2.0));
     }
 }

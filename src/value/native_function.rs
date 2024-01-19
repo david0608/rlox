@@ -1,5 +1,3 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use crate::value::{
     Value,
     function::function_id,
@@ -8,9 +6,8 @@ use crate::call::{
     Call,
     CallResult,
 };
-use crate::scope::Scope;
 
-pub type NativeFunctionHandler = fn(&Rc<RefCell<Scope>>, Vec<Value>) -> CallResult;
+pub type NativeFunctionHandler = fn(Vec<Value>) -> CallResult;
 
 #[derive(Clone)]
 pub struct NativeFunction {
@@ -42,7 +39,7 @@ impl std::cmp::PartialEq for NativeFunction {
 }
 
 impl Call for NativeFunction {
-    fn call(&self, scope: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
-        (self.handler)(scope, arguments)
+    fn call(&self, arguments: Vec<Value>) -> CallResult {
+        (self.handler)(arguments)
     }
 }

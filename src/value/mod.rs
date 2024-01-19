@@ -1,11 +1,8 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use crate::call::{
     Call,
     CallResult,
     CallError,
 };
-use crate::scope::Scope;
 
 pub mod function;
 use function::Function;
@@ -50,13 +47,13 @@ impl std::fmt::Display for Value {
 }
 
 impl Call for Value {
-    fn call(&self, scope: &Rc<RefCell<Scope>>, arguments: Vec<Value>) -> CallResult {
+    fn call(&self, arguments: Vec<Value>) -> CallResult {
         match self {
             Value::Function(f) => {
-                return f.call(scope, arguments);
+                return f.call(arguments);
             }
             Value::NativeFunction(f) => {
-                return f.call(scope, arguments);
+                return f.call(arguments);
             }
             _ => {
                 return Err(CallError::NotCallable);

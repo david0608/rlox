@@ -12,7 +12,6 @@ pub enum RuntimeErrorEnum {
     InvalidArithmetic(Value, Value),
     DivideByZero(Value, Value),
     VariableNotDeclared,
-    GlobalVariableMutation,
     ArgumentNumberMismatch(usize, usize),
     NotCallable(Value),
     MultipleDeclaration,
