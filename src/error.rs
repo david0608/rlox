@@ -11,10 +11,10 @@ pub enum RuntimeErrorEnum {
     InvalidCompare(Value, Value),
     InvalidArithmetic(Value, Value),
     DivideByZero(Value, Value),
-    VariableNotDeclared,
     ArgumentNumberMismatch(usize, usize),
     NotCallable(Value),
     MultipleDeclaration,
+    VariableNotResolved,
     RuntimeError,
     Unknown,
 }

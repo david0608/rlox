@@ -3,95 +3,123 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use crate::value::Value;
 
-#[derive(PartialEq, Debug)]
-pub enum EnvironmentError {
-    NotDeclared,
-    MultipleDeclaration,
-}
-
 #[derive(Debug)]
-pub struct Environment {
+pub struct EnvironmentStruct {
     values: HashMap<String, Value>,
-    parent: Option<Rc<RefCell<Environment>>>,
+    parent: Option<Environment>,
 }
 
-impl Environment {
-    pub fn new() -> Environment {
-        Environment {
-            values: HashMap::new(),
-            parent: None,
+pub type Environment = Rc<RefCell<EnvironmentStruct>>;
+
+pub trait EnvironmentOps {
+    fn new() -> Environment;
+
+    fn new_child(&self) -> Environment;
+
+    fn parent(&self) -> Option<Environment>;
+
+    fn has(&self, name: &str, depth: usize) -> bool;
+
+    fn get(&self, name: &str, depth: usize) -> Option<Value>;
+
+    fn set(&self, name: &str, depth: usize, value: Value) -> Result<(), ()>;
+
+    fn declare(&self, name: &str, value: Value) -> Result<(), ()>;
+}
+
+impl EnvironmentOps for Environment {
+    fn new() -> Environment {
+        Rc::new(
+            RefCell::new(
+                EnvironmentStruct {
+                    values: HashMap::new(),
+                    parent: None,
+                }
+            )
+        )
+    }
+
+    fn new_child(&self) -> Environment {
+        Rc::new(
+            RefCell::new(
+                EnvironmentStruct {
+                    values: HashMap::new(),
+                    parent: Some(self.clone()),
+                }
+            )
+        )
+    }
+
+    fn parent(&self) -> Option<Environment> {
+        if let Some(e) = self.borrow().parent.as_ref() {
+            return Some(e.clone());
+        }
+        else {
+            return None;
         }
     }
 
-    pub fn new_child(parent: &Rc<RefCell<Environment>>) -> Environment {
-        Environment {
-            values: HashMap::new(),
-            parent: Some(Rc::clone(parent)),
+    fn has(&self, name: &str, depth: usize) -> bool {
+        if depth > 0 {
+            if let Some(e) = self.parent() {
+                return e.has(name, depth - 1);
+            }
+            else {
+                return false;
+            }
+        }
+        else {
+            return self.borrow().values.contains_key(name);
         }
     }
-}
 
-pub fn new_environment() -> Rc<RefCell<Environment>> {
-    Rc::new(RefCell::new(Environment::new()))
-}
+    fn get(&self, name: &str, depth: usize) -> Option<Value> {
+        if depth > 0 {
+            if let Some(e) = self.parent() {
+                return e.get(name, depth - 1);
+            }
+            else {
+                return None;
+            }
+        }
+        else {
+            if let Some(v) = self.borrow().values.get(name) {
+                return Some(v.clone());
+            }
+            else {
+                return None;
+            }
+        }
+    }
 
-pub fn new_child_environment(parent: &Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
-    Rc::new(RefCell::new(Environment::new_child(parent)))
-}
+    fn set(&self, name: &str, depth: usize, value: Value) -> Result<(), ()> {
+        if depth > 0 {
+            if let Some(e) = self.parent() {
+                return e.set(name, depth - 1, value);
+            }
+            else {
+                return Err(());
+            }
+        }
+        else {
+            if self.has(name, 0) {
+                self.borrow_mut().values.insert(name.to_owned(), value);
+                return Ok(());
+            }
+            else {
+                return Err(());
+            }
+        }
+    }
 
-pub fn parent_environment(env: &Rc<RefCell<Environment>>) -> Option<Rc<RefCell<Environment>>> {
-    if let Some(e) = env.borrow().parent.as_ref() {
-        return Some(e.clone());
-    }
-    else {
-        return None;
-    }
-}
-
-pub fn environment_has_name(env: &Rc<RefCell<Environment>>, name: &str) -> bool {
-    if env.borrow().values.contains_key(name) {
-        return true;
-    }
-    else if let Some(penv) = parent_environment(env) {
-        return environment_has_name(&penv, name);
-    }
-    else {
-        return false;
-    }
-}
-
-pub fn environment_get_value(env: &Rc<RefCell<Environment>>, name: &str) -> Result<Value, EnvironmentError> {
-    if let Some(v) = env.borrow().values.get(name) {
-        return Ok(v.clone());
-    }
-    else if let Some(penv) = parent_environment(env) {
-        return environment_get_value(&penv, name);
-    }
-    else {
-        return Err(EnvironmentError::NotDeclared);
-    }
-}
-
-pub fn environment_set_value(env: &Rc<RefCell<Environment>>, name: &str, value: Value) -> Result<(), EnvironmentError> {
-    if env.borrow().values.contains_key(name) {
-        env.borrow_mut().values.insert(name.to_owned(), value);
-        return Ok(());
-    }
-    else if let Some(penv) = parent_environment(env) {
-        return environment_set_value(&penv, name, value);
-    }
-    else {
-        return Err(EnvironmentError::NotDeclared);
-    }
-}
-
-pub fn environment_declare(env: &Rc<RefCell<Environment>>, name: &str, value: Value) -> Result<(), EnvironmentError> {
-    if env.borrow().values.contains_key(name) {
-        return Err(EnvironmentError::MultipleDeclaration);
-    }
-    else {
-        env.borrow_mut().values.insert(name.to_owned(), value);
-        return Ok(());
+    fn declare(&self, name: &str, value: Value) -> Result<(), ()> {
+        if self.has(name, 0) {
+            return Err(());
+        }
+        else {
+            self.borrow_mut().values.insert(name.to_owned(), value);
+            return Ok(());
+        }
     }
 }
 
@@ -99,69 +127,68 @@ pub fn environment_declare(env: &Rc<RefCell<Environment>>, name: &str, value: Va
 mod tests {
     use crate::value::Value;
     use crate::environment::{
-        EnvironmentError,
-        new_environment,
-        new_child_environment,
-        environment_has_name,
-        environment_get_value,
-        environment_set_value,
-        environment_declare,
+        Environment,
+        EnvironmentOps,
     };
 
     #[test]
-    fn test_environment_has_name() {
-        let penv = new_environment();
-        environment_declare(&penv, "foo", Value::Bool(true)).expect("declare foo.");
-        let cenv = new_child_environment(&penv);
-        environment_declare(&cenv, "bar", Value::Bool(false)).expect("declare bar.");
-        assert_eq!(environment_has_name(&penv, "foo"), true);
-        assert_eq!(environment_has_name(&penv, "bar"), false);
-        assert_eq!(environment_has_name(&cenv, "foo"), true);
-        assert_eq!(environment_has_name(&cenv, "bar"), true);
+    fn test_environment_has() {
+        let penv = <Environment as EnvironmentOps>::new();
+        penv.declare("foo", Value::Bool(true)).expect("declare foo.");
+        let cenv = penv.new_child();
+        cenv.declare("bar", Value::Bool(false)).expect("declare foo.");
+        assert_eq!(penv.has("foo", 0), true);
+        assert_eq!(penv.has("foo", 1), false);
+        assert_eq!(penv.has("bar", 0), false);
+        assert_eq!(penv.has("bar", 1), false);
+        assert_eq!(cenv.has("foo", 0), false);
+        assert_eq!(cenv.has("foo", 1), true);
+        assert_eq!(cenv.has("bar", 0), true);
+        assert_eq!(cenv.has("bar", 1), false);
     }
 
     #[test]
-    fn test_environment_get_value() {
-        let penv = new_environment();
-        environment_declare(&penv, "foo", Value::Bool(true)).expect("declare foo.");
-        let cenv = new_child_environment(&penv);
-        environment_declare(&cenv, "bar", Value::Bool(false)).expect("declare bar.");
-        assert_eq!(environment_get_value(&penv, "foo"), Ok(Value::Bool(true)));
-        assert_eq!(environment_get_value(&penv, "bar"), Err(EnvironmentError::NotDeclared));
-        assert_eq!(environment_get_value(&cenv, "foo"), Ok(Value::Bool(true)));
-        assert_eq!(environment_get_value(&cenv, "bar"), Ok(Value::Bool(false)));
+    fn test_environment_get() {
+        let penv = <Environment as EnvironmentOps>::new();
+        penv.declare("foo", Value::Bool(true)).expect("declare foo.");
+        let cenv = penv.new_child();
+        cenv.declare("bar", Value::Bool(false)).expect("declare foo.");
+        assert_eq!(penv.get("foo", 0), Some(Value::Bool(true)));
+        assert_eq!(penv.get("foo", 1), None);
+        assert_eq!(penv.get("bar", 0), None);
+        assert_eq!(penv.get("bar", 1), None);
+        assert_eq!(cenv.get("foo", 0), None);
+        assert_eq!(cenv.get("foo", 1), Some(Value::Bool(true)));
+        assert_eq!(cenv.get("bar", 0), Some(Value::Bool(false)));
+        assert_eq!(cenv.get("bar", 1), None);
     }
 
     #[test]
-    fn test_environment_set_value() {
-        let penv = new_environment();
-        environment_declare(&penv, "foo", Value::Number(0.0)).expect("declare foo.");
-        let cenv = new_child_environment(&penv);
-        environment_declare(&cenv, "bar", Value::Number(0.0)).expect("declare bar.");
-        assert_eq!(environment_set_value(&penv, "foo", Value::Number(1.0)), Ok(()));
-        assert_eq!(environment_get_value(&penv, "foo"), Ok(Value::Number(1.0)));
-        assert_eq!(environment_set_value(&penv, "bar", Value::Number(1.0)), Err(EnvironmentError::NotDeclared));
-        assert_eq!(environment_set_value(&cenv, "foo", Value::Number(2.0)), Ok(()));
-        assert_eq!(environment_get_value(&cenv, "foo"), Ok(Value::Number(2.0)));
-        assert_eq!(environment_set_value(&cenv, "bar", Value::Number(2.0)), Ok(()));
-        assert_eq!(environment_get_value(&cenv, "bar"), Ok(Value::Number(2.0)));
+    fn test_environment_set() {
+        let penv = <Environment as EnvironmentOps>::new();
+        penv.declare("foo", Value::Number(0.0)).expect("declare foo.");
+        let cenv = penv.new_child();
+        cenv.declare("bar", Value::Number(1.0)).expect("declare foo.");
+        assert_eq!(penv.set("foo", 0, Value::Number(1.0)), Ok(()));
+        assert_eq!(penv.get("foo", 0), Some(Value::Number(1.0)));
+        assert_eq!(penv.set("foo", 1, Value::Number(1.0)), Err(()));
+        assert_eq!(penv.set("bar", 0, Value::Number(1.0)), Err(()));
+        assert_eq!(penv.set("bar", 1, Value::Number(1.0)), Err(()));
+        assert_eq!(cenv.set("foo", 0, Value::Number(2.0)), Err(()));
+        assert_eq!(cenv.set("foo", 1, Value::Number(2.0)), Ok(()));
+        assert_eq!(cenv.get("foo", 1), Some(Value::Number(2.0)));
+        assert_eq!(cenv.set("bar", 0, Value::Number(2.0)), Ok(()));
+        assert_eq!(cenv.get("bar", 0), Some(Value::Number(2.0)));
+        assert_eq!(cenv.set("bar", 1, Value::Number(2.0)), Err(()));
     }
 
     #[test]
     fn test_declare() {
-        let env = new_environment();
-        environment_declare(&env, "foo", Value::Number(123.0)).expect("declare foo");
-        assert_eq!(environment_get_value(&env, "foo"), Ok(Value::Number(123.0)));
-        assert_eq!(environment_declare(&env, "foo", Value::Number(0.0)), Err(EnvironmentError::MultipleDeclaration));
-    }
-
-    #[test]
-    fn test_shallow() {
-        let penv = new_environment();
-        environment_declare(&penv, "foo", Value::Bool(true)).expect("declare foo");
-        let cenv = new_child_environment(&penv);
-        environment_declare(&cenv, "foo", Value::Bool(false)).expect("declare bar");
-        assert_eq!(environment_get_value(&penv, "foo"), Ok(Value::Bool(true)));
-        assert_eq!(environment_get_value(&cenv, "foo"), Ok(Value::Bool(false)));
+        let penv = <Environment as EnvironmentOps>::new();
+        assert_eq!(penv.declare("foo", Value::Bool(true)), Ok(()));
+        assert_eq!(penv.declare("foo", Value::Bool(true)), Err(()));
+        let cenv = penv.new_child();
+        assert_eq!(cenv.declare("foo", Value::Bool(false)), Ok(()));
+        assert_eq!(cenv.declare("foo", Value::Bool(false)), Err(()));
     }
 }

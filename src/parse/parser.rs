@@ -10,7 +10,7 @@ use crate::scan::token::simple::{
 };
 use crate::scan::token::identifier::IdentifierToken;
 use crate::parse::expression::BoxedExpression;
-use crate::parse::expression::assign::AssignExpression;
+use crate::parse::expression::assign::AssignExpressionNotResolved;
 use crate::parse::expression::binary::{
     BinaryExpression,
     BinaryExpressionEnum,
@@ -29,7 +29,7 @@ use crate::parse::expression::unary::{
     UnaryExpression,
     UnaryExpressionEnum,
 };
-use crate::parse::expression::variable::VariableExpression;
+use crate::parse::expression::variable::VariableExpressionNotResolved;
 use crate::parse::statement::BoxedStatement;
 use crate::parse::statement::block::BlockStatement;
 use crate::parse::statement::r#break::BreakStatement;
@@ -42,14 +42,14 @@ use crate::parse::statement::r#return::ReturnStatement;
 use crate::parse::statement::var_declare::VarDeclareStatement;
 use crate::parse::statement::r#while::WhileStatement;
 use crate::{
-    assign_expression,
+    assign_expression_not_resolved,
     binary_expression,
     call_expression,
     grouping_expression,
     literal_expression,
     logical_expression,
     unary_expression,
-    variable_expression,
+    variable_expression_not_resolved,
     block_statement,
     break_statement,
     expression_statement,
@@ -116,7 +116,6 @@ impl LoxError for ParseError {
                 return out;
             }
         }
-        
     }
 }
 
@@ -262,7 +261,7 @@ impl<'tokens> Parser<'tokens> {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
                 let expr = self.assignment()?;
                 let span = CodeSpan::new(ident.code_span().start(), expr.code_span().end());
-                return Ok(assign_expression!(ident.name(), expr, span));
+                return Ok(assign_expression_not_resolved!(ident.clone(), expr, span));
             }
             else {
                 self.fallback();
@@ -498,7 +497,7 @@ impl<'tokens> Parser<'tokens> {
                 }
                 Token::Identifier(it) => {
                     self.advance();
-                    Ok(variable_expression!(it.name(), it.code_span()))
+                    Ok(variable_expression_not_resolved!(it.clone()))
                 }
                 Token::Simple(st) => {
                     match st.variant() {
@@ -653,7 +652,7 @@ impl<'tokens> Parser<'tokens> {
     fn var_declare_statement(&mut self) -> Result<BoxedStatement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
-        let name = self.consume_identifier()?.name();
+        let identifier = self.consume_identifier()?;
 
         let mut initializer = None;
         if self.consume(SimpleTokenEnum::Equal).is_ok() {
@@ -664,11 +663,13 @@ impl<'tokens> Parser<'tokens> {
 
         let cp_end = self.peek_last().code_span().end();
 
-        return Ok(var_declare_statement!(
-            name,
-            initializer,
-            CodeSpan::new(cp_start, cp_end)
-        ));
+        return Ok(
+            var_declare_statement!(
+                identifier.clone(),
+                initializer,
+                CodeSpan::new(cp_start, cp_end)
+            )
+        );
     }
 
     fn fun_declare_statement(&mut self) -> Result<BoxedStatement, ParseError> {
@@ -799,7 +800,8 @@ impl<'tokens> Parser<'tokens> {
             Some(increment)
         };
 
-        let body = self.not_declaration_statement(true)?;
+        self.consume(SimpleTokenEnum::LeftBrace)?;
+        let body = self.block(true)?;
 
         let cp_end = self.peek_last().code_span().end();
 
@@ -1515,12 +1517,12 @@ mod tests {
     fn test_for_statement() {
         let tests: Vec<(&str, &str)> = vec![
             (
-                "for (;;) print 1;",
-                "for (;;) print 1;",
+                "for (;;) { print 1; }",
+                "for (;;) {print 1;}",
             ),
             (
-                "for (var i = 0; i < 10; i = i + 1) print 1;",
-                "for (var i = 0; (< i 10); (= i (+ i 1))) print 1;",
+                "for (var i = 0; i < 10; i = i + 1) { print 1; }",
+                "for (var i = 0; (< i 10); (= i (+ i 1))) {print 1;}",
             ),
         ];
         for (src, expect) in tests {
@@ -1643,7 +1645,8 @@ mod tests {
         let mut parser = Parser::new(&tokens);
         assert_eq!(
             parser.statement(false).unwrap_err(),
-            ParseError::UnexpectedEnd(
+            ParseError::ExpectTokenNotFound(
+                "{".to_owned(),
                 CodePoint::new(0, 30)
             )
         );

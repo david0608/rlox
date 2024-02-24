@@ -1,3 +1,5 @@
+#![feature(trait_upcasting)]
+
 use std::io::Write;
 
 mod code;
@@ -11,6 +13,8 @@ mod error;
 mod evaluate;
 mod execute;
 mod print;
+mod resolve;
+mod utils;
 
 type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 

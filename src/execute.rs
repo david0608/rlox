@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use crate::code::Code;
 use crate::parse::statement::block::BlockStatement;
 use crate::parse::statement::r#break::BreakStatement;
@@ -18,8 +16,7 @@ use crate::value::function::{
 };
 use crate::environment::{
     Environment,
-    new_child_environment,
-    environment_declare,
+    EnvironmentOps,
 };
 use crate::error::{
     RuntimeError,
@@ -37,12 +34,12 @@ pub enum ExecuteOk {
 pub type ExecuteResult = std::result::Result<ExecuteOk, RuntimeError>;
 
 pub trait Execute {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult;
+    fn execute(&self, env: &Environment) -> ExecuteResult;
 }
 
 impl Execute for BlockStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
-        let env = new_child_environment(env);
+    fn execute(&self, env: &Environment) -> ExecuteResult {
+        let env = env.new_child();
         for statement in self.statements() {
             let ok = statement.execute(&env)?;
             match ok {
@@ -62,13 +59,13 @@ impl Execute for BlockStatement {
 }
 
 impl Execute for BreakStatement {
-    fn execute(&self, _: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, _: &Environment) -> ExecuteResult {
         return Ok(ExecuteOk::Break);
     }
 }
 
 impl Execute for ExpressionStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, env: &Environment) -> ExecuteResult {
         if let Err(e) = self.expression().evaluate(env) {
             return Err(
                 runtime_error!(
@@ -85,8 +82,8 @@ impl Execute for ExpressionStatement {
 }
 
 impl Execute for ForStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
-        let env = new_child_environment(env);
+    fn execute(&self, env: &Environment) -> ExecuteResult {
+        let env = env.new_child();
 
         if let Some(initializer) = self.initializer() {
             if let Err(e) = initializer.execute(&env) {
@@ -157,9 +154,8 @@ impl Execute for ForStatement {
 }
 
 impl Execute for FunDeclareStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
-        if environment_declare(
-            env,
+    fn execute(&self, env: &Environment) -> ExecuteResult {
+        if env.declare(
             self.name().name(),
             Value::Function(
                 Function::new(
@@ -167,7 +163,7 @@ impl Execute for FunDeclareStatement {
                     self.name().clone(),
                     self.parameters().clone(),
                     self.body().clone(),
-                    env,
+                    env.clone(),
                 )
             )
         )
@@ -187,7 +183,7 @@ impl Execute for FunDeclareStatement {
 }
 
 impl Execute for IfStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, env: &Environment) -> ExecuteResult {
         let condition = match self.condition().evaluate(env) {
             Ok(val) => val.is_truthy(),
             Err(err) => {
@@ -206,9 +202,8 @@ impl Execute for IfStatement {
         else {
             self.else_statement()
         };
-        let cenv = new_child_environment(env);
         if let Some(stmt) = statement {
-            match stmt.execute(&cenv) {
+            match stmt.execute(env) {
                 Err(err) => {
                     return Err(
                         runtime_error!(
@@ -228,7 +223,7 @@ impl Execute for IfStatement {
 }
 
 impl Execute for PrintStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, env: &Environment) -> ExecuteResult {
         match self.value().evaluate(env) {
             Ok(v) => {
                 println!("{}", v);
@@ -248,7 +243,7 @@ impl Execute for PrintStatement {
 }
 
 impl Execute for ReturnStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, env: &Environment) -> ExecuteResult {
         if let Some(e) = self.expression() {
             match e.evaluate(env) {
                 Ok(v) => {
@@ -272,7 +267,7 @@ impl Execute for ReturnStatement {
 }
 
 impl Execute for VarDeclareStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, env: &Environment) -> ExecuteResult {
         let mut value = Value::Nil;
         if let Some(i) = self.initializer() {
             match i.evaluate(env) {
@@ -288,7 +283,7 @@ impl Execute for VarDeclareStatement {
                 }
             }
         };
-        if environment_declare(env, self.name(), value).is_err() {
+        if env.declare(self.name().name(), value).is_err() {
             return Err(
                 runtime_error!(
                     RuntimeErrorEnum::MultipleDeclaration,
@@ -301,7 +296,7 @@ impl Execute for VarDeclareStatement {
 }
 
 impl Execute for WhileStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
+    fn execute(&self, env: &Environment) -> ExecuteResult {
         loop {
             if let Some(condition) = self.condition() {
                 match condition.evaluate(env) {
@@ -348,191 +343,201 @@ impl Execute for WhileStatement {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_point::CodePoint;
-    use crate::code::code_span::CodeSpan;
-    use crate::parse::Parse;
-    use crate::parse::parser::Parser;
+    use crate::code::code_span::new_code_span;
+    use crate::parse::{
+        Parse,
+        statement::{
+            block::BlockStatement,
+            r#break::BreakStatement,
+            expression::ExpressionStatement,
+            r#for::ForStatement,
+            ifelse::IfStatement,
+            print::PrintStatement,
+            r#return::ReturnStatement,
+            var_declare::VarDeclareStatement,
+            r#while::WhileStatement,
+        }
+    };
     use crate::scan::Scan;
     use crate::value::Value;
     use crate::environment::{
-        new_environment,
-        environment_has_name,
-        environment_get_value,
+        Environment,
+        EnvironmentOps,
     };
     use crate::error::{
         RuntimeError,
         RuntimeErrorEnum,
     };
     use crate::execute::ExecuteOk;
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+    };
     use crate::runtime_error;
-
-    fn code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
-        CodeSpan::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
-    }
 
     #[test]
     fn test_block() {
-        let (tokens, errors) =
-            "
-            var foo = 1;
-            {
-                var bar = 2;
-                foo = bar;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts.len(), 2);
-        let env = new_environment();
-        assert_eq!(stmts[0].execute(&env).is_ok(), true);
-        assert_eq!(stmts[1].execute(&env).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(2.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        var bar = 2;
+                        foo = bar;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(2.0)),
+        );
     }
 
     #[test]
     fn test_block_break() {
-        let (tokens, errors) =
-            "
-            var foo = 1;
-            {
-                foo = 2;
-                break;
-                foo = 3;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let mut parser = Parser::new(&tokens);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
         assert_eq!(
-            parser.statement(true).unwrap().execute(&env).is_ok(),
-            true
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        foo = 2;
+                        break;
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Break)
         );
         assert_eq!(
-            parser.statement(true).unwrap().execute(&env).unwrap(),
-            ExecuteOk::Break
-        );
-        assert_eq!(
-            environment_get_value(&env, "foo").unwrap(),
-            Value::Number(2.0),
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(2.0))
         );
     }
 
     #[test]
     fn test_block_return() {
-        let (tokens, errors) =
-            "
-            var foo = 1;
-            {
-                foo = 2;
-                return foo;
-                foo = 3;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let mut parser = Parser::new(&tokens);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
         assert_eq!(
-            parser.statement(true).unwrap().execute(&env).is_ok(),
-            true
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        foo = 2;
+                        return foo;
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Return(Value::Number(2.0)))
         );
         assert_eq!(
-            parser.statement(true).unwrap().execute(&env).unwrap(),
-            ExecuteOk::Return(Value::Number(2.0))
-        );
-        assert_eq!(
-            environment_get_value(&env, "foo").unwrap(),
-            Value::Number(2.0),
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(2.0))
         );
     }
 
     #[test]
     fn test_block_shadow() {
-        let (tokens, errors) =
-            "
-            var foo = 1;
-            {
-                var foo = 2;
-                foo = 3;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        for stmt in stmts {
-            assert_eq!(stmt.execute(&env).is_ok(), true);
-        }
-        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(1.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        var foo = 2;
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(1.0))
+        );
     }
 
     #[test]
     fn test_block_execute_error() {
-        let (tokens, errors) =
-            "
-            {
-                var foo;
-                foo = bar;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmts[0].execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(3, 0, 3, 10),
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        var foo;
+                        foo = true + 1;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
-                    code_span(3, 0, 3, 9),
+                    new_code_span(3, 0, 3, 15),
                     runtime_error!(
-                        RuntimeErrorEnum::VariableNotDeclared,
-                        code_span(3, 6, 3, 9),
+                        RuntimeErrorEnum::RuntimeError,
+                        new_code_span(3, 0, 3, 14),
+                        runtime_error!(
+                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                            new_code_span(3, 6, 3, 14),
+                        )
                     )
                 )
-            ),
+            )
         );
     }
 
     #[test]
     fn test_break() {
-        let tokens = "break;".scan().0;
-        let mut p = Parser::new(&tokens);
-        let stmt = p.statement(true).unwrap();
-        let env = new_environment();
-        assert_eq!(stmt.execute(&env).unwrap(), ExecuteOk::Break);
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.execute(parse_statement::<BreakStatement>("break;").as_ref()),
+            Ok(ExecuteOk::Break)
+        );
     }
 
     #[test]
     fn test_expression() {
-        let env = new_environment();
-        let tokens = "true;".scan().0;
-        let stmt = &tokens.parse().0[0];
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmt.execute(&env).unwrap(),
-            ExecuteOk::KeepGoing
+            ctx.execute(parse_statement::<ExpressionStatement>("true;").as_ref()),
+            Ok(ExecuteOk::KeepGoing)
         );
     }
 
     #[test]
     fn test_expression_evaluate_error() {
-        let env = new_environment();
-        let stmt = &"foo;".scan().0.parse().0[0];
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmt.execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(0, 0, 0, 4),
+            ctx.execute(
+                parse_statement::<ExpressionStatement>("true + 1;").as_ref()
+            ),
+            Err(
                 runtime_error!(
-                    RuntimeErrorEnum::VariableNotDeclared,
-                    code_span(0, 0, 0, 3),
+                    RuntimeErrorEnum::RuntimeError,
+                    new_code_span(0, 0, 0, 9),
+                    runtime_error!(
+                        RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                        new_code_span(0, 0, 0, 8),
+                    )
                 )
             )
         );
@@ -540,91 +545,100 @@ mod tests {
 
     #[test]
     fn test_for() {
-        let src = "
-            var sum = 0;
-            for (var i = 1; i <= 10; i = i + 1) {
-                sum = sum + i;
-            }
-        ";
-        let env = new_environment();
-        let (tokens, errors) = src.scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        for stmt in stmts {
-            assert_eq!(stmt.execute(&env).is_ok(), true);
-        }
-        assert_eq!(environment_get_value(&env, "sum").unwrap(), Value::Number(55.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var sum = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = 1; i <= 10; i = i + 1) {
+                        sum = sum + i;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("sum", 0),
+            Some(Value::Number(55.0))
+        );
     }
 
     #[test]
     fn test_for_break() {
-        let (tokens, errors) =
-            "
-            var num = 0;
-            for (var i = 0; i < 10; i = i + 1) {
-                num = num + 1;
-                if (num >= 5) {
-                    break;
-                }
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(stmts[0].execute(&env).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(stmts[1].execute(&env).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(environment_get_value(&env, "num").unwrap(), Value::Number(5.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var num = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = 0; i < 10; i = i + 1) {
+                        num = num + 1;
+                        if (num >= 5) {
+                            break;
+                        }
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("num", 0).unwrap(),
+            Value::Number(5.0),
+        );
     }
 
     #[test]
     fn test_for_return() {
-        let (tokens, errors) =
-            "
-            var num = 0;
-            for (var i = 0; i < 10; i = i + 1) {
-                num = num + 1;
-                if (num >= 5) {
-                    return num;
-                }
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(stmts[0].execute(&env).unwrap(), ExecuteOk::KeepGoing);
-        assert_eq!(stmts[1].execute(&env).unwrap(), ExecuteOk::Return(Value::Number(5.0)));
-        assert_eq!(environment_get_value(&env, "num").unwrap(), Value::Number(5.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var num = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = 0; i < 10; i = i + 1) {
+                        num = num + 1;
+                        if (num >= 5) {
+                            return num;
+                        }
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Return(Value::Number(5.0)))
+        );
     }
 
     #[test]
     fn test_for_initializer_execute_error() {
-        let (tokens, errors) =
-            "
-            for (var i = foo; i < 10; i = i + 1) {
-                print i;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmts[0].execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(1, 0, 3, 1),
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = true + 1; i < 10; i = i + 1) {
+                        print i;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
-                    code_span(1, 5, 1, 17),
+                    new_code_span(1, 0, 3, 1),
                     runtime_error!(
-                        RuntimeErrorEnum::VariableNotDeclared,
-                        code_span(1, 13, 1, 16),
+                        RuntimeErrorEnum::RuntimeError,
+                        new_code_span(1, 5, 1, 22),
+                        runtime_error!(
+                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                            new_code_span(1, 13, 1, 21),
+                        )
                     )
                 )
             )
@@ -633,25 +647,26 @@ mod tests {
 
     #[test]
     fn test_for_condition_evaluate_error() {
-        let (tokens, errors) =
-            "
-            for (var i = 0; i < true; i = i + 1) {
-                print i;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmts[0].execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(1, 0, 3, 1),
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = 0; i < true; i = i + 1) {
+                        print i;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Err(
                 runtime_error!(
-                    RuntimeErrorEnum::InvalidCompare(Value::Number(0.0), Value::Bool(true)),
-                    code_span(1, 16, 1, 24),
+                    RuntimeErrorEnum::RuntimeError,
+                    new_code_span(1, 0, 3, 1),
+                    runtime_error!(
+                        RuntimeErrorEnum::InvalidCompare(Value::Number(0.0), Value::Bool(true)),
+                        new_code_span(1, 16, 1, 24),
+                    )
                 )
             )
         );
@@ -659,28 +674,29 @@ mod tests {
 
     #[test]
     fn test_for_body_execute_error() {
-        let (tokens, errors) =
-            "
-            for (var i = 0; i < 10; i = i + 1) {
-                print foo;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmts[0].execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(1, 0, 3, 1),
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = 0; i < 10; i = i + 1) {
+                        print true + 1;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
-                    code_span(2, 0, 2, 10),
+                    new_code_span(1, 0, 3, 1),
                     runtime_error!(
-                        RuntimeErrorEnum::VariableNotDeclared,
-                        code_span(2, 6, 2, 9),
+                        RuntimeErrorEnum::RuntimeError,
+                        new_code_span(2, 0, 2, 15),
+                        runtime_error!(
+                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                            new_code_span(2, 6, 2, 14),
+                        )
                     )
                 )
             )
@@ -689,31 +705,28 @@ mod tests {
 
     #[test]
     fn test_for_increment_evaluate_error() {
-        let (tokens, errors) =
-            "
-            for (var i = 0; i < 10; i = j + 1) {
-                print i;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmts[0].execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(1, 0, 3, 1),
+            ctx.execute(
+                parse_statement::<ForStatement>(
+                    "
+                    for (var i = 0; i < 10; i = true + 1) {
+                        print i;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Err(
                 runtime_error!(
                     RuntimeErrorEnum::RuntimeError,
-                    code_span(1, 24, 1, 33),
+                    new_code_span(1, 0, 3, 1),
                     runtime_error!(
                         RuntimeErrorEnum::RuntimeError,
-                        code_span(1, 28, 1, 33),
+                        new_code_span(1, 24, 1, 36),
                         runtime_error!(
-                            RuntimeErrorEnum::VariableNotDeclared,
-                            code_span(1, 28, 1, 29),
+                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                            new_code_span(1, 28, 1, 36),
                         )
                     )
                 )
@@ -734,9 +747,9 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
-        let f = if let Value::Function(f) = environment_get_value(&env, "foo").unwrap() {
+        let f = if let Value::Function(f) = env.get("foo", 0).unwrap() {
             f
         }
         else {
@@ -767,14 +780,14 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(stmts.len(), 2);
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
         assert_eq!(
             stmts[1].execute(&env),
             Err(
                 runtime_error!(
                     RuntimeErrorEnum::MultipleDeclaration,
-                    code_span(2, 0, 4, 1),
+                    new_code_span(2, 0, 4, 1),
                 )
             )
         );
@@ -782,62 +795,64 @@ mod tests {
 
     #[test]
     fn test_if() {
-        let (tokens, errors) =
-            "
-            var foo = 1;
-            if (true) foo = 2;
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(2.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(parse_statement::<IfStatement>("if (true) foo = 2;").as_ref()),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0).unwrap(),
+            Value::Number(2.0)
+        );
     } 
 
     #[test]
     fn test_if_else() {
-        let (tokens, errors) =
-            "
-            var foo = 1;
-            if (false) {
-                foo = 2;
-            } else {
-                foo = 3;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(environment_get_value(&env, "foo").unwrap(), Value::Number(3.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<IfStatement>(
+                    "
+                    if (false) {
+                        foo = 2;
+                    } else {
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0).unwrap(),
+            Value::Number(3.0)
+        );
     }
 
     #[test]
     fn test_print() {
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         let tokens = "print true;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(stmt.execute(&env).is_ok(), true);
     }
 
     #[test]
-    fn test_print_evaluate_error() {
-        let env = new_environment();
-        let stmt = &"print foo;".scan().0.parse().0[0];
+    fn test_print_execute_error() {
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmt.execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(0, 0, 0, 10),
+            ctx.execute(parse_statement::<PrintStatement>("print true + 1;").as_ref()),
+            Err(
                 runtime_error!(
-                    RuntimeErrorEnum::VariableNotDeclared,
-                    code_span(0, 6, 0, 9),
+                    RuntimeErrorEnum::RuntimeError,
+                    new_code_span(0, 0, 0, 15),
+                    runtime_error!(
+                        RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                        new_code_span(0, 6, 0, 14),
+                    )
                 )
             )
         );
@@ -845,7 +860,7 @@ mod tests {
 
     #[test]
     fn test_return() {
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         let stmt = &"return;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&env).unwrap(),
@@ -855,7 +870,7 @@ mod tests {
 
     #[test]
     fn test_return_value() {
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         let stmt = &"return true;".scan().0.parse().0[0];
         assert_eq!(
             stmt.execute(&env).unwrap(),
@@ -864,17 +879,18 @@ mod tests {
     }
 
     #[test]
-    fn test_return_evaluate_error() {
-        let env = new_environment();
-        let stmt = &"return foo;".scan().0.parse().0[0];
+    fn test_return_execute_error() {
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmt.execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(0, 0, 0, 11),
+            ctx.execute(parse_statement::<ReturnStatement>("return true + 1;").as_ref()),
+            Err(
                 runtime_error!(
-                    RuntimeErrorEnum::VariableNotDeclared,
-                    code_span(0, 7, 0, 10),
+                    RuntimeErrorEnum::RuntimeError,
+                    new_code_span(0, 0, 0, 16),
+                    runtime_error!(
+                        RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                        new_code_span(0, 7, 0, 15),
+                    )
                 )
             )
         );
@@ -882,27 +898,27 @@ mod tests {
 
     #[test]
     fn test_var_declare() {
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         let tokens = "var foo;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(stmt.execute(&env).is_ok(), true);
-        assert_eq!(environment_has_name(&env, "foo"), true);
-        assert_eq!(environment_get_value(&env, "foo"), Ok(Value::Nil));
+        assert_eq!(env.has("foo", 0), true);
+        assert_eq!(env.get("foo", 0), Some(Value::Nil));
     }
 
     #[test]
     fn test_var_declare_initializer() {
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         let tokens = "var foo = 1 + 1;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(stmt.execute(&env).is_ok(), true);
-        assert_eq!(environment_has_name(&env, "foo"), true);
-        assert_eq!(environment_get_value(&env, "foo"), Ok(Value::Number(2.0)));
+        assert_eq!(env.has("foo", 0), true);
+        assert_eq!(env.get("foo", 0), Some(Value::Number(2.0)));
     }
 
     #[test]
     fn test_var_declare_multiple_declare() {
-        let env = new_environment();
+        let env = <Environment as EnvironmentOps>::new();
         let tokens = "var foo;".scan().0;
         let stmt = &tokens.parse().0[0];
         assert_eq!(stmt.execute(&env).is_ok(), true);
@@ -910,24 +926,24 @@ mod tests {
             stmt.execute(&env).unwrap_err(),
             runtime_error!(
                 RuntimeErrorEnum::MultipleDeclaration,
-                code_span(0, 0, 0, 8),
+                new_code_span(0, 0, 0, 8),
             )
         );
     }
 
     #[test]
     fn test_var_declare_initializer_evaluate_error() {
-        let env = new_environment();
-        let tokens = "var foo = bar;".scan().0;
-        let stmt = &tokens.parse().0[0];
+        let mut ctx = TestContext::new();
         assert_eq!(
-            stmt.execute(&env).unwrap_err(),
-            runtime_error!(
-                RuntimeErrorEnum::RuntimeError,
-                code_span(0, 0, 0, 14),
+            ctx.execute(parse_statement::<VarDeclareStatement>("var foo = true + 1;").as_ref()),
+            Err(
                 runtime_error!(
-                    RuntimeErrorEnum::VariableNotDeclared,
-                    code_span(0, 10, 0, 13),
+                    RuntimeErrorEnum::RuntimeError,
+                    new_code_span(0, 0, 0, 19),
+                    runtime_error!(
+                        RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                        new_code_span(0, 10, 0, 18),
+                    )
                 )
             )
         );
@@ -935,73 +951,82 @@ mod tests {
 
     #[test]
     fn test_while() {
-        let (tokens, errors) =
-            "
-            var sum = 0;
-            var i = 3;
-            while (i > 0) {
-                sum = sum + i;
-                i = i - 1;
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[2].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(environment_get_value(&env, "sum").unwrap(), Value::Number(6.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var sum = 0;");
+        ctx.execute_src("var i = 3;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<WhileStatement>(
+                    "
+                    while (i > 0) {
+                        sum = sum + i;
+                        i = i - 1;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing),
+        );
+        assert_eq!(
+            ctx.environment.get("sum", 0).unwrap(),
+            Value::Number(6.0),
+        );
     }
 
     #[test]
     fn test_while_break() {
-        let (tokens, errors) =
-            "
-            var i = 0;
-            while (i <= 3) {
-                if (i == 2) {
-                    break;
-                }
-                else {
-                    i = i + 1;
-                }
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(environment_get_value(&env, "i").unwrap(), Value::Number(2.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var i = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<WhileStatement>(
+                    "
+                    while (i <= 3) {
+                        if (i == 2) {
+                            break;
+                        }
+                        else {
+                            i = i + 1;
+                        }
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing),
+        );
+        assert_eq!(
+            ctx.environment.get("i", 0).unwrap(),
+            Value::Number(2.0),
+        );
     }
 
     #[test]
     fn test_while_return() {
-        let (tokens, errors) =
-            "
-            var i = 0;
-            while (i <= 3) {
-                if (i == 2) {
-                    return i;
-                }
-                else {
-                    i = i + 1;
-                }
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        let env = new_environment();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts[0].execute(&env), Ok(ExecuteOk::KeepGoing));
-        assert_eq!(stmts[1].execute(&env), Ok(ExecuteOk::Return(Value::Number(2.0))));
-        assert_eq!(environment_get_value(&env, "i").unwrap(), Value::Number(2.0));
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var i = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<WhileStatement>(
+                    "
+                    while (i <= 3) {
+                        if (i == 2) {
+                            return i;
+                        }
+                        else {
+                            i = i + 1;
+                        }
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Return(Value::Number(2.0))),
+        );
+        assert_eq!(
+            ctx.environment.get("i", 0).unwrap(),
+            Value::Number(2.0),
+        );
     }
 }

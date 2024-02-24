@@ -1,5 +1,3 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::time::{
     UNIX_EPOCH,
     SystemTime,
@@ -14,12 +12,17 @@ use crate::call::{
 };
 use crate::environment::{
     Environment,
-    environment_declare,
+    EnvironmentOps,
 };
+use crate::resolve::ResolveCtx;
 
-pub fn add_native_clock(env: &Rc<RefCell<Environment>>) {
-    environment_declare(
-        env,
+pub fn add_native_clock(
+    resolve_context: &mut ResolveCtx,
+    environment: &Environment,
+) {
+    resolve_context.declare("clock")
+        .expect("Declare native function clock.");
+    environment.declare(
         "clock",
         Value::NativeFunction(
             NativeFunction::new("clock", native_function_clock_handler),
@@ -55,15 +58,20 @@ mod tests {
         CallError,
     };
     use crate::environment::{
-        new_environment,
-        environment_get_value,
+        Environment,
+        EnvironmentOps,
     };
+    use crate::resolve::ResolveCtx;
 
     #[test]
     fn test_native_function_clock() {
-        let env = new_environment();
-        add_native_clock(&env);
-        let nf = if let Ok(Value::NativeFunction(nf)) = environment_get_value(&env, "clock") {
+        let mut ctx = ResolveCtx::new();
+        let env = <Environment as EnvironmentOps>::new();
+        add_native_clock(&mut ctx, &env);
+
+        assert_eq!(ctx.find("clock").unwrap(), 0);
+
+        let nf = if let Some(Value::NativeFunction(nf)) = env.get("clock", 0) {
             nf
         }
         else {

@@ -119,6 +119,11 @@ impl CodeSpan {
 }
 
 #[cfg(test)]
+pub fn new_code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
+    CodeSpan::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

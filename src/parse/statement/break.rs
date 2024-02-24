@@ -1,5 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
+use crate::resolve::{
+    ResolveCtx,
+    ResolveError,
+};
 use super::{
     Statement,
     BoxedStatement,
@@ -34,6 +38,10 @@ impl Statement for BreakStatement {
             )
         )
     }
+
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+        Ok(self.box_clone())
+    }
 }
 
 #[macro_export]
@@ -44,5 +52,20 @@ macro_rules! break_statement {
                 $code_span,
             )
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::code::code_span::new_code_span;
+    use crate::parse::statement::r#break::BreakStatement;
+    use crate::utils::test_utils::TestContext;
+    use crate::break_statement;
+
+    #[test]
+    fn test_break_statement_resolve() {
+        let stmt = break_statement!(new_code_span(0, 0, 0, 0));
+        let mut ctx = TestContext::new();
+        ctx.resolve_statement_unknown(stmt.as_ref()).expect("resolve break statement");
     }
 }

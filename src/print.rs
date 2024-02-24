@@ -1,6 +1,9 @@
 use crate::parse::{
     expression::{
-        assign::AssignExpression,
+        assign::{
+            AssignExpressionNotResolved,
+            AssignExpression,
+        },
         binary::{
             BinaryExpression,
             BinaryExpressionEnum,
@@ -19,7 +22,10 @@ use crate::parse::{
             UnaryExpression,
             UnaryExpressionEnum,
         },
-        variable::VariableExpression,
+        variable::{
+            VariableExpressionNotResolved,
+            VariableExpression,
+        },
     },
     statement::{
         block::BlockStatement,
@@ -58,9 +64,17 @@ macro_rules! impl_debug_for_printable {
     }
 }
 
+impl Print for AssignExpressionNotResolved {
+    fn print(&self) -> String {
+        format!("(= {} {})", self.to().name(), self.value().print())
+    }
+}
+
+impl_debug_for_printable!(AssignExpressionNotResolved);
+
 impl Print for AssignExpression {
     fn print(&self) -> String {
-        format!("(= {} {})", self.name(), self.value().print())
+        format!("(= {} {})", self.to().name(), self.value().print())
     }
 }
 
@@ -145,9 +159,17 @@ impl Print for UnaryExpression {
 
 impl_debug_for_printable!(UnaryExpression);
 
+impl Print for VariableExpressionNotResolved {
+    fn print(&self) -> String {
+        self.from().name().to_string()
+    }
+}
+
+impl_debug_for_printable!(VariableExpressionNotResolved);
+
 impl Print for VariableExpression {
     fn print(&self) -> String {
-        self.name().to_string()
+        self.from().name().to_string()
     }
 }
 
@@ -265,10 +287,10 @@ impl_debug_for_printable!(ReturnStatement);
 impl Print for VarDeclareStatement {
     fn print(&self) -> String {
         if let Some(i) = self.initializer() {
-            format!("{} {} = {};", VAR_LEXEME, self.name(), i.print())
+            format!("{} {} = {};", VAR_LEXEME, self.name().name(), i.print())
         }
         else {
-            format!("{} {};", VAR_LEXEME, self.name())
+            format!("{} {};", VAR_LEXEME, self.name().name())
         }
     }
 }
@@ -438,11 +460,11 @@ mod tests {
     #[test]
     fn test_print_for_statement() {
         let tests: Vec<(&str, &str)> = vec![
-            ("for (;;) print i;", "for (;;) print i;"),
-            ("for (var i;;) print i;", "for (var i;;) print i;"),
-            ("for (; i < 10;) print i;", "for (; (< i 10);) print i;"),
-            ("for (;; i = i + 1) print i;", "for (;; (= i (+ i 1))) print i;"),
-            ("for (var i; i < 10; i = i + 1) print i;", "for (var i; (< i 10); (= i (+ i 1))) print i;"),
+            ("for (;;) { print i; }", "for (;;) {print i;}"),
+            ("for (var i;;) { print i; }", "for (var i;;) {print i;}"),
+            ("for (; i < 10;) { print i; }", "for (; (< i 10);) {print i;}"),
+            ("for (;; i = i + 1) { print i; }", "for (;; (= i (+ i 1))) {print i;}"),
+            ("for (var i; i < 10; i = i + 1) { print i; }", "for (var i; (< i 10); (= i (+ i 1))) {print i;}"),
             ("for (var i; i < 10;) { print i; i = i + 1; }", "for (var i; (< i 10);) {print i; (= i (+ i 1));}"),
         ];
         for (src, expect) in tests {

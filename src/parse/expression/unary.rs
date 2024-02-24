@@ -1,5 +1,9 @@
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
+use crate::resolve::{
+    ResolveCtx,
+    ResolveError,
+};
 use super::{
     Expression,
     BoxedExpression,
@@ -56,6 +60,18 @@ impl Expression for UnaryExpression {
             )
         )
     }
+
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+        Ok(
+            Box::new(
+                UnaryExpression::new(
+                    self.variant,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
+                )
+            )
+        )
+    }
 }
 
 #[macro_export]
@@ -69,4 +85,59 @@ macro_rules! unary_expression {
             )
         )
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::code::code_span::new_code_span;
+    use crate::parse::expression::{
+        unary::UnaryExpression,
+        variable::VariableExpression,
+    };
+    use crate::resolve::{
+        ResolveError,
+        ResolveErrorEnum,
+    };
+    use crate::utils::{
+        AsAny,
+        test_utils::{
+            TestContext,
+            parse_expression,
+            parse_expression_unknown,
+        },
+    };
+    use crate::{
+        resolve_error,
+        downcast_ref,
+    };
+
+    #[test]
+    fn test_unary_expression_resolve() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo;");
+
+        let unary_expr = ctx.resolve_expression::<UnaryExpression>(
+            parse_expression_unknown("!foo").as_ref()
+        )
+            .unwrap();
+        assert_eq!(
+            downcast_ref!(unary_expr.rhs(), VariableExpression).binding(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_unary_expression_resolve_rhs_resolve_error() {
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.resolve_expression_unknown(
+                parse_expression::<UnaryExpression>("!foo").as_ref()
+            )
+                .unwrap_err(),
+            resolve_error!(
+                ResolveErrorEnum::VariableNotDeclared,
+                new_code_span(0, 1, 0, 4)
+            )
+        );
+    }
 }

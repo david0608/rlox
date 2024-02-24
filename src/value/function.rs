@@ -1,6 +1,4 @@
 use core::sync::atomic;
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::iter::zip;
 use crate::parse::statement::BoxedStatement;
 use crate::scan::token::identifier::IdentifierToken;
@@ -12,8 +10,7 @@ use crate::call::{
 };
 use crate::environment::{
     Environment,
-    new_child_environment,
-    environment_declare,
+    EnvironmentOps,
 };
 use crate::execute::ExecuteOk;
 
@@ -29,7 +26,7 @@ pub struct Function {
     name: IdentifierToken,
     parameters: Vec<IdentifierToken>,
     body: Vec<BoxedStatement>,
-    environment: Rc<RefCell<Environment>>,
+    environment: Environment,
 }
 
 impl Function {
@@ -38,7 +35,7 @@ impl Function {
         name: IdentifierToken,
         parameters: Vec<IdentifierToken>,
         body: Vec<BoxedStatement>,
-        environment: &Rc<RefCell<Environment>>,
+        environment: Environment,
     ) -> Function
     {
         Function {
@@ -46,28 +43,28 @@ impl Function {
             name,
             parameters,
             body,
-            environment: Rc::clone(environment),
+            environment,
         }
     }
 
     pub fn id(&self) -> usize {
-        return self.id;
+        self.id
     }
 
     pub fn name(&self) -> &str {
-        return self.name.name();
+        self.name.name()
     }
 
     pub fn parameters(&self) -> &Vec<IdentifierToken> {
-        return &self.parameters;
+        &self.parameters
     }
 
     pub fn body(&self) -> &Vec<BoxedStatement> {
-        return &self.body;
+        &self.body
     }
 
-    pub fn environment(&self) -> &Rc<RefCell<Environment>> {
-        return &self.environment;
+    pub fn environment(&self) -> &Environment {
+        &self.environment
     }
 }
 
@@ -84,9 +81,9 @@ impl Call for Function {
         if argn_expect != argn_found {
             return Err(CallError::ArgumentNumberMismatch(argn_expect, argn_found));
         }
-        let env = new_child_environment(self.environment());
+        let env = self.environment.new_child();
         for (p, v) in zip(&self.parameters, arguments) {
-            if environment_declare(&env, p.name(), v).is_err() {
+            if env.declare(p.name(), v).is_err() {
                 unreachable!();
             }
         }
@@ -114,64 +111,48 @@ impl Call for Function {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::CodeSpan;
-    use crate::code::code_point::CodePoint;
-    use crate::parse::Parse;
-    use crate::scan::Scan;
+    use crate::code::code_span::new_code_span;
     use crate::value::Value;
     use crate::call::{
         Call,
         CallError,
     };
-    use crate::environment::{
-        new_environment,
-        environment_get_value,
-    };
+    use crate::environment::EnvironmentOps;
     use crate::error::{
         RuntimeError,
         RuntimeErrorEnum,
     };
-    use crate::execute::ExecuteOk;
+    use crate::utils::test_utils::TestContext;
     use crate::runtime_error;
 
     #[test]
     fn test_function_call() {
-        let (tokens, errors) =
+        let mut ctx = TestContext::new();
+        ctx.execute_src(
             "
             fun foo(a, b) {
                 return a + b;
             }
             "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts.len(), 1);
-        let env = new_environment();
-        stmts[0].execute(&env).expect("function declare");
-        let f = environment_get_value(&env, "foo").unwrap();
+        );
+        let f = ctx.environment.get("foo", 0).unwrap();
         assert_eq!(
             f.call(vec![Value::Number(1.0), Value::Number(2.0)]),
-            Ok(Value::Number(3.0)),
+            Ok(Value::Number(3.0))
         );
     }
 
     #[test]
     fn test_function_call_argument_number_mismatch_error() {
-        let (tokens, errors) =
+        let mut ctx = TestContext::new();
+        ctx.execute_src(
             "
             fun foo(a, b) {
                 return a + b;
             }
             "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts.len(), 1);
-        let env = new_environment();
-        stmts[0].execute(&env).expect("function declare");
-        let f = environment_get_value(&env, "foo").unwrap();
+        );
+        let f = ctx.environment.get("foo", 0).unwrap();
         assert_eq!(
             f.call(vec![Value::Number(1.0)]),
             Err(CallError::ArgumentNumberMismatch(2, 1)),
@@ -180,93 +161,25 @@ mod tests {
 
     #[test]
     fn test_function_call_execute_error() {
-        let (tokens, errors) =
+        let mut ctx = TestContext::new();
+        ctx.execute_src(
             "
             fun foo() {
-                return bar;
+                return true + 1;
             }
             "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts.len(), 1);
-        let env = new_environment();
-        stmts[0].execute(&env).expect("function declare");
-        let f = environment_get_value(&env, "foo").unwrap();
+        );
+        let f = ctx.environment.get("foo", 0).unwrap();
         assert_eq!(
             f.call(vec![]),
             Err(
                 CallError::RuntimeError(
                     runtime_error!(
                         RuntimeErrorEnum::RuntimeError,
-                        CodeSpan::new(
-                            CodePoint::new(2, 0),
-                            CodePoint::new(2, 11),
-                        ),
+                        new_code_span(2, 0, 2, 16),
                         runtime_error!(
-                            RuntimeErrorEnum::VariableNotDeclared,
-                            CodeSpan::new(
-                                CodePoint::new(2, 7),
-                                CodePoint::new(2, 10),
-                            ),
-                        )
-                    )
-                )
-            )
-        );
-    }
-
-    #[test]
-    fn test_function_call_scope_isolation() {
-        let (tokens, errors) =
-            "
-            fun foo() {
-                return bar;
-            }
-            {
-                var bar = true;
-                print foo();
-            }
-            "
-            .scan();
-        assert_eq!(errors.len(), 0);
-        let (stmts, errors) = &tokens.parse();
-        assert_eq!(errors.len(), 0);
-        assert_eq!(stmts.len(), 2);
-        let env = new_environment();
-        assert_eq!(
-            stmts[0].execute(&env),
-            Ok(ExecuteOk::KeepGoing),
-        );
-        assert_eq!(
-            stmts[1].execute(&env),
-            Err(
-                runtime_error!(
-                    RuntimeErrorEnum::RuntimeError,
-                    CodeSpan::new(
-                        CodePoint::new(6, 0),
-                        CodePoint::new(6, 12),
-                    ),
-                    runtime_error!(
-                        RuntimeErrorEnum::RuntimeError,
-                        CodeSpan::new(
-                            CodePoint::new(6, 6),
-                            CodePoint::new(6, 11),
-                        ),
-                        runtime_error!(
-                            RuntimeErrorEnum::RuntimeError,
-                            CodeSpan::new(
-                                CodePoint::new(2, 0),
-                                CodePoint::new(2, 11),
-                            ),
-                            runtime_error!(
-                                RuntimeErrorEnum::VariableNotDeclared,
-                                CodeSpan::new(
-                                    CodePoint::new(2, 7),
-                                    CodePoint::new(2, 10),
-                                ),
-                            )
+                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                            new_code_span(2, 7, 2, 15),
                         )
                     )
                 )
