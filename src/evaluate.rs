@@ -458,7 +458,7 @@ impl Evaluate for VariableExpression {
 #[cfg(test)]
 mod tests {
     use crate::code::code_span::new_code_span;
-    use crate::native::clock::add_native_clock;
+    use crate::native::add_native_clock;
     use crate::parse::expression::{
         assign::AssignExpression,
         binary::BinaryExpression,

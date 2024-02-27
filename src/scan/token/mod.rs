@@ -41,6 +41,7 @@ impl Token {
         Token::String(StringToken::new(literal, lexeme, code_span))
     }
 
+    #[allow(dead_code)]
     pub fn lexeme(&self) -> &str {
         match self {
             Token::Simple(t) => t.lexeme(),

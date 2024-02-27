@@ -23,6 +23,7 @@ pub fn function_id() -> usize {
 #[derive(Clone, Debug)]
 pub struct Function {
     id: usize,
+    #[allow(dead_code)]
     name: IdentifierToken,
     parameters: Vec<IdentifierToken>,
     body: Vec<Statement>,
@@ -47,6 +48,7 @@ impl Function {
         }
     }
 
+    #[allow(dead_code)]
     pub fn id(&self) -> usize {
         self.id
     }
@@ -66,6 +68,7 @@ impl Function {
         &self.body
     }
 
+    #[allow(dead_code)]
     pub fn environment(&self) -> &Environment {
         &self.environment
     }

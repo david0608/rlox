@@ -1,20 +1,4 @@
-#![feature(trait_upcasting)]
-
 use std::io::Write;
-
-mod code;
-mod native;
-mod parse;
-mod scan;
-mod value;
-mod call;
-mod environment;
-mod error;
-mod evaluate;
-mod execute;
-mod print;
-mod resolve;
-mod utils;
 
 type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
