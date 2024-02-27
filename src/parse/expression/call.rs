@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::resolve::{
@@ -6,19 +7,19 @@ use crate::resolve::{
 };
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 pub struct CallExpression {
-    callee: BoxedExpression,
-    arguments: Vec<BoxedExpression>,
+    callee: Expression,
+    arguments: Vec<Expression>,
     code_span: CodeSpan,
 }
 
 impl CallExpression {
     pub fn new(
-        callee: BoxedExpression,
-        arguments: Vec<BoxedExpression>,
+        callee: Expression,
+        arguments: Vec<Expression>,
         code_span: CodeSpan,
     ) -> CallExpression
     {
@@ -29,11 +30,11 @@ impl CallExpression {
         }
     }
 
-    pub fn callee(&self) -> &BoxedExpression {
+    pub fn callee(&self) -> &Expression {
         &self.callee
     }
 
-    pub fn arguments(&self) -> &Vec<BoxedExpression> {
+    pub fn arguments(&self) -> &Vec<Expression> {
         &self.arguments
     }
 }
@@ -44,30 +45,22 @@ impl Code for CallExpression {
     }
 }
 
-impl Expression for CallExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            CallExpression::new(
-                self.callee().clone(),
-                self.arguments().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for CallExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         Ok(
-            Box::new(
-                CallExpression::new(
-                    self.callee.resolve(context)?,
-                    self.arguments.iter().try_fold(
-                        Vec::new(),
-                        |mut args, a| {
-                            args.push(a.resolve(context)?);
-                            Ok(args)
-                        },
-                    )?,
-                    self.code_span.clone(),
+            Expression(
+                Rc::new(
+                    CallExpression::new(
+                        self.callee.resolve(context)?,
+                        self.arguments.iter().try_fold(
+                            Vec::new(),
+                            |mut args, a| {
+                                args.push(a.resolve(context)?);
+                                Ok(args)
+                            },
+                        )?,
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -77,11 +70,13 @@ impl Expression for CallExpression {
 #[macro_export]
 macro_rules! call_expression {
     ( $callee:expr, $arguments:expr, $code_span:expr ) => {
-        Box::new(
-            CallExpression::new(
-                $callee,
-                $arguments,
-                $code_span
+        Expression(
+            Rc::new(
+                CallExpression::new(
+                    $callee,
+                    $arguments,
+                    $code_span
+                )
             )
         )
     }
@@ -98,18 +93,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        }
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_expression,
+        parse_expression_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_call_expression_resolve() {
@@ -125,15 +114,15 @@ mod tests {
         )
             .unwrap();
         assert_eq!(
-            downcast_ref!(call_expr.callee(), VariableExpression).binding(),
+            call_expr.callee().downcast_ref::<VariableExpression>().unwrap().binding(),
             0
         );
         assert_eq!(
-            downcast_ref!(call_expr.arguments()[0], VariableExpression).binding(),
+            call_expr.arguments()[0].downcast_ref::<VariableExpression>().unwrap().binding(),
             2
         );
         assert_eq!(
-            downcast_ref!(call_expr.arguments()[1], VariableExpression).binding(),
+            call_expr.arguments()[1].downcast_ref::<VariableExpression>().unwrap().binding(),
             1
         );
     }

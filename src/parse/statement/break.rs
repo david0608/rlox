@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::resolve::{
@@ -6,7 +7,7 @@ use crate::resolve::{
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct BreakStatement {
@@ -30,26 +31,28 @@ impl Code for BreakStatement {
     }
 }
 
-impl Statement for BreakStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            BreakStatement::new(
-                self.code_span(),
+impl AsStatement for BreakStatement {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+        Ok(
+            Statement(
+                Rc::new(
+                    BreakStatement::new(
+                        self.code_span.clone()
+                    )
+                )
             )
         )
-    }
-
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
-        Ok(self.box_clone())
     }
 }
 
 #[macro_export]
 macro_rules! break_statement {
     ( $code_span:expr ) => {
-        Box::new(
-            BreakStatement::new(
-                $code_span,
+        Statement(
+            Rc::new(
+                BreakStatement::new(
+                    $code_span,
+                )
             )
         )
     }
@@ -57,8 +60,12 @@ macro_rules! break_statement {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
     use crate::code::code_span::new_code_span;
-    use crate::parse::statement::r#break::BreakStatement;
+    use crate::parse::statement::{
+        Statement,
+        r#break::BreakStatement,
+    };
     use crate::utils::test_utils::TestContext;
     use crate::break_statement;
 

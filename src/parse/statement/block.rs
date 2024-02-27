@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::resolve::{
@@ -6,23 +7,23 @@ use crate::resolve::{
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct BlockStatement {
-    statements: Vec<BoxedStatement>,
+    statements: Vec<Statement>,
     code_span: CodeSpan,
 }
 
 impl BlockStatement {
-    pub fn new(statements: Vec<BoxedStatement>, code_span: CodeSpan) -> BlockStatement {
+    pub fn new(statements: Vec<Statement>, code_span: CodeSpan) -> BlockStatement {
         BlockStatement {
             statements,
             code_span,
         }
     }
 
-    pub fn statements(&self) -> &Vec<BoxedStatement> {
+    pub fn statements(&self) -> &Vec<Statement> {
         &self.statements
     }
 }
@@ -33,27 +34,20 @@ impl Code for BlockStatement {
     }
 }
 
-impl Statement for BlockStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            BlockStatement::new(
-                self.statements.clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for BlockStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         context.begin();
         let stmts = self.statements.iter().map(|s| s.resolve(context)).collect();
         context.end();
         match stmts {
             Ok(stmts) => {
                 return Ok(
-                    Box::new(
-                        BlockStatement::new(
-                            stmts,
-                            self.code_span.clone(),
+                    Statement(
+                        Rc::new(
+                            BlockStatement::new(
+                                stmts,
+                                self.code_span.clone(),
+                            )
                         )
                     )
                 );
@@ -68,10 +62,12 @@ impl Statement for BlockStatement {
 #[macro_export]
 macro_rules! block_statement {
     ( $statements:expr, $code_span:expr ) => {
-        Box::new(
-            BlockStatement::new(
-                $statements,
-                $code_span,
+        Statement(
+            Rc::new(
+                BlockStatement::new(
+                    $statements,
+                    $code_span,
+                )
             )
         )
     }
@@ -92,18 +88,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_block_statement_resolve() {
@@ -115,12 +105,12 @@ mod tests {
         )
             .unwrap();
 
-        let var_declare_stmt = downcast_ref!(block_stmt.statements()[0], VarDeclareStatement);
-        let var_expr = downcast_ref!(var_declare_stmt.initializer().unwrap(), VariableExpression);
+        let var_declare_stmt = block_stmt.statements()[0].downcast_ref::<VarDeclareStatement>().unwrap();
+        let var_expr = var_declare_stmt.initializer().unwrap().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
 
-        let expr_stmt = downcast_ref!(block_stmt.statements()[1], ExpressionStatement);
-        let var_expr = downcast_ref!(expr_stmt.expression(), VariableExpression);
+        let expr_stmt = block_stmt.statements()[1].downcast_ref::<ExpressionStatement>().unwrap();
+        let var_expr = expr_stmt.expression().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 0);
     }
 

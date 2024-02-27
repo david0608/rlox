@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::collections::HashSet;
 use crate::error::LoxError;
 use crate::code::Code;
@@ -9,7 +10,7 @@ use crate::scan::token::simple::{
     SimpleTokenEnum,
 };
 use crate::scan::token::identifier::IdentifierToken;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::parse::expression::assign::AssignExpressionNotResolved;
 use crate::parse::expression::binary::{
     BinaryExpression,
@@ -29,18 +30,22 @@ use crate::parse::expression::unary::{
     UnaryExpression,
     UnaryExpressionEnum,
 };
-use crate::parse::expression::variable::VariableExpressionNotResolved;
-use crate::parse::statement::BoxedStatement;
-use crate::parse::statement::block::BlockStatement;
-use crate::parse::statement::r#break::BreakStatement;
-use crate::parse::statement::expression::ExpressionStatement;
-use crate::parse::statement::r#for::ForStatement;
-use crate::parse::statement::fun_declare::FunDeclareStatement;
-use crate::parse::statement::ifelse::IfStatement;
-use crate::parse::statement::print::PrintStatement;
-use crate::parse::statement::r#return::ReturnStatement;
-use crate::parse::statement::var_declare::VarDeclareStatement;
-use crate::parse::statement::r#while::WhileStatement;
+use crate::parse::{
+    expression::variable::VariableExpressionNotResolved,
+    statement::{
+        Statement,
+        block::BlockStatement,
+        r#break::BreakStatement,
+        expression::ExpressionStatement,
+        r#for::ForStatement,
+        fun_declare::FunDeclareStatement,
+        ifelse::IfStatement,
+        print::PrintStatement,
+        r#return::ReturnStatement,
+        var_declare::VarDeclareStatement,
+        r#while::WhileStatement,
+    }
+};
 use crate::{
     assign_expression_not_resolved,
     binary_expression,
@@ -119,7 +124,7 @@ impl LoxError for ParseError {
     }
 }
 
-pub type ParserOutput = (Vec<BoxedStatement>, Vec<ParseError>);
+pub type ParserOutput = (Vec<Statement>, Vec<ParseError>);
 
 pub struct Parser<'tokens> {
     tokens: &'tokens Vec<Token>,
@@ -252,11 +257,11 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn expression(&mut self) -> Result<BoxedExpression, ParseError> {
+    pub fn expression(&mut self) -> Result<Expression, ParseError> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn assignment(&mut self) -> Result<Expression, ParseError> {
         if let Ok(ident) = self.consume_identifier() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
                 let expr = self.assignment()?;
@@ -270,7 +275,7 @@ impl<'tokens> Parser<'tokens> {
         return self.logical_or();
     }
 
-    fn logical_or(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn logical_or(&mut self) -> Result<Expression, ParseError> {
         let mut lhs = self.logical_and()?;
         while self.consume(SimpleTokenEnum::Or).is_ok() {
             let rhs = self.logical_and()?;
@@ -280,7 +285,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn logical_and(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn logical_and(&mut self) -> Result<Expression, ParseError> {
         let mut lhs = self.equality()?;
         while self.consume(SimpleTokenEnum::And).is_ok() {
             let rhs = self.equality()?;
@@ -290,7 +295,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn equality(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn equality(&mut self) -> Result<Expression, ParseError> {
         let mut lhs = self.comparison()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -319,7 +324,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn comparison(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn comparison(&mut self) -> Result<Expression, ParseError> {
         let mut lhs = self.term()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -362,7 +367,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn term(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn term(&mut self) -> Result<Expression, ParseError> {
         let mut lhs = self.factor()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -391,7 +396,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn factor(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn factor(&mut self) -> Result<Expression, ParseError> {
         let mut lhs = self.unary()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -420,7 +425,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn unary(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn unary(&mut self) -> Result<Expression, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -447,12 +452,12 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn call(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn call(&mut self) -> Result<Expression, ParseError> {
         let mut e = self.primary()?;
         loop {
             if self.peek_simple(SimpleTokenEnum::LeftParen).is_some() {
                 self.advance();
-                let mut arguments = Vec::<BoxedExpression>::new();
+                let mut arguments = Vec::<Expression>::new();
 
                 if let Some(rp) = self.peek_simple(SimpleTokenEnum::RightParen) {
                     self.advance();
@@ -484,7 +489,7 @@ impl<'tokens> Parser<'tokens> {
         return Ok(e);
     }
 
-    fn primary(&mut self) -> Result<BoxedExpression, ParseError> {
+    fn primary(&mut self) -> Result<Expression, ParseError> {
         if let Some(t) = self.peek() {
             match t {
                 Token::Number(nt) => {
@@ -539,7 +544,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn statement(&mut self, can_break: bool) -> Result<BoxedStatement, ParseError> {
+    pub fn statement(&mut self, can_break: bool) -> Result<Statement, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -598,7 +603,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn not_declaration_statement(&mut self, can_break: bool) -> Result<BoxedStatement, ParseError> {
+    fn not_declaration_statement(&mut self, can_break: bool) -> Result<Statement, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -649,7 +654,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn var_declare_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn var_declare_statement(&mut self) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         let identifier = self.consume_identifier()?;
@@ -672,7 +677,7 @@ impl<'tokens> Parser<'tokens> {
         );
     }
 
-    fn fun_declare_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn fun_declare_statement(&mut self) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         let name = self.consume_identifier()?;
@@ -719,7 +724,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn ifelse(&mut self, can_break: bool) -> Result<BoxedStatement, ParseError> {
+    fn ifelse(&mut self, can_break: bool) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         self.consume(SimpleTokenEnum::LeftParen)?;
         let condition = self.expression()?;
@@ -747,7 +752,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn r#while(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn r#while(&mut self) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
@@ -767,7 +772,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn r#for(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn r#for(&mut self) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
@@ -814,7 +819,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn block(&mut self, can_break: bool) -> Result<BoxedStatement, ParseError> {
+    fn block(&mut self, can_break: bool) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         let mut stmts = Vec::new();
         loop {
@@ -830,7 +835,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn print_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn print_statement(&mut self) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         let value = self.expression()?;
         self.consume(SimpleTokenEnum::Semicolon)?;
@@ -841,7 +846,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn return_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn return_statement(&mut self) -> Result<Statement, ParseError> {
         let cp_start = self.peek_last().code_span().start();
         let mut e = Option::None;
         if self.peek_simple(SimpleTokenEnum::Semicolon).is_none() {
@@ -855,7 +860,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn break_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn break_statement(&mut self) -> Result<Statement, ParseError> {
         let cs = self.peek_last().code_span();
         self.consume(SimpleTokenEnum::Semicolon)?;
         Ok(break_statement!(
@@ -863,7 +868,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn expression_statement(&mut self) -> Result<BoxedStatement, ParseError> {
+    fn expression_statement(&mut self) -> Result<Statement, ParseError> {
         let expr = self.expression()?;
         let cp_start = expr.code_span().start();
         self.consume(SimpleTokenEnum::Semicolon)?;
@@ -894,7 +899,7 @@ impl<'tokens> Parser<'tokens> {
 
     pub fn parse(tokens: &Vec<Token>) -> ParserOutput {
         let mut p = Parser::new(tokens);
-        let mut stmts: Vec<BoxedStatement> = Vec::new();
+        let mut stmts: Vec<Statement> = Vec::new();
         let mut errors: Vec<ParseError> = Vec::new();
 
         while !p.is_end() {

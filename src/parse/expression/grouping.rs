@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::resolve::{
@@ -6,23 +7,23 @@ use crate::resolve::{
 };
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 pub struct GroupingExpression {
-    expression: BoxedExpression,
+    expression: Expression,
     code_span: CodeSpan,
 }
 
 impl GroupingExpression {
-    pub fn new(expression: BoxedExpression, code_span: CodeSpan) -> GroupingExpression {
+    pub fn new(expression: Expression, code_span: CodeSpan) -> GroupingExpression {
         GroupingExpression {
             expression,
             code_span,
         }
     }
 
-    pub fn expression(&self) -> &BoxedExpression {
+    pub fn expression(&self) -> &Expression {
         &self.expression
     }
 }
@@ -33,22 +34,15 @@ impl Code for GroupingExpression {
     }
 }
 
-impl Expression for GroupingExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            GroupingExpression::new(
-                self.expression().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for GroupingExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         Ok(
-            Box::new(
-                GroupingExpression::new(
-                    self.expression.resolve(context)?,
-                    self.code_span.clone(),
+            Expression(
+                Rc::new(
+                    GroupingExpression::new(
+                        self.expression.resolve(context)?,
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -58,10 +52,12 @@ impl Expression for GroupingExpression {
 #[macro_export]
 macro_rules! grouping_expression {
     ( $expression:expr, $code_span:expr ) => {
-        Box::new(
-            GroupingExpression::new(
-                $expression,
-                $code_span
+        Expression(
+            Rc::new(
+                GroupingExpression::new(
+                    $expression,
+                    $code_span
+                )
             )
         )
     };
@@ -78,18 +74,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_expression,
+        parse_expression_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_grouping_expression_resolve() {
@@ -101,7 +91,7 @@ mod tests {
         )
             .unwrap();
         assert_eq!(
-            downcast_ref!(group_expr.expression(), VariableExpression).binding(),
+            group_expr.expression().downcast_ref::<VariableExpression>().unwrap().binding(),
             0
         );
     }

@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::resolve::{
@@ -6,7 +7,7 @@ use crate::resolve::{
 };
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 #[derive(Clone, Copy)]
@@ -25,16 +26,16 @@ pub enum BinaryExpressionEnum {
 
 pub struct BinaryExpression {
     variant: BinaryExpressionEnum,
-    lhs: BoxedExpression,
-    rhs: BoxedExpression,
+    lhs: Expression,
+    rhs: Expression,
     code_span: CodeSpan,
 }
 
 impl BinaryExpression {
     pub fn new(
         variant: BinaryExpressionEnum,
-        lhs: BoxedExpression,
-        rhs: BoxedExpression,
+        lhs: Expression,
+        rhs: Expression,
         code_span: CodeSpan,
     ) -> BinaryExpression
     {
@@ -50,11 +51,11 @@ impl BinaryExpression {
         self.variant
     }
 
-    pub fn lhs(&self) -> &BoxedExpression {
+    pub fn lhs(&self) -> &Expression {
         &self.lhs
     }
 
-    pub fn rhs(&self) -> &BoxedExpression {
+    pub fn rhs(&self) -> &Expression {
         &self.rhs
     }
 }
@@ -65,26 +66,17 @@ impl Code for BinaryExpression {
     }
 }
 
-impl Expression for BinaryExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            BinaryExpression::new(
-                self.variant(),
-                self.lhs().clone(),
-                self.rhs().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for BinaryExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         Ok(
-            Box::new(
-                BinaryExpression::new(
-                    self.variant,
-                    self.lhs.resolve(context)?,
-                    self.rhs.resolve(context)?,
-                    self.code_span.clone(),
+            Expression(
+                Rc::new(
+                    BinaryExpression::new(
+                        self.variant,
+                        self.lhs.resolve(context)?,
+                        self.rhs.resolve(context)?,
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -94,12 +86,14 @@ impl Expression for BinaryExpression {
 #[macro_export]
 macro_rules! binary_expression {
     ( $variant:ident, $lhs:expr, $rhs:expr, $code_span:expr ) => {
-        Box::new(
-            BinaryExpression::new(
-                BinaryExpressionEnum::$variant,
-                $lhs,
-                $rhs,
-                $code_span
+        Expression(
+            Rc::new(
+                BinaryExpression::new(
+                    BinaryExpressionEnum::$variant,
+                    $lhs,
+                    $rhs,
+                    $code_span
+                )
             )
         )
     };
@@ -116,18 +110,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_expression,
+        parse_expression_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_binary_expression_resolve() {
@@ -141,11 +129,11 @@ mod tests {
         )
             .unwrap();
         assert_eq!(
-            downcast_ref!(binary_expr.lhs(), VariableExpression).binding(),
+            binary_expr.lhs().downcast_ref::<VariableExpression>().unwrap().binding(),
             1
         );
         assert_eq!(
-            downcast_ref!(binary_expr.rhs(), VariableExpression).binding(),
+            binary_expr.rhs().downcast_ref::<VariableExpression>().unwrap().binding(),
             0
         );
     }

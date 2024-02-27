@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::code_span::CodeSpan;
 use crate::code::Code;
 use crate::resolve::{
@@ -7,7 +8,7 @@ use crate::resolve::{
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 use crate::scan::token::identifier::IdentifierToken;
 use crate::resolve_error;
@@ -15,7 +16,7 @@ use crate::resolve_error;
 pub struct FunDeclareStatement {
     name: IdentifierToken,
     parameters: Vec<IdentifierToken>,
-    body: Vec<BoxedStatement>,
+    body: Vec<Statement>,
     code_span: CodeSpan,
 }
 
@@ -23,7 +24,7 @@ impl FunDeclareStatement {
     pub fn new(
         name: IdentifierToken,
         parameters: Vec<IdentifierToken>,
-        body: Vec<BoxedStatement>,
+        body: Vec<Statement>,
         code_span: CodeSpan,
     ) -> FunDeclareStatement
     {
@@ -43,7 +44,7 @@ impl FunDeclareStatement {
         &self.parameters
     }
 
-    pub fn body(&self) -> &Vec<BoxedStatement> {
+    pub fn body(&self) -> &Vec<Statement> {
         &self.body
     }
 }
@@ -54,19 +55,8 @@ impl Code for FunDeclareStatement {
     }
 }
 
-impl Statement for FunDeclareStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            FunDeclareStatement::new(
-                self.name.clone(),
-                self.parameters().clone(),
-                self.body().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for FunDeclareStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         if context.declare(self.name.name()).is_err() {
             return Err(
                 resolve_error!(
@@ -92,12 +82,14 @@ impl Statement for FunDeclareStatement {
         match body {
             Ok(body) => {
                 return Ok(
-                    Box::new(
-                        FunDeclareStatement::new(
-                            self.name.clone(),
-                            self.parameters.clone(),
-                            body,
-                            self.code_span.clone(),
+                    Statement(
+                        Rc::new(
+                            FunDeclareStatement::new(
+                                self.name.clone(),
+                                self.parameters.clone(),
+                                body,
+                                self.code_span.clone(),
+                            )
                         )
                     )
                 );
@@ -112,12 +104,14 @@ impl Statement for FunDeclareStatement {
 #[macro_export]
 macro_rules! fun_declare_statement {
     ( $identifier:expr, $parameters:expr, $body:expr, $code_span:expr ) => {
-        Box::new(
-            FunDeclareStatement::new(
-                $identifier,
-                $parameters,
-                $body,
-                $code_span,
+        Statement(
+            Rc::new(
+                FunDeclareStatement::new(
+                    $identifier,
+                    $parameters,
+                    $body,
+                    $code_span,
+                )
             )
         )
     };
@@ -137,18 +131,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_fun_declare_statement_resolve() {
@@ -168,12 +156,12 @@ mod tests {
         )
             .unwrap();
 
-        let print_stmt = downcast_ref!(fun_declare_stmt.body[0], PrintStatement);
-        let var_expr = downcast_ref!(print_stmt.value(), VariableExpression);
+        let print_stmt = fun_declare_stmt.body[0].downcast_ref::<PrintStatement>().unwrap();
+        let var_expr = print_stmt.value().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 0);
 
-        let print_stmt = downcast_ref!(fun_declare_stmt.body()[1], PrintStatement);
-        let var_expr = downcast_ref!(print_stmt.value(), VariableExpression);
+        let print_stmt = fun_declare_stmt.body()[1].downcast_ref::<PrintStatement>().unwrap();
+        let var_expr = print_stmt.value().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
     }
 

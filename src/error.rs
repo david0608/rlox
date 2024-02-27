@@ -14,9 +14,7 @@ pub enum RuntimeErrorEnum {
     ArgumentNumberMismatch(usize, usize),
     NotCallable(Value),
     MultipleDeclaration,
-    VariableNotResolved,
     RuntimeError,
-    Unknown,
 }
 
 #[derive(Debug, PartialEq)]

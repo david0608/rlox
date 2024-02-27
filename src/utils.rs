@@ -1,36 +1,15 @@
-#[macro_export]
-macro_rules! downcast_ref {
-    ( $from:expr, $to:ty ) => {
-        $from.as_any_ref().downcast_ref::<$to>().unwrap()
-    }
-}
-
-#[macro_export]
-macro_rules! box_downcast {
-    ( $from:expr, $to:ty ) => {
-        $from.as_box_any().downcast::<$to>().unwrap()
-    }
-}
-
-use std::any::Any;
-
-pub trait AsAny {
-    fn as_any_ref(&self) -> &dyn Any;
-
-    fn as_box_any(self) -> Box<dyn Any>;
-}
-
 #[cfg(test)]
 pub mod test_utils {
+    use std::rc::Rc;
     use crate::parse::{
         parser::Parser,
         expression::{
             Expression,
-            BoxedExpression,
+            AsExpression,
         },
         statement::{
             Statement,
-            BoxedStatement,
+            AsStatement,
         },
     };
     use crate::scan::Scan;
@@ -44,24 +23,23 @@ pub mod test_utils {
         ResolveCtx,
         ResolveError,
     };
-    use crate::utils::AsAny;
 
-    pub fn parse_expression<T: Expression>(src: &str) -> Box<T> {
-        box_downcast!(parse_expression_unknown(src), T)
+    pub fn parse_expression<T: AsExpression>(src: &str) -> Rc<T> {
+        parse_expression_unknown(src).downcast::<T>().unwrap()
     }
 
-    pub fn parse_expression_unknown(src: &str) -> BoxedExpression {
+    pub fn parse_expression_unknown(src: &str) -> Expression {
         let (tokens, errors) = src.scan();
         assert_eq!(errors.len(), 0);
         let mut parser = Parser::new(&tokens);
         parser.expression().unwrap()
     }
 
-    pub fn parse_statement<T: Statement>(src: &str) -> Box<T> {
-        box_downcast!(parse_statement_unknown(src), T)
+    pub fn parse_statement<T: AsStatement>(src: &str) -> Rc<T> {
+        parse_statement_unknown(src).downcast::<T>().unwrap()
     }
 
-    pub fn parse_statement_unknown(src: &str) -> BoxedStatement {
+    pub fn parse_statement_unknown(src: &str) -> Statement {
         let (tokens, errors) = src.scan();
         assert_eq!(errors.len(), 0);
         let mut parser = Parser::new(&tokens);
@@ -83,52 +61,52 @@ pub mod test_utils {
 
         pub fn resolve_expression<T>(
             &mut self,
-            expr: &dyn Expression
+            expr: &dyn AsExpression
         )
-            -> Result<Box<T>, ResolveError>
+            -> Result<Rc<T>, ResolveError>
         where
-            T: Expression
+            T: AsExpression
         {
             self.resolve_expression_unknown(expr)
-                .map(|expr| box_downcast!(expr, T))
+                .map(|expr| expr.downcast::<T>().unwrap())
         }
 
         pub fn resolve_expression_unknown(
             &mut self,
-            expr: &dyn Expression
+            expr: &dyn AsExpression
         )
-            -> Result<BoxedExpression, ResolveError>
+            -> Result<Expression, ResolveError>
         {
             expr.resolve(&mut self.resolve_context)
         }
 
         pub fn resolve_statement<T>(
             &mut self,
-            stmt: &dyn Statement
+            stmt: &dyn AsStatement
         )
-            -> Result<Box<T>, ResolveError>
+            -> Result<Rc<T>, ResolveError>
         where
-            T: Statement
+            T: AsStatement
         {
             self.resolve_statement_unknown(stmt)
-                .map(|stmt| box_downcast!(stmt, T))
+                .map(|stmt| stmt.downcast::<T>().unwrap())
         }
 
         pub fn resolve_statement_unknown(
             &mut self,
-            stmt: &dyn Statement
+            stmt: &dyn AsStatement
         )
-            -> Result<BoxedStatement, ResolveError>
+            -> Result<Statement, ResolveError>
         {
             stmt.resolve(&mut self.resolve_context)
         }
 
-        pub fn evaluate(&mut self, expr: &dyn Expression) -> EvaluateResult {
+        pub fn evaluate(&mut self, expr: &dyn AsExpression) -> EvaluateResult {
             let expr = self.resolve_expression_unknown(expr).unwrap();
             expr.evaluate(&self.environment)
         }
 
-        pub fn execute(&mut self, stmt: &dyn Statement) -> ExecuteResult {
+        pub fn execute(&mut self, stmt: &dyn AsStatement) -> ExecuteResult {
             let stmt = self.resolve_statement_unknown(stmt).unwrap();
             stmt.execute(&self.environment)
         }

@@ -1,29 +1,30 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::resolve::{
     ResolveCtx,
     ResolveError,
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct PrintStatement {
-    value: BoxedExpression,
+    value: Expression,
     code_span: CodeSpan,
 }
 
 impl PrintStatement {
-    pub fn new(value: BoxedExpression, code_span: CodeSpan) -> PrintStatement {
+    pub fn new(value: Expression, code_span: CodeSpan) -> PrintStatement {
         PrintStatement {
             value,
             code_span,
         }
     }
 
-    pub fn value(&self) -> &BoxedExpression {
+    pub fn value(&self) -> &Expression {
         &self.value
     }
 }
@@ -34,22 +35,15 @@ impl Code for PrintStatement {
     }
 }
 
-impl Statement for PrintStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            PrintStatement::new(
-                self.value().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for PrintStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         Ok(
-            Box::new(
-                PrintStatement::new(
-                    self.value.resolve(context)?,
-                    self.code_span.clone(),
+            Statement(
+                Rc::new(
+                    PrintStatement::new(
+                        self.value.resolve(context)?,
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -59,10 +53,12 @@ impl Statement for PrintStatement {
 #[macro_export]
 macro_rules! print_statement {
     ( $expression:expr, $code_span:expr ) => {
-        Box::new(
-            PrintStatement::new(
-                $expression,
-                $code_span,
+        Statement(
+            Rc::new(
+                PrintStatement::new(
+                    $expression,
+                    $code_span,
+                )
             )
         )
     }
@@ -79,18 +75,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_print_statement_resolve() {
@@ -101,7 +91,7 @@ mod tests {
             parse_statement_unknown("print foo;").as_ref()
         )
             .unwrap();
-        let var_expr = downcast_ref!(print_stmt.value, VariableExpression);
+        let var_expr = print_stmt.value.downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 0);
     }
 

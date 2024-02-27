@@ -1,27 +1,28 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::resolve::{
     ResolveCtx,
     ResolveError,
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct IfStatement {
-    condition: BoxedExpression,
-    then_statement: BoxedStatement,
-    else_statement: Option<BoxedStatement>,
+    condition: Expression,
+    then_statement: Statement,
+    else_statement: Option<Statement>,
     code_span: CodeSpan,
 }
 
 impl IfStatement {
     pub fn new(
-        condition: BoxedExpression,
-        then_statement: BoxedStatement,
-        else_statement: Option<BoxedStatement>,
+        condition: Expression,
+        then_statement: Statement,
+        else_statement: Option<Statement>,
         code_span: CodeSpan,
     ) -> IfStatement
     {
@@ -33,15 +34,15 @@ impl IfStatement {
         }
     }
 
-    pub fn condition(&self) -> &BoxedExpression {
+    pub fn condition(&self) -> &Expression {
         &self.condition
     }
 
-    pub fn then_statement(&self) -> &BoxedStatement {
+    pub fn then_statement(&self) -> &Statement {
         &self.then_statement
     }
 
-    pub fn else_statement(&self) -> Option<&BoxedStatement> {
+    pub fn else_statement(&self) -> Option<&Statement> {
         self.else_statement.as_ref()
     }
 }
@@ -52,19 +53,8 @@ impl Code for IfStatement {
     }
 }
 
-impl Statement for IfStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            IfStatement::new(
-                self.condition().clone(),
-                self.then_statement().clone(),
-                self.else_statement().map(|s| s.clone()),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for IfStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         let condition = self.condition.resolve(context)?;
         let then = self.then_statement.resolve(context)?;
         let r#else = if let Some(stmt) = self.else_statement.as_ref() {
@@ -74,12 +64,14 @@ impl Statement for IfStatement {
             None
         };
         return Ok(
-            Box::new(
-                IfStatement::new(
-                    condition,
-                    then,
-                    r#else,
-                    self.code_span.clone(),
+            Statement(
+                Rc::new(
+                    IfStatement::new(
+                        condition,
+                        then,
+                        r#else,
+                        self.code_span.clone(),
+                    )
                 )
             )
         );
@@ -89,23 +81,27 @@ impl Statement for IfStatement {
 #[macro_export]
 macro_rules! if_statement {
     ( $condition:expr, $then_statement:expr, $else_statement:expr, $code_span:expr ) => {
-        Box::new(
-            IfStatement::new(
-                $condition,
-                $then_statement,
-                Some($else_statement),
-                $code_span,
+        Statement(
+            Rc::new(
+                IfStatement::new(
+                    $condition,
+                    $then_statement,
+                    Some($else_statement),
+                    $code_span,
+                )
             )
         )
     };
 
     ( $condition:expr, $then_statement:expr, $code_span:expr ) => {
-        Box::new(
-            IfStatement::new(
-                $condition,
-                $then_statement,
-                None,
-                $code_span,
+        Statement(
+            Rc::new(
+                IfStatement::new(
+                    $condition,
+                    $then_statement,
+                    None,
+                    $code_span,
+                )
             )
         )
     };
@@ -126,18 +122,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_ifelse_statement_resolve() {
@@ -149,17 +139,17 @@ mod tests {
         )
             .unwrap();
 
-        let var_expr = downcast_ref!(ifelse_stmt.condition, VariableExpression);
+        let var_expr = ifelse_stmt.condition().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 0);
 
-        let block_stmt = downcast_ref!(ifelse_stmt.then_statement, BlockStatement);
-        let print_stmt = downcast_ref!(block_stmt.statements()[0], PrintStatement);
-        let var_expr = downcast_ref!(print_stmt.value(), VariableExpression);
+        let block_stmt = ifelse_stmt.then_statement.downcast_ref::<BlockStatement>().unwrap();
+        let print_stmt = block_stmt.statements()[0].downcast_ref::<PrintStatement>().unwrap();
+        let var_expr = print_stmt.value().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
 
-        let block_stmt = downcast_ref!(ifelse_stmt.else_statement.as_ref().unwrap(), BlockStatement);
-        let print_stmt = downcast_ref!(block_stmt.statements()[0], PrintStatement);
-        let var_expr = downcast_ref!(print_stmt.value(), VariableExpression);
+        let block_stmt = ifelse_stmt.else_statement.as_ref().unwrap().downcast_ref::<BlockStatement>().unwrap();
+        let print_stmt = block_stmt.statements()[0].downcast_ref::<PrintStatement>().unwrap();
+        let var_expr = print_stmt.value().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
     }
 

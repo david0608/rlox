@@ -1,29 +1,30 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::resolve::{
     ResolveCtx,
     ResolveError,
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct ForStatement {
-    initializer: Option<BoxedStatement>,
-    condition: Option<BoxedExpression>,
-    increment: Option<BoxedExpression>,
-    body: BoxedStatement,
+    initializer: Option<Statement>,
+    condition: Option<Expression>,
+    increment: Option<Expression>,
+    body: Statement,
     code_span: CodeSpan,
 }
 
 impl ForStatement {
     pub fn new(
-        initializer: Option<BoxedStatement>,
-        condition: Option<BoxedExpression>,
-        increment: Option<BoxedExpression>,
-        body: BoxedStatement,
+        initializer: Option<Statement>,
+        condition: Option<Expression>,
+        increment: Option<Expression>,
+        body: Statement,
         code_span: CodeSpan,
     ) -> ForStatement
     {
@@ -36,19 +37,19 @@ impl ForStatement {
         }
     }
 
-    pub fn initializer(&self) -> Option<&BoxedStatement> {
+    pub fn initializer(&self) -> Option<&Statement> {
         self.initializer.as_ref()
     }
 
-    pub fn condition(&self) -> Option<&BoxedExpression> {
+    pub fn condition(&self) -> Option<&Expression> {
         self.condition.as_ref()
     }
 
-    pub fn increment(&self) -> Option<&BoxedExpression> {
+    pub fn increment(&self) -> Option<&Expression> {
         self.increment.as_ref()
     }
 
-    pub fn body(&self) -> &BoxedStatement {
+    pub fn body(&self) -> &Statement {
         &self.body
     }
 }
@@ -59,20 +60,8 @@ impl Code for ForStatement {
     }
 }
 
-impl Statement for ForStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            ForStatement::new(
-                self.initializer().map(|s| s.clone()),
-                self.condition().map(|e| e.clone()),
-                self.increment().map(|e| e.clone()),
-                self.body().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for ForStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         context.begin();
         let initializer = if let Some(s) = self.initializer.as_ref() {
             match s.resolve(context) {
@@ -119,13 +108,15 @@ impl Statement for ForStatement {
         };
         context.end();
         Ok(
-            Box::new(
-                ForStatement::new(
-                    initializer,
-                    condition,
-                    increment,
-                    body,
-                    self.code_span.clone(),
+            Statement(
+                Rc::new(
+                    ForStatement::new(
+                        initializer,
+                        condition,
+                        increment,
+                        body,
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -141,13 +132,15 @@ macro_rules! for_statement {
         $body:expr,
         $code_span:expr,
     ) => {
-        Box::new(
-            ForStatement::new(
-                $initializer,
-                $condition,
-                $increment,
-                $body,
-                $code_span,
+        Statement(
+            Rc::new(
+                ForStatement::new(
+                    $initializer,
+                    $condition,
+                    $increment,
+                    $body,
+                    $code_span,
+                )
             )
         )
     }
@@ -173,18 +166,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_for_statement_resolve() {
@@ -196,26 +183,26 @@ mod tests {
         )
             .unwrap();
 
-        let init_stmt = downcast_ref!(for_stmt.initializer().unwrap(), VarDeclareStatement);
-        let var_expr = downcast_ref!(init_stmt.initializer().unwrap(), VariableExpression);
+        let init_stmt = for_stmt.initializer().unwrap().downcast_ref::<VarDeclareStatement>().unwrap();
+        let var_expr = init_stmt.initializer().unwrap().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
 
-        let cond_expr = downcast_ref!(for_stmt.condition().unwrap(), BinaryExpression);
-        let lhs_expr = downcast_ref!(cond_expr.lhs(), VariableExpression);
+        let cond_expr = for_stmt.condition().unwrap().downcast_ref::<BinaryExpression>().unwrap();
+        let lhs_expr = cond_expr.lhs().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(lhs_expr.binding(), 0);
 
-        let assign_expr = downcast_ref!(for_stmt.increment().unwrap(), AssignExpression);
+        let assign_expr = for_stmt.increment().unwrap().downcast_ref::<AssignExpression>().unwrap();
         assert_eq!(assign_expr.binding(), 0);
-        let bin_expr = downcast_ref!(assign_expr.value(), BinaryExpression);
-        let lhs_expr = downcast_ref!(bin_expr.lhs(), VariableExpression);
+        let bin_expr = assign_expr.value().downcast_ref::<BinaryExpression>().unwrap();
+        let lhs_expr = bin_expr.lhs().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(lhs_expr.binding(), 0);
 
-        let body_stmt = downcast_ref!(for_stmt.body(), BlockStatement);
-        let expr_stmt = downcast_ref!(body_stmt.statements()[0], ExpressionStatement);
-        let assign_expr = downcast_ref!(expr_stmt.expression(), AssignExpression);
+        let body_stmt = for_stmt.body().downcast_ref::<BlockStatement>().unwrap();
+        let expr_stmt = body_stmt.statements()[0].downcast_ref::<ExpressionStatement>().unwrap();
+        let assign_expr = expr_stmt.expression().downcast_ref::<AssignExpression>().unwrap();
         assert_eq!(assign_expr.binding(), 2);
 
-        let val_expr = downcast_ref!(assign_expr.value(), VariableExpression);
+        let val_expr = assign_expr.value().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(val_expr.binding(), 1);
     }
 

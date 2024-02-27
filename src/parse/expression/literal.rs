@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::scan::token::{
@@ -10,7 +11,7 @@ use crate::resolve::{
 };
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,22 +47,15 @@ impl Code for LiteralExpression {
     }
 }
 
-impl Expression for LiteralExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            LiteralExpression::new(
-                self.variant(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for LiteralExpression {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         Ok(
-            Box::new(
-                LiteralExpression::new(
-                    self.variant.clone(),
-                    self.code_span.clone(),
+            Expression(
+                Rc::new(
+                    LiteralExpression::new(
+                        self.variant.clone(),
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -71,19 +65,23 @@ impl Expression for LiteralExpression {
 #[macro_export]
 macro_rules! literal_expression {
     ( $variant:ident, $code_span:expr ) => {
-        Box::new(
-            LiteralExpression::new(
-                LiteralExpressionEnum::$variant,
-                $code_span,
+        Expression(
+            Rc::new(
+                LiteralExpression::new(
+                    LiteralExpressionEnum::$variant,
+                    $code_span,
+                )
             )
         )
     };
 
     ( $variant:ident, $token:expr, $code_span:expr ) => {
-        Box::new(
-            LiteralExpression::new(
-                LiteralExpressionEnum::$variant($token),
-                $code_span,
+        Expression(
+            Rc::new(
+                LiteralExpression::new(
+                    LiteralExpressionEnum::$variant($token),
+                    $code_span,
+                )
             )
         )
     }

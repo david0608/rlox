@@ -1,4 +1,6 @@
 use std::any::Any;
+use std::rc::Rc;
+use std::ops::Deref;
 use crate::code::Code;
 use crate::execute::Execute;
 use crate::print::Print;
@@ -6,7 +8,6 @@ use crate::resolve::{
     ResolveCtx,
     ResolveError,
 };
-use crate::utils::AsAny;
 
 pub mod block;
 pub mod r#break;
@@ -19,7 +20,7 @@ pub mod r#return;
 pub mod var_declare;
 pub mod r#while;
 
-pub trait Statement
+pub trait AsStatement
     where
     Self: Code
         + Print
@@ -27,25 +28,28 @@ pub trait Statement
         + std::fmt::Debug
         + Any
 {
-    fn box_clone(&self) -> BoxedStatement;
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError>;
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError>;
 }
 
-pub type BoxedStatement = Box<dyn Statement>;
+#[derive(Clone, Debug)]
+pub struct Statement(pub Rc<dyn AsStatement>);
 
-impl Clone for BoxedStatement {
-    fn clone(&self) -> Self {
-        self.as_ref().box_clone()
+impl Statement {
+    #[cfg(test)]
+    pub fn downcast_ref<T: AsStatement>(&self) -> Option<&T> {
+        (self.as_ref() as &dyn Any).downcast_ref::<T>()
+    }
+
+    #[cfg(test)]
+    pub fn downcast<T: AsStatement>(self) -> Result<Rc<T>, Rc<dyn Any>> {
+        (self.0 as Rc<dyn Any>).downcast::<T>()
     }
 }
 
-impl AsAny for BoxedStatement {
-    fn as_any_ref(&self) -> &dyn Any {
-        self.as_ref() as &dyn Any
-    }
+impl Deref for Statement {
+    type Target = Rc<dyn AsStatement>;
 
-    fn as_box_any(self) -> Box<dyn Any> {
-        self
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

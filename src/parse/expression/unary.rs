@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::resolve::{
@@ -6,7 +7,7 @@ use crate::resolve::{
 };
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 #[derive(Clone, Copy)]
@@ -17,14 +18,14 @@ pub enum UnaryExpressionEnum {
 
 pub struct UnaryExpression {
     variant: UnaryExpressionEnum,
-    rhs: BoxedExpression,
+    rhs: Expression,
     code_span: CodeSpan,
 }
 
 impl UnaryExpression {
     pub fn new(
         variant: UnaryExpressionEnum, 
-        rhs: BoxedExpression,
+        rhs: Expression,
         code_span: CodeSpan,
     ) -> UnaryExpression
     {
@@ -39,7 +40,7 @@ impl UnaryExpression {
         self.variant
     }
 
-    pub fn rhs(&self) -> &BoxedExpression {
+    pub fn rhs(&self) -> &Expression {
         &self.rhs
     }
 }
@@ -50,24 +51,16 @@ impl Code for UnaryExpression {
     }
 }
 
-impl Expression for UnaryExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            UnaryExpression::new(
-                self.variant(),
-                self.rhs().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for UnaryExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         Ok(
-            Box::new(
-                UnaryExpression::new(
-                    self.variant,
-                    self.rhs.resolve(context)?,
-                    self.code_span.clone(),
+            Expression(
+                Rc::new(
+                    UnaryExpression::new(
+                        self.variant,
+                        self.rhs.resolve(context)?,
+                        self.code_span.clone(),
+                    )
                 )
             )
         )
@@ -77,11 +70,13 @@ impl Expression for UnaryExpression {
 #[macro_export]
 macro_rules! unary_expression {
     ( $variant:ident, $rhs:expr, $code_span:expr ) => {
-        Box::new(
-            UnaryExpression::new(
-                UnaryExpressionEnum::$variant,
-                $rhs,
-                $code_span,
+        Expression(
+            Rc::new(
+                UnaryExpression::new(
+                    UnaryExpressionEnum::$variant,
+                    $rhs,
+                    $code_span,
+                )
             )
         )
     };
@@ -98,18 +93,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_expression,
+        parse_expression_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_unary_expression_resolve() {
@@ -121,7 +110,7 @@ mod tests {
         )
             .unwrap();
         assert_eq!(
-            downcast_ref!(unary_expr.rhs(), VariableExpression).binding(),
+            unary_expr.rhs().downcast_ref::<VariableExpression>().unwrap().binding(),
             0
         );
     }

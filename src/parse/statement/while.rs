@@ -1,25 +1,26 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::resolve::{
     ResolveCtx,
     ResolveError,
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct WhileStatement {
-    condition: Option<BoxedExpression>,
-    body: BoxedStatement,
+    condition: Option<Expression>,
+    body: Statement,
     code_span: CodeSpan,
 }
 
 impl WhileStatement {
     pub fn new(
-        condition: Option<BoxedExpression>,
-        body: BoxedStatement,
+        condition: Option<Expression>,
+        body: Statement,
         code_span: CodeSpan
     ) -> WhileStatement
     {
@@ -30,11 +31,11 @@ impl WhileStatement {
         }
     }
 
-    pub fn condition(&self) -> Option<&BoxedExpression> {
+    pub fn condition(&self) -> Option<&Expression> {
         self.condition.as_ref()
     }
 
-    pub fn body(&self) -> &BoxedStatement {
+    pub fn body(&self) -> &Statement {
         &self.body
     }
 }
@@ -45,18 +46,8 @@ impl Code for WhileStatement {
     }
 }
 
-impl Statement for WhileStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            WhileStatement::new(
-                self.condition().map(|e| e.clone()),
-                self.body().clone(),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for WhileStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         let condition = if let Some(e) = self.condition.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -64,11 +55,13 @@ impl Statement for WhileStatement {
             None
         };
         return Ok(
-            Box::new(
-                WhileStatement::new(
-                    condition,
-                    self.body.resolve(context)?,
-                    self.code_span.clone(),
+            Statement(
+                Rc::new(
+                    WhileStatement::new(
+                        condition,
+                        self.body.resolve(context)?,
+                        self.code_span.clone(),
+                    )
                 )
             )
         );
@@ -78,21 +71,25 @@ impl Statement for WhileStatement {
 #[macro_export]
 macro_rules! while_statement {
     ( $body:expr, $span:expr ) => {
-        Box::new(
-            WhileStatement::new(
-                None,
-                $body,
-                $span,
+        Statement(
+            Rc::new(
+                WhileStatement::new(
+                    None,
+                    $body,
+                    $span,
+                )
             )
         )
     };
 
     ( $condition:expr, $body:expr, $span:expr ) => {
-        Box::new(
-            WhileStatement::new(
-                Some($condition),
-                $body,
-                $span,
+        Statement(
+            Rc::new(
+                WhileStatement::new(
+                    Some($condition),
+                    $body,
+                    $span,
+                )
             )
         )
     }
@@ -113,18 +110,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_while_statement_resolve() {
@@ -136,12 +127,12 @@ mod tests {
         )
             .unwrap();
 
-        let cond_expr = downcast_ref!(while_stmt.condition().unwrap(), VariableExpression);
+        let cond_expr = while_stmt.condition().unwrap().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(cond_expr.binding(), 0);
 
-        let body_stmt = downcast_ref!(while_stmt.body(), BlockStatement);
-        let print_stmt = downcast_ref!(body_stmt.statements()[0], PrintStatement);
-        let var_expr = downcast_ref!(print_stmt.value(), VariableExpression);
+        let body_stmt = while_stmt.body().downcast_ref::<BlockStatement>().unwrap();
+        let print_stmt = body_stmt.statements()[0].downcast_ref::<PrintStatement>().unwrap();
+        let var_expr = print_stmt.value().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
     }
 

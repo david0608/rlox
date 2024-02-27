@@ -1,23 +1,24 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::resolve::{
     ResolveCtx,
     ResolveError,
 };
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct ReturnStatement {
-    expression: Option<BoxedExpression>,
+    expression: Option<Expression>,
     code_span: CodeSpan,
 }
 
 impl ReturnStatement {
     pub fn new(
-        expression: Option<BoxedExpression>,
+        expression: Option<Expression>,
         code_span: CodeSpan,
     ) -> ReturnStatement
     {
@@ -27,7 +28,7 @@ impl ReturnStatement {
         }
     }
 
-    pub fn expression(&self) -> Option<&BoxedExpression> {
+    pub fn expression(&self) -> Option<&Expression> {
         self.expression.as_ref()
     }
 }
@@ -38,17 +39,8 @@ impl Code for ReturnStatement {
     }
 }
 
-impl Statement for ReturnStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            ReturnStatement::new(
-                self.expression().map(|s| s.clone()),
-                self.code_span(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for ReturnStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         let expr = if let Some(e) = self.expression.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -56,10 +48,12 @@ impl Statement for ReturnStatement {
             None
         };
         return Ok(
-            Box::new(
-                ReturnStatement::new(
-                    expr,
-                    self.code_span.clone(),
+            Statement(
+                Rc::new(
+                    ReturnStatement::new(
+                        expr,
+                        self.code_span.clone(),
+                    )
                 )
             )
         );
@@ -69,10 +63,12 @@ impl Statement for ReturnStatement {
 #[macro_export]
 macro_rules! return_statement {
     ( $expression:expr, $code_span:expr ) => {
-        Box::new(
-            ReturnStatement::new(
-                $expression,
-                $code_span,
+        Statement(
+            Rc::new(
+                ReturnStatement::new(
+                    $expression,
+                    $code_span,
+                )
             )
         )
     }
@@ -89,18 +85,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_return_statement_resolve() {
@@ -111,7 +101,7 @@ mod tests {
             parse_statement_unknown("return foo;").as_ref()
         )
             .unwrap();
-        let var_expr = downcast_ref!(return_stmt.expression().unwrap(), VariableExpression);
+        let var_expr = return_stmt.expression().unwrap().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 0);
     }
 

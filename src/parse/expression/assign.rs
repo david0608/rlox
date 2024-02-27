@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::scan::token::identifier::IdentifierToken;
@@ -9,19 +10,19 @@ use crate::resolve::{
 use crate::resolve_error;
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 pub struct AssignExpressionNotResolved {
     to: IdentifierToken,
-    value: BoxedExpression,
+    value: Expression,
     code_span: CodeSpan,
 }
 
 impl AssignExpressionNotResolved {
     pub fn new(
         to: IdentifierToken,
-        value: BoxedExpression,
+        value: Expression,
         code_span: CodeSpan,
     ) -> AssignExpressionNotResolved
     {
@@ -36,7 +37,7 @@ impl AssignExpressionNotResolved {
         &self.to
     }
 
-    pub fn value(&self) -> &BoxedExpression {
+    pub fn value(&self) -> &Expression {
         &self.value
     }
 }
@@ -47,26 +48,18 @@ impl Code for AssignExpressionNotResolved {
     }
 }
 
-impl Expression for AssignExpressionNotResolved {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            AssignExpressionNotResolved::new(
-                self.to.clone(),
-                self.value.clone(),
-                self.code_span.clone(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for AssignExpressionNotResolved {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         if let Some(d) = context.find(self.to.name()) {
             return Ok(
-                Box::new(
-                    AssignExpression::new(
-                        self.to.clone(),
-                        self.value.resolve(context)?,
-                        self.code_span.clone(),
-                        d,
+                Expression(
+                    Rc::new(
+                        AssignExpression::new(
+                            self.to.clone(),
+                            self.value.resolve(context)?,
+                            self.code_span.clone(),
+                            d,
+                        )
                     )
                 )
             );
@@ -85,11 +78,13 @@ impl Expression for AssignExpressionNotResolved {
 #[macro_export]
 macro_rules! assign_expression_not_resolved {
     ( $to:expr, $value:expr, $code_span:expr ) => {
-        Box::new(
-            AssignExpressionNotResolved::new(
-                $to,
-                $value,
-                $code_span
+        Expression(
+            Rc::new(
+                AssignExpressionNotResolved::new(
+                    $to,
+                    $value,
+                    $code_span
+                )
             )
         )
     };
@@ -97,7 +92,7 @@ macro_rules! assign_expression_not_resolved {
 
 pub struct AssignExpression {
     to: IdentifierToken,
-    value: BoxedExpression,
+    value: Expression,
     code_span: CodeSpan,
     binding: usize,
 }
@@ -105,7 +100,7 @@ pub struct AssignExpression {
 impl AssignExpression {
     pub fn new(
         to: IdentifierToken,
-        value: BoxedExpression,
+        value: Expression,
         code_span: CodeSpan,
         binding: usize,
     ) -> AssignExpression
@@ -122,7 +117,7 @@ impl AssignExpression {
         &self.to
     }
 
-    pub fn value(&self) -> &BoxedExpression {
+    pub fn value(&self) -> &Expression {
         &self.value
     }
 
@@ -137,32 +132,34 @@ impl Code for AssignExpression {
     }
 }
 
-impl Expression for AssignExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            AssignExpression::new(
-                self.to.clone(),
-                self.value.clone(),
-                self.code_span.clone(),
-                self.binding,
+impl AsExpression for AssignExpression {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+        Ok(
+            Expression(
+                Rc::new(
+                    AssignExpression::new(
+                        self.to.clone(),
+                        self.value.clone(),
+                        self.code_span.clone(),
+                        self.binding,
+                    )
+                )
             )
         )
-    }
-
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
-        Ok(self.box_clone())
     }
 }
 
 #[macro_export]
 macro_rules! assign_expression {
     ( $to:expr, $value:expr, $code_span:expr, $binding:expr ) => {
-        Box::new(
-            AssignExpression::new(
-                $to,
-                $value,
-                $code_span,
-                $binding
+        Expression(
+            Rc::new(
+                AssignExpression::new(
+                    $to,
+                    $value,
+                    $code_span,
+                    $binding
+                )
             )
         )
     };
@@ -182,18 +179,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_expression,
+        parse_expression_unknown,
     };
-    use crate::{
-        resolve_error,
-        box_downcast,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_assign_expression_resolve() {
@@ -214,7 +205,7 @@ mod tests {
             .unwrap();
         assert_eq!(assign_expr.binding(), 0);
 
-        let var_expr = box_downcast!(assign_expr.value, VariableExpression);
+        let var_expr = assign_expr.value.downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(var_expr.binding(), 1);
     }
 

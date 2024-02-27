@@ -1,6 +1,7 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
-use crate::parse::expression::BoxedExpression;
+use crate::parse::expression::Expression;
 use crate::scan::token::identifier::IdentifierToken;
 use crate::resolve::{
     ResolveCtx,
@@ -10,19 +11,19 @@ use crate::resolve::{
 use crate::resolve_error;
 use super::{
     Statement,
-    BoxedStatement,
+    AsStatement,
 };
 
 pub struct VarDeclareStatement {
     name: IdentifierToken,
-    initializer: Option<BoxedExpression>,
+    initializer: Option<Expression>,
     code_span: CodeSpan,
 }
 
 impl VarDeclareStatement {
     pub fn new(
         name: IdentifierToken,
-        initializer: Option<BoxedExpression>,
+        initializer: Option<Expression>,
         code_span: CodeSpan
     ) -> VarDeclareStatement
     {
@@ -37,7 +38,7 @@ impl VarDeclareStatement {
         &self.name
     }
 
-    pub fn initializer(&self) -> Option<&BoxedExpression> {
+    pub fn initializer(&self) -> Option<&Expression> {
         self.initializer.as_ref()
     }
 }
@@ -48,18 +49,8 @@ impl Code for VarDeclareStatement {
     }
 }
 
-impl Statement for VarDeclareStatement {
-    fn box_clone(&self) -> BoxedStatement {
-        Box::new(
-            VarDeclareStatement::new(
-                self.name.clone(),
-                self.initializer.as_ref().map(|e| e.clone()),
-                self.code_span.clone(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedStatement, ResolveError> {
+impl AsStatement for VarDeclareStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         let initializer = if let Some(e) = self.initializer.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -75,11 +66,13 @@ impl Statement for VarDeclareStatement {
             );
         }
         return Ok(
-            Box::new(
-                VarDeclareStatement::new(
-                    self.name.clone(),
-                    initializer,
-                    self.code_span.clone(),
+            Statement(
+                Rc::new(
+                    VarDeclareStatement::new(
+                        self.name.clone(),
+                        initializer,
+                        self.code_span.clone(),
+                    )
                 )
             )
         );
@@ -89,11 +82,13 @@ impl Statement for VarDeclareStatement {
 #[macro_export]
 macro_rules! var_declare_statement {
     ( $identifier:expr, $initializer:expr, $code_span:expr ) => {
-        Box::new(
-            VarDeclareStatement::new(
-                $identifier,
-                $initializer,
-                $code_span,
+        Statement(
+            Rc::new(
+                VarDeclareStatement::new(
+                    $identifier,
+                    $initializer,
+                    $code_span,
+                )
             )
         )
     };
@@ -110,18 +105,12 @@ mod tests {
         ResolveError,
         ResolveErrorEnum,
     };
-    use crate::utils::{
-        AsAny,
-        test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+    use crate::utils::test_utils::{
+        TestContext,
+        parse_statement,
+        parse_statement_unknown,
     };
-    use crate::{
-        resolve_error,
-        downcast_ref,
-    };
+    use crate::resolve_error;
 
     #[test]
     fn test_var_declare_statement_resolve() {
@@ -133,7 +122,7 @@ mod tests {
             parse_statement_unknown("var foo = bar;").as_ref()
         )
             .unwrap();
-        let init_expr = downcast_ref!(var_declare_stmt.initializer().unwrap(), VariableExpression);
+        let init_expr = var_declare_stmt.initializer().unwrap().downcast_ref::<VariableExpression>().unwrap();
         assert_eq!(init_expr.binding(), 1);
     }
 

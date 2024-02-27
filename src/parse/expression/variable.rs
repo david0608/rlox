@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::code::Code;
 use crate::code::code_span::CodeSpan;
 use crate::scan::token::identifier::IdentifierToken;
@@ -9,7 +10,7 @@ use crate::resolve::{
 use crate::resolve_error;
 use super::{
     Expression,
-    BoxedExpression,
+    AsExpression,
 };
 
 pub struct VariableExpressionNotResolved {
@@ -37,16 +38,8 @@ impl Code for VariableExpressionNotResolved {
     }
 }
 
-impl Expression for VariableExpressionNotResolved {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            VariableExpressionNotResolved::new(
-                self.from.clone(),
-            )
-        )
-    }
-
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
+impl AsExpression for VariableExpressionNotResolved {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         let binding = if let Some(d) = context.find(self.from.name()) {
             d
         }
@@ -60,10 +53,12 @@ impl Expression for VariableExpressionNotResolved {
         };
 
         Ok(
-            Box::new(
-                VariableExpression::new(
-                    self.from.clone(),
-                    binding,
+            Expression(
+                Rc::new(
+                    VariableExpression::new(
+                        self.from.clone(),
+                        binding,
+                    )
                 )
             )
         )
@@ -73,9 +68,11 @@ impl Expression for VariableExpressionNotResolved {
 #[macro_export]
 macro_rules! variable_expression_not_resolved {
     ( $identifier:expr ) => {
-        Box::new(
-            VariableExpressionNotResolved::new(
-                $identifier
+        Expression(
+            Rc::new(
+                VariableExpressionNotResolved::new(
+                    $identifier
+                )
             )
         )
     }
@@ -113,28 +110,16 @@ impl Code for VariableExpression {
     }
 }
 
-impl Expression for VariableExpression {
-    fn box_clone(&self) -> BoxedExpression {
-        Box::new(
-            VariableExpression::new(
-                self.from.clone(),
-                self.binding,
-            )
-        )
-    }
-
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<BoxedExpression, ResolveError> {
-        Ok(self.box_clone())
-    }
-}
-
-#[macro_export]
-macro_rules! variable_expression {
-    ( $identifier:expr, $binding:expr ) => {
-        Box::new(
-            VariableExpression::new(
-                $identifier,
-                $binding,
+impl AsExpression for VariableExpression {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+        Ok(
+            Expression(
+                Rc::new(
+                    VariableExpression::new(
+                        self.from.clone(),
+                        self.binding,
+                    )
+                )
             )
         )
     }

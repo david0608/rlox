@@ -1,6 +1,6 @@
 use core::sync::atomic;
 use std::iter::zip;
-use crate::parse::statement::BoxedStatement;
+use crate::parse::statement::Statement;
 use crate::scan::token::identifier::IdentifierToken;
 use crate::value::Value;
 use crate::call::{
@@ -25,7 +25,7 @@ pub struct Function {
     id: usize,
     name: IdentifierToken,
     parameters: Vec<IdentifierToken>,
-    body: Vec<BoxedStatement>,
+    body: Vec<Statement>,
     environment: Environment,
 }
 
@@ -34,7 +34,7 @@ impl Function {
         id: usize,
         name: IdentifierToken,
         parameters: Vec<IdentifierToken>,
-        body: Vec<BoxedStatement>,
+        body: Vec<Statement>,
         environment: Environment,
     ) -> Function
     {
@@ -51,15 +51,18 @@ impl Function {
         self.id
     }
 
+    #[cfg(test)]
     pub fn name(&self) -> &str {
         self.name.name()
     }
 
+    #[cfg(test)]
     pub fn parameters(&self) -> &Vec<IdentifierToken> {
         &self.parameters
     }
 
-    pub fn body(&self) -> &Vec<BoxedStatement> {
+    #[cfg(test)]
+    pub fn body(&self) -> &Vec<Statement> {
         &self.body
     }
 
