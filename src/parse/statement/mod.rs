@@ -11,6 +11,7 @@ use crate::resolve::{
 
 pub mod block;
 pub mod r#break;
+pub mod class_declare;
 pub mod expression;
 pub mod r#for;
 pub mod fun_declare;

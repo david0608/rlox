@@ -14,6 +14,8 @@ pub enum RuntimeErrorEnum {
     ArgumentNumberMismatch(usize, usize),
     NotCallable(Value),
     MultipleDeclaration,
+    CanNotGetProperty(Value),
+    CanNotSetProperty(Value),
     RuntimeError,
 }
 

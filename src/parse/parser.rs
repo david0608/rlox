@@ -1,5 +1,10 @@
-use std::rc::Rc;
-use std::collections::HashSet;
+use std::{
+    rc::Rc,
+    collections::{
+        HashSet,
+        HashMap,
+    },
+};
 use crate::error::LoxError;
 use crate::code::Code;
 use crate::code::code_point::CodePoint;
@@ -17,6 +22,7 @@ use crate::parse::expression::binary::{
     BinaryExpressionEnum,
 };
 use crate::parse::expression::call::CallExpression;
+use crate::parse::expression::get::GetExpression;
 use crate::parse::expression::grouping::GroupingExpression;
 use crate::parse::expression::literal::{
     LiteralExpression,
@@ -26,6 +32,7 @@ use crate::parse::expression::logical::{
     LogicalExpression,
     LogicalExpressionEnum,
 };
+use crate::parse::expression::set::SetExpression;
 use crate::parse::expression::unary::{
     UnaryExpression,
     UnaryExpressionEnum,
@@ -36,6 +43,10 @@ use crate::parse::{
         Statement,
         block::BlockStatement,
         r#break::BreakStatement,
+        class_declare::{
+            MethodDefinition,
+            ClassDeclareStatement,
+        },
         expression::ExpressionStatement,
         r#for::ForStatement,
         fun_declare::FunDeclareStatement,
@@ -50,13 +61,16 @@ use crate::{
     assign_expression_not_resolved,
     binary_expression,
     call_expression,
+    get_expression,
     grouping_expression,
     literal_expression,
     logical_expression,
+    set_expression,
     unary_expression,
     variable_expression_not_resolved,
     block_statement,
     break_statement,
+    class_declare_statement,
     expression_statement,
     for_statement,
     fun_declare_statement,
@@ -76,6 +90,7 @@ pub enum ParseError {
     ExpectIdentifier(CodeSpan),
     DuplicatedFunctionParameter(CodeSpan),
     ContextNotSupportBreak(CodeSpan),
+    DuplicatedMethodDefinition(CodeSpan),
 }
 
 impl LoxError for ParseError {
@@ -117,6 +132,11 @@ impl LoxError for ParseError {
             }
             ParseError::ContextNotSupportBreak(s) => {
                 let mut out = "Error: Break statement is not supported in this context.\r\n".to_owned();
+                out += s.debug_string(&src_lines).as_ref();
+                return out;
+            }
+            ParseError::DuplicatedMethodDefinition(s) => {
+                let mut out = "Error: Duplicated method definition.\r\n".to_owned();
                 out += s.debug_string(&src_lines).as_ref();
                 return out;
             }
@@ -262,17 +282,29 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn assignment(&mut self) -> Result<Expression, ParseError> {
-        if let Ok(ident) = self.consume_identifier() {
+        let lhs = self.logical_or()?;
+        if let Some(get_expr) = lhs.downcast_ref::<GetExpression>() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
-                let expr = self.assignment()?;
-                let span = CodeSpan::new(ident.code_span().start(), expr.code_span().end());
-                return Ok(assign_expression_not_resolved!(ident.clone(), expr, span));
-            }
-            else {
-                self.fallback();
+                let rhs = self.assignment()?;
+                let span = CodeSpan::new(get_expr.code_span().start(), rhs.code_span().end());
+                return Ok(
+                    set_expression!(
+                        get_expr.object().clone(),
+                        get_expr.name().clone(),
+                        rhs,
+                        span
+                    )
+                );
             }
         }
-        return self.logical_or();
+        else if let Some(var_expr) = lhs.downcast_ref::<VariableExpressionNotResolved>() {
+            if self.consume(SimpleTokenEnum::Equal).is_ok() {
+                let rhs = self.assignment()?;
+                let span = CodeSpan::new(var_expr.code_span().start(), rhs.code_span().end());
+                return Ok(assign_expression_not_resolved!(var_expr.from().clone(), rhs, span));
+            }
+        }
+        return Ok(lhs);
     }
 
     fn logical_or(&mut self) -> Result<Expression, ParseError> {
@@ -482,6 +514,13 @@ impl<'tokens> Parser<'tokens> {
                     continue;
                 }
             }
+            else if self.peek_simple(SimpleTokenEnum::Dot).is_some() {
+                self.advance();
+                let ident = self.consume_identifier()?;
+                let span = CodeSpan::new(e.code_span().start(), ident.code_span().end());
+                e = get_expression!(e, ident.clone(), span);
+                continue;
+            }
             else {
                 break;
             }
@@ -544,6 +583,54 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
+    fn method_definition(&mut self) -> Result<MethodDefinition, ParseError> {
+        let name = self.consume_identifier()?;
+        let cp_start = name.code_span().start();
+
+        self.consume(SimpleTokenEnum::LeftParen)?;
+        let mut parameters = Vec::new();
+        if self.peek_simple(SimpleTokenEnum::RightParen).is_none() {
+            let mut used = HashSet::new();
+            used.insert("this");
+            loop {
+                let p = self.consume_identifier()?;
+                if !used.insert(p.name()) {
+                    return Err(ParseError::DuplicatedFunctionParameter(p.code_span()));
+                }
+                parameters.push(p.clone());
+                if self.consume(SimpleTokenEnum::Comma).is_ok() {
+                    continue;
+                }
+                else {
+                    break;
+                }
+            }
+        }
+        self.consume(SimpleTokenEnum::RightParen)?;
+
+        self.consume(SimpleTokenEnum::LeftBrace)?;
+        let mut body = Vec::new();
+        loop {
+            if self.consume(SimpleTokenEnum::RightBrace).is_ok() {
+                break;
+            }
+            else {
+                body.push(self.statement(false)?);
+            }
+        }
+
+        let cp_end = self.peek_last().code_span().end();
+
+        return Ok(
+            MethodDefinition::new(
+                name.clone(),
+                parameters,
+                body,
+                CodeSpan::new(cp_start, cp_end),
+            )
+        );
+    }
+
     pub fn statement(&mut self, can_break: bool) -> Result<Statement, ParseError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
@@ -555,6 +642,10 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Fun => {
                         self.advance();
                         self.fun_declare_statement()
+                    }
+                    SimpleTokenEnum::Class => {
+                        self.advance();
+                        self.class_declare_statement()
                     }
                     SimpleTokenEnum::If => {
                         self.advance();
@@ -720,6 +811,39 @@ impl<'tokens> Parser<'tokens> {
             name.clone(),
             parameters,
             body,
+            CodeSpan::new(cp_start, cp_end)
+        ));
+    }
+
+    fn class_declare_statement(&mut self) -> Result<Statement, ParseError> {
+        let cp_start = self.peek_last().code_span().start();
+
+        let name = self.consume_identifier()?;
+
+        self.consume(SimpleTokenEnum::LeftBrace)?;
+        let mut method_definitions = HashMap::new();
+        loop {
+            if self.peek_simple(SimpleTokenEnum::RightBrace).is_some() {
+                break;
+            }
+            let method_def = self.method_definition()?;
+            if method_definitions.contains_key(method_def.name().name()) {
+                return Err(
+                    ParseError::DuplicatedMethodDefinition(method_def.code_span())
+                );
+            }
+            else {
+                method_definitions.insert(
+                    method_def.name().name().to_owned(),
+                    Rc::new(method_def),
+                );
+            }
+        }
+        let cp_end = self.consume(SimpleTokenEnum::RightBrace)?.code_span().end();
+
+        return Ok(class_declare_statement!(
+            name.clone(),
+            Rc::new(method_definitions),
             CodeSpan::new(cp_start, cp_end)
         ));
     }

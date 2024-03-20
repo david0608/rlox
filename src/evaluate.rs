@@ -414,7 +414,10 @@ impl Evaluate for UnaryExpression {
                     | Value::Bool(_)
                     | Value::String(_)
                     | Value::Function(_)
-                    | Value::NativeFunction(_) => {
+                    | Value::NativeFunction(_)
+                    | Value::Class(_)
+                    | Value::Object(_)
+                    | Value::Method(_) => {
                         Err(
                             runtime_error!(
                                 RuntimeErrorEnum::InvalidNegate(rhs),
