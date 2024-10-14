@@ -1,5 +1,7 @@
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
+use crate::code::{
+    Code,
+    code_span::CodeSpan,
+};
 
 pub mod identifier;
 use identifier::IdentifierToken;

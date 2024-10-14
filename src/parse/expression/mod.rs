@@ -1,20 +1,26 @@
-use std::any::Any;
-use std::rc::Rc;
-use std::ops::Deref;
-use crate::code::Code;
-use crate::evaluate::Evaluate;
-use crate::print::Print;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
+use std::{
+    any::Any,
+    rc::Rc,
+    ops::Deref,
+};
+use crate::{
+    code::Code,
+    evaluate::Evaluate,
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    }
 };
 
 pub mod assign;
 pub mod binary;
 pub mod call;
+pub mod get;
 pub mod grouping;
 pub mod literal;
 pub mod logical;
+pub mod set;
 pub mod unary;
 pub mod variable;
 
@@ -33,12 +39,10 @@ pub trait AsExpression
 pub struct Expression(pub Rc<dyn AsExpression>);
 
 impl Expression {
-    #[cfg(test)]
     pub fn downcast_ref<T: AsExpression>(&self) -> Option<&T> {
         (self.as_ref() as &dyn Any).downcast_ref::<T>()
     }
 
-    #[cfg(test)]
     pub fn downcast<T: AsExpression>(self) -> Result<Rc<T>, Rc<dyn Any>> {
         (self.0 as Rc<dyn Any>).downcast::<T>()
     }

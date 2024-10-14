@@ -1,10 +1,12 @@
-use crate::value::{
-    Value,
-    function::function_id,
-};
-use crate::call::{
-    Call,
-    CallResult,
+use crate::{
+    value::{
+        Value,
+        function::function_id,
+    },
+    call::{
+        Call,
+        CallResult,
+    }
 };
 
 pub type NativeFunctionHandler = fn(Vec<Value>) -> CallResult;

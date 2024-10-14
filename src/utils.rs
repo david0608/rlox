@@ -1,27 +1,33 @@
 #[cfg(test)]
 pub mod test_utils {
     use std::rc::Rc;
-    use crate::parse::{
-        parser::Parser,
-        expression::{
-            Expression,
-            AsExpression,
+    use crate::{
+        parse::{
+            expression::{
+                Expression,
+                AsExpression,
+            },
+            statement::{
+                Statement,
+                AsStatement,
+            },
+            parser::{
+                Parser,
+                ParserError,
+            },
         },
-        statement::{
-            Statement,
-            AsStatement,
+        scan::Scan,
+        value::Value,
+        environment::{
+            Environment,
+            EnvironmentOps,
         },
-    };
-    use crate::scan::Scan;
-    use crate::environment::{
-        Environment,
-        EnvironmentOps,
-    };
-    use crate::evaluate::EvaluateResult;
-    use crate::execute::ExecuteResult;
-    use crate::resolve::{
-        ResolveCtx,
-        ResolveError,
+        error::RuntimeError,
+        execute::ExecuteResult,
+        resolve::{
+            ResolveCtx,
+            ResolveError,
+        }
     };
 
     pub fn parse_expression<T: AsExpression>(src: &str) -> Rc<T> {
@@ -44,6 +50,18 @@ pub mod test_utils {
         assert_eq!(errors.len(), 0);
         let mut parser = Parser::new(&tokens);
         parser.statement(true).unwrap()
+    }
+
+    pub fn try_parse_statement(src: &str) -> Result<Statement, ParserError> {
+        let (tokens, errors) = src.scan();
+        assert_eq!(errors.len(), 0);
+        let mut parser = Parser::new(&tokens);
+        parser.statement(true)
+    }
+
+    pub fn evaluate_src(src: &str) -> Result<Value, RuntimeError> {
+        let mut ctx = TestContext::new();
+        ctx.evaluate(parse_expression_unknown(src).as_ref())
     }
 
     pub struct TestContext {
@@ -101,7 +119,7 @@ pub mod test_utils {
             stmt.resolve(&mut self.resolve_context)
         }
 
-        pub fn evaluate(&mut self, expr: &dyn AsExpression) -> EvaluateResult {
+        pub fn evaluate(&mut self, expr: &dyn AsExpression) -> Result<Value, RuntimeError> {
             let expr = self.resolve_expression_unknown(expr).unwrap();
             expr.evaluate(&self.environment)
         }

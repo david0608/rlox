@@ -1,13 +1,25 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-};
-use super::{
-    Statement,
-    AsStatement,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::statement::{
+        Statement,
+        AsStatement,
+    },
+    environment::Environment,
+    error::RuntimeError,
+    execute::{
+        Execute,
+        ExecuteOk,
+    },
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    },
+    impl_debug_for_printable,
 };
 
 pub struct BreakStatement {
@@ -28,6 +40,20 @@ impl BreakStatement {
 impl Code for BreakStatement {
     fn code_span(&self) -> CodeSpan {
         self.code_span
+    }
+}
+
+impl Print for BreakStatement {
+    fn print(&self) -> String {
+        "break;".to_owned()
+    }
+}
+
+impl_debug_for_printable!(BreakStatement);
+
+impl Execute for BreakStatement {
+    fn execute(&self, _: &Environment) -> Result<ExecuteOk, RuntimeError> {
+        return Ok(ExecuteOk::Break);
     }
 }
 
@@ -61,13 +87,39 @@ macro_rules! break_statement {
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
-    use crate::code::code_span::new_code_span;
-    use crate::parse::statement::{
-        Statement,
-        r#break::BreakStatement,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::statement::{
+            Statement,
+            r#break::BreakStatement,
+        },
+        execute::ExecuteOk,
+        print::Print,
+        utils::test_utils::{
+            TestContext,
+            parse_statement,
+        },
+        break_statement,
     };
-    use crate::utils::test_utils::TestContext;
-    use crate::break_statement;
+
+    #[test]
+    fn test_break_statement_print() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("break;", "break;"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_statement::<BreakStatement>(src).print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_break_statement_execute() {
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.execute(parse_statement::<BreakStatement>("break;").as_ref()),
+            Ok(ExecuteOk::Break)
+        );
+    }
 
     #[test]
     fn test_break_statement_resolve() {

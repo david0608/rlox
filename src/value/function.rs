@@ -1,18 +1,20 @@
 use core::sync::atomic;
 use std::iter::zip;
-use crate::parse::statement::Statement;
-use crate::scan::token::identifier::IdentifierToken;
-use crate::value::Value;
-use crate::call::{
-    Call,
-    CallResult,
-    CallError,
+use crate::{
+    parse::statement::Statement,
+    scan::token::identifier::IdentifierToken,
+    value::Value,
+    call::{
+        Call,
+        CallResult,
+        CallError,
+    },
+    environment::{
+        Environment,
+        EnvironmentOps,
+    },
+    execute::ExecuteOk,
 };
-use crate::environment::{
-    Environment,
-    EnvironmentOps,
-};
-use crate::execute::ExecuteOk;
 
 static FUNCTION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
 
@@ -129,7 +131,6 @@ mod tests {
         RuntimeErrorEnum,
     };
     use crate::utils::test_utils::TestContext;
-    use crate::runtime_error;
 
     #[test]
     fn test_function_call() {
@@ -180,13 +181,12 @@ mod tests {
             f.call(vec![]),
             Err(
                 CallError::RuntimeError(
-                    runtime_error!(
-                        RuntimeErrorEnum::RuntimeError,
-                        new_code_span(2, 0, 2, 16),
-                        runtime_error!(
+                    RuntimeError::wrap(
+                        RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
                             new_code_span(2, 7, 2, 15),
-                        )
+                        ),
+                        new_code_span(2, 0, 2, 16),
                     )
                 )
             )

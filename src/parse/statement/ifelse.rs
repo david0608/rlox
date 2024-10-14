@@ -1,14 +1,28 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::parse::expression::Expression;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-};
-use super::{
-    Statement,
-    AsStatement,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::{
+        expression::Expression,
+        statement::{
+            Statement,
+            AsStatement,
+        }
+    },
+    environment::Environment,
+    error::RuntimeError,
+    execute::{
+        Execute,
+        ExecuteOk,
+    },
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    },
+    impl_debug_for_printable,
 };
 
 pub struct IfStatement {
@@ -50,6 +64,56 @@ impl IfStatement {
 impl Code for IfStatement {
     fn code_span(&self) -> CodeSpan {
         self.code_span
+    }
+}
+
+impl Print for IfStatement {
+    fn print(&self) -> String {
+        if let Some(else_statement) = self.else_statement() {
+            format!(
+                "if {} {} else {}",
+                self.condition().print(),
+                self.then_statement().print(),
+                else_statement.print()
+            )
+        }
+        else {
+            format!(
+                "if {} {}",
+                self.condition().print(),
+                self.then_statement().print()
+            )
+        }
+    }
+}
+
+impl_debug_for_printable!(IfStatement);
+
+impl Execute for IfStatement {
+    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+        let condition = match self.condition().evaluate(env) {
+            Ok(val) => val.is_truthy(),
+            Err(err) => {
+                return Err(RuntimeError::wrap(err, self.code_span()));
+            }
+        };
+        let statement = if condition {
+            Some(self.then_statement())
+        }
+        else {
+            self.else_statement()
+        };
+        if let Some(stmt) = statement {
+            match stmt.execute(env) {
+                Ok(ok) => {
+                    return Ok(ok);
+                }
+                Err(err) => {
+                    return Err(RuntimeError::wrap(err, self.code_span()));
+                }
+            }
+        }
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
@@ -109,25 +173,74 @@ macro_rules! if_statement {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::{
-        expression::variable::VariableExpression,
-        statement::{
-            block::BlockStatement,
-            ifelse::IfStatement,
-            print::PrintStatement,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::{
+            expression::variable::VariableExpression,
+            statement::{
+                block::BlockStatement,
+                ifelse::IfStatement,
+                print::PrintStatement,
+            }
         },
+        value::Value,
+        environment::EnvironmentOps,
+        execute::ExecuteOk,
+        print::Print,
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_statement,
+            parse_statement_unknown,
+        }
     };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_statement,
-        parse_statement_unknown,
-    };
-    use crate::resolve_error;
+
+    #[test]
+    fn test_ifelse_statement_print() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("if (true) print \"hello\";", "if true print \"hello\";"),
+            ("if (1 + 1 == 2) { print 1; } else { print 2; }", "if (== (+ 1 1) 2) {print 1;} else {print 2;}"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_statement::<IfStatement>(src).print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_ifelse_statement_execute() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(parse_statement::<IfStatement>("if (true) foo = 2;").as_ref()),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0).unwrap(),
+            Value::Number(2.0)
+        );
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<IfStatement>(
+                    "
+                    if (false) {
+                        foo = 3;
+                    } else {
+                        foo = 4;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0).unwrap(),
+            Value::Number(4.0)
+        );
+    } 
 
     #[test]
     fn test_ifelse_statement_resolve() {
@@ -161,7 +274,7 @@ mod tests {
                 parse_statement::<IfStatement>("if (foo) { print foo; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 4, 0, 7)
             )
@@ -176,7 +289,7 @@ mod tests {
                 parse_statement::<IfStatement>("if (true) { print foo; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 18, 0, 21)
             )
@@ -191,7 +304,7 @@ mod tests {
                 parse_statement::<IfStatement>("if (true) { print true; } else { print foo; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 39, 0, 42)
             )

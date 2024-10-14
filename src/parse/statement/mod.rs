@@ -1,16 +1,21 @@
-use std::any::Any;
-use std::rc::Rc;
-use std::ops::Deref;
-use crate::code::Code;
-use crate::execute::Execute;
-use crate::print::Print;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
+use std::{
+    any::Any,
+    rc::Rc,
+    ops::Deref,
+};
+use crate::{
+    code::Code,
+    execute::Execute,
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    }
 };
 
 pub mod block;
 pub mod r#break;
+pub mod class_declare;
 pub mod expression;
 pub mod r#for;
 pub mod fun_declare;

@@ -1,25 +1,31 @@
 use std::str::FromStr;
-use crate::error::LoxError;
-use crate::code::code_point::CodePoint;
-use crate::code::code_span::CodeSpan;
-use super::token::Token;
-use super::token::simple::SimpleTokenEnum;
+use crate::{
+    code::{
+        code_point::CodePoint,
+        code_span::CodeSpan,
+    },
+    scan::token::{
+        Token,
+        simple::SimpleTokenEnum,
+    },
+    error::LoxError,
+};
 
-pub enum Error {
+pub enum ScannerError {
     UnexpectedCharacter(CodePoint),
-    ExpectCharacterNotFound(String, CodePoint),
+    ExpectCharacterNotFound(&'static str, CodePoint),
 }
 
-impl LoxError for Error {
+impl LoxError for ScannerError {
     fn print(&self, src_lines: &Vec<&str>) -> String {
         match self {
-            Error::UnexpectedCharacter(cp) => {
-                let mut out = format!("Error: Unexpected character: {}\r\n", cp.str(&src_lines));
+            ScannerError::UnexpectedCharacter(cp) => {
+                let mut out = format!("ScannerError: Unexpected character: {}\r\n", cp.str(&src_lines));
                 out += cp.debug_string(&src_lines).as_ref();
                 return out;
             }
-            Error::ExpectCharacterNotFound(ec, cp) => {
-                let mut out = format!("Error: Expect character: {} but not found.\r\n", ec);
+            ScannerError::ExpectCharacterNotFound(ec, cp) => {
+                let mut out = format!("ScannerError: Expect character: {} but not found.\r\n", ec);
                 out += cp.debug_string(&src_lines).as_ref();
                 return out;
             }
@@ -27,7 +33,7 @@ impl LoxError for Error {
     }
 }
 
-pub type ScannerOutput = (Vec<Token>, Vec<Error>);
+pub type ScannerOutput = (Vec<Token>, Vec<ScannerError>);
 
 pub struct Scanner<'src> {
     src: &'src str,
@@ -36,7 +42,7 @@ pub struct Scanner<'src> {
     start: usize,
     current: usize,
     tokens: Vec<Token>,
-    errors: Vec<Error>,
+    errors: Vec<ScannerError>,
 }
 
 impl<'src> Scanner<'src> {
@@ -252,7 +258,6 @@ impl<'src> Scanner<'src> {
             "break" => self.simple_token(SimpleTokenEnum::Break),
             "class" => self.simple_token(SimpleTokenEnum::Class),
             "super" => self.simple_token(SimpleTokenEnum::Super),
-            "this" => self.simple_token(SimpleTokenEnum::This),
             "print" => self.simple_token(SimpleTokenEnum::Print),
             "and" => self.simple_token(SimpleTokenEnum::And),
             "or" => self.simple_token(SimpleTokenEnum::Or),
@@ -271,11 +276,11 @@ impl<'src> Scanner<'src> {
     }
 
     fn unexpected_character(&mut self) {
-        self.errors.push(Error::UnexpectedCharacter(CodePoint::new(self.line, self.char)));
+        self.errors.push(ScannerError::UnexpectedCharacter(CodePoint::new(self.line, self.char)));
     }
 
-    fn expected_character_not_found(&mut self, ec: &str) {
-        self.errors.push(Error::ExpectCharacterNotFound(ec.to_string(), CodePoint::new(self.line, self.char)));
+    fn expected_character_not_found(&mut self, ec: &'static str) {
+        self.errors.push(ScannerError::ExpectCharacterNotFound(ec, CodePoint::new(self.line, self.char)));
     }
 
     pub fn scan(src: &str) -> ScannerOutput {
@@ -422,15 +427,21 @@ fn is_alphanumeric(c: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::LoxError;
-    use crate::code::Code;
-    use crate::code::code_point::CodePoint;
-    use crate::code::code_span::CodeSpan;
-    use crate::scan::token::Token;
-    use crate::scan::token::simple::SimpleTokenEnum;
+    use crate::{
+        code::{
+            Code,
+            code_point::CodePoint,
+            code_span::CodeSpan,
+        },
+        scan::token::{
+            Token,
+            simple::SimpleTokenEnum,
+        },
+        error::LoxError,
+    };
     use super::{
         Scanner,
-        Error,
+        ScannerError,
         is_digit,
         is_alpha,
         is_alphanumeric,
@@ -664,7 +675,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 1);
         match s.errors[0] {
-            Error::ExpectCharacterNotFound(ref ec, cp) => {
+            ScannerError::ExpectCharacterNotFound(ec, cp) => {
                 assert_eq!(ec, "\"");
                 assert_eq!(cp, CodePoint::new(1, 5));
             }
@@ -880,7 +891,7 @@ mod tests {
         assert_eq!(
             errors[0].print(&src_lines),
             concat!(
-                "Error: Unexpected character: @\r\n",
+                "ScannerError: Unexpected character: @\r\n",
                 "1: @\r\n",
                 "   ^\r\n",
             ),
@@ -915,7 +926,7 @@ mod tests {
         assert_eq!(
             errors[0].print(&src_lines),
             concat!(
-                "Error: Expect character: \" but not found.\r\n",
+                "ScannerError: Expect character: \" but not found.\r\n",
                 "3: \r\n",
                 "   ^\r\n",
             ),

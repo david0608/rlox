@@ -1,6 +1,8 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+    collections::HashMap,
+};
 use crate::value::Value;
 
 #[derive(Debug)]

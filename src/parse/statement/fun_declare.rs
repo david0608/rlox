@@ -1,17 +1,38 @@
 use std::rc::Rc;
-use crate::code::code_span::CodeSpan;
-use crate::code::Code;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-    ResolveErrorEnum,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::statement::{
+        Statement,
+        AsStatement,
+    },
+    scan::token::identifier::IdentifierToken,
+    value::{
+        Value,
+        function::{
+            Function,
+            function_id,
+        },
+    },
+    environment::{
+        Environment,
+        EnvironmentOps,
+    },
+    error::RuntimeError,
+    execute::{
+        Execute,
+        ExecuteOk,
+    },
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+        ResolveErrorEnum,
+    },
+    impl_debug_for_printable,
 };
-use super::{
-    Statement,
-    AsStatement,
-};
-use crate::scan::token::identifier::IdentifierToken;
-use crate::resolve_error;
 
 pub struct FunDeclareStatement {
     name: IdentifierToken,
@@ -55,12 +76,44 @@ impl Code for FunDeclareStatement {
     }
 }
 
+impl Print for FunDeclareStatement {
+    fn print(&self) -> String {
+        return format!(
+            "fun {}({}) {{{}}}",
+            self.name().name(),
+            self.parameters().iter().map(|i| i.name().to_owned()).collect::<Vec<String>>().join(", "),
+            self.body().iter().map(|s| s.print()).collect::<Vec<String>>().join(" "),
+        );
+    }
+}
+
+impl_debug_for_printable!(FunDeclareStatement);
+
+impl Execute for FunDeclareStatement {
+    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+        env.declare(
+            self.name().name(),
+            Value::Function(
+                Function::new(
+                    function_id(),
+                    self.name().clone(),
+                    self.parameters().clone(),
+                    self.body().clone(),
+                    env.clone(),
+                )
+            )
+        )
+            .expect("Variable name have been declared. This may not happen if the function declaration statement have been successfully resolved.");
+        return Ok(ExecuteOk::KeepGoing);
+    }
+}
+
 impl AsStatement for FunDeclareStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
         if context.declare(self.name.name()).is_err() {
             return Err(
-                resolve_error!(
-                    ResolveErrorEnum::VariableHasBeenDeclared,
+                ResolveError::new(
+                    ResolveErrorEnum::VariableHaveBeenDeclared,
                     self.name.code_span()
                 )
             );
@@ -70,8 +123,8 @@ impl AsStatement for FunDeclareStatement {
             if context.declare(p.name()).is_err() {
                 context.end();
                 return Err(
-                    resolve_error!(
-                        ResolveErrorEnum::VariableHasBeenDeclared,
+                    ResolveError::new(
+                        ResolveErrorEnum::VariableHaveBeenDeclared,
                         p.code_span()
                     )
                 );
@@ -119,24 +172,93 @@ macro_rules! fun_declare_statement {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::{
-        expression::variable::VariableExpression,
-        statement::{
-            fun_declare::FunDeclareStatement,
-            print::PrintStatement,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::{
+            expression::variable::VariableExpression,
+            statement::{
+                fun_declare::FunDeclareStatement,
+                print::PrintStatement,
+            },
+        },
+        value::Value,
+        environment::EnvironmentOps,
+        execute::{
+            Execute,
+            ExecuteOk,
+        },
+        print::Print,
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_statement,
+            parse_statement_unknown,
+        },
+    };
+
+    #[test]
+    fn test_fun_declare_statement_print() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("fun foo() {print \"hello\";}", "fun foo() {print \"hello\";}"),
+            ("fun bar(a, b) {var c = a + b; print c;}", "fun bar(a, b) {var c = (+ a b); print c;}"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_statement::<FunDeclareStatement>(src).print(), expect);
         }
-    };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_statement,
-        parse_statement_unknown,
-    };
-    use crate::resolve_error;
+    }
+
+    #[test]
+    fn test_fun_declare_statement_execute() {
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<FunDeclareStatement>(
+                    "
+                    fun foo(a, b) {
+                        var c = a + b;
+                        print c;
+                    }
+                    "
+                )
+                    .as_ref(),
+            ),
+            Ok(ExecuteOk::KeepGoing),
+        );
+
+        let f = if let Value::Function(f) = ctx.environment.get("foo", 0).unwrap() {
+            f
+        }
+        else {
+            panic!("Value should be function.");
+        };
+        assert_eq!(f.name(), "foo");
+        let params = f.parameters();
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0].name(), "a");
+        assert_eq!(params[1].name(), "b");
+        let body = f.body();
+        assert_eq!(body.len(), 2);
+        assert_eq!(body[0].print(), "var c = (+ a b);");
+        assert_eq!(body[1].print(), "print c;");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fun_declare_statement_execute_duplicated_declaration_panic() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = true;");
+        let stmt = parse_statement::<FunDeclareStatement>(
+            "
+            fun foo(a, b) {
+                print \"foo\";
+            }
+            "
+        );
+        let _ = stmt.execute(&ctx.environment);
+    }
 
     #[test]
     fn test_fun_declare_statement_resolve() {
@@ -174,8 +296,8 @@ mod tests {
                 parse_statement::<FunDeclareStatement>("fun test() {}").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
-                ResolveErrorEnum::VariableHasBeenDeclared,
+            ResolveError::new(
+                ResolveErrorEnum::VariableHaveBeenDeclared,
                 new_code_span(0, 4, 0, 8)
             )
         );
@@ -189,8 +311,8 @@ mod tests {
                 parse_statement::<FunDeclareStatement>("fun test(a) { var a; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
-                ResolveErrorEnum::VariableHasBeenDeclared,
+            ResolveError::new(
+                ResolveErrorEnum::VariableHaveBeenDeclared,
                 new_code_span(0, 18, 0, 19)
             )
         );
@@ -200,7 +322,7 @@ mod tests {
                 parse_statement::<FunDeclareStatement>("fun test() { var a = b; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 21, 0, 22)
             )

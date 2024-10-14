@@ -1,13 +1,23 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-};
-use super::{
-    Expression,
-    AsExpression,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::expression::{
+        Expression,
+        AsExpression,
+    },
+    value::Value,
+    environment::Environment,
+    error::RuntimeError,
+    evaluate::Evaluate,
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    },
+    impl_debug_for_printable,
 };
 
 pub struct GroupingExpression {
@@ -31,6 +41,23 @@ impl GroupingExpression {
 impl Code for GroupingExpression {
     fn code_span(&self) -> CodeSpan {
         self.code_span
+    }
+}
+
+impl Print for GroupingExpression {
+    fn print(&self) -> String {
+        format!("(group {})", self.expression().print())
+    }
+}
+
+impl_debug_for_printable!(GroupingExpression);
+
+impl Evaluate for GroupingExpression {
+    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+        match self.expression().evaluate(env) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(RuntimeError::wrap(e, self.code_span))
+        }
     }
 }
 
@@ -65,21 +92,64 @@ macro_rules! grouping_expression {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::expression::{
-        grouping::GroupingExpression,
-        variable::VariableExpression,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::expression::{
+            grouping::GroupingExpression,
+            variable::VariableExpression,
+        },
+        value::Value,
+        error::{
+            RuntimeError,
+            RuntimeErrorEnum,
+        },
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_expression,
+            parse_expression_unknown,
+            evaluate_src
+        },
     };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_expression,
-        parse_expression_unknown,
-    };
-    use crate::resolve_error;
+
+    #[test]
+    fn test_grouping_expression_print() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("(123)", "(group 123)"),
+            ("(1 + 2) * 3", "(* (group (+ 1 2)) 3)"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_expression_unknown(src).print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_grouping_expression_evaluate() {
+        assert_eq!(evaluate_src("(nil)"), Ok(Value::Nil));
+        assert_eq!(evaluate_src("(true)"), Ok(Value::Bool(true)));
+        assert_eq!(evaluate_src("(123)"), Ok(Value::Number(123.0)));
+        assert_eq!(evaluate_src("(\"hello\")"), Ok(Value::String("hello".to_owned())));
+        assert_eq!(evaluate_src("2 * (3 - 1)"), Ok(Value::Number(4.0)));
+    }
+
+    #[test]
+    fn test_grouping_expression_evaluate_error() {
+        assert_eq!(
+            evaluate_src("(true + 1)"),
+            Err(
+                RuntimeError::wrap(
+                    RuntimeError::new(
+                        RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                        new_code_span(0, 1, 0, 9),
+                    ),
+                    new_code_span(0, 0, 0, 10)
+                )
+            )
+        );
+    }
 
     #[test]
     fn test_grouping_expression_resolve() {
@@ -104,7 +174,7 @@ mod tests {
                 parse_expression::<GroupingExpression>("(foo)").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 1, 0, 4)
             )

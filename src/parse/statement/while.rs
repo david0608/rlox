@@ -1,14 +1,28 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::parse::expression::Expression;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-};
-use super::{
-    Statement,
-    AsStatement,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::{
+        expression::Expression,
+        statement::{
+            Statement,
+            AsStatement,
+        }
+    },
+    environment::Environment,
+    error::RuntimeError,
+    execute::{
+        Execute,
+        ExecuteOk,
+    },
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    },
+    impl_debug_for_printable,
 };
 
 pub struct WhileStatement {
@@ -43,6 +57,53 @@ impl WhileStatement {
 impl Code for WhileStatement {
     fn code_span(&self) -> CodeSpan {
         self.code_span
+    }
+}
+
+impl Print for WhileStatement {
+    fn print(&self) -> String {
+        if let Some(condition) = self.condition() {
+            format!("while {} {}", condition.print(), self.body().print())
+        }
+        else {
+            format!("while true {}", self.body().print())
+        }
+    }
+}
+
+impl_debug_for_printable!(WhileStatement);
+
+impl Execute for WhileStatement {
+    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+        loop {
+            if let Some(condition) = self.condition() {
+                match condition.evaluate(env) {
+                    Ok(v) => {
+                        if !v.is_truthy() {
+                            return Ok(ExecuteOk::KeepGoing);
+                        }
+                    }
+                    Err(e) => {
+                        return Err(RuntimeError::wrap(e, self.code_span()));
+                    }
+                }
+            }
+
+            match self.body().execute(env) {
+                Ok(ExecuteOk::KeepGoing) => {
+                    // do nothing.
+                }
+                Ok(ExecuteOk::Break) => {
+                    return Ok(ExecuteOk::KeepGoing);
+                }
+                Ok(ExecuteOk::Return(v)) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+                Err(err) => {
+                    return Err(RuntimeError::wrap(err, self.code_span()));
+                }
+            }
+        }
     }
 }
 
@@ -97,25 +158,122 @@ macro_rules! while_statement {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::{
-        expression::variable::VariableExpression,
-        statement::{
-            block::BlockStatement,
-            print::PrintStatement,
-            r#while::WhileStatement,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::{
+            expression::variable::VariableExpression,
+            statement::{
+                block::BlockStatement,
+                print::PrintStatement,
+                r#while::WhileStatement,
+            }
         },
+        value::Value,
+        environment::EnvironmentOps,
+        execute::ExecuteOk,
+        print::Print,
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_statement,
+            parse_statement_unknown,
+        }
     };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_statement,
-        parse_statement_unknown,
-    };
-    use crate::resolve_error;
+
+    #[test]
+    fn test_print_while_statement() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("while (foo) print \"hello\";", "while foo print \"hello\";"),
+            ("while (foo == true) print \"hello\";", "while (== foo true) print \"hello\";"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_statement::<WhileStatement>(src).print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_while_statement_execute() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var sum = 0;");
+        ctx.execute_src("var i = 3;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<WhileStatement>(
+                    "
+                    while (i > 0) {
+                        sum = sum + i;
+                        i = i - 1;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing),
+        );
+        assert_eq!(
+            ctx.environment.get("sum", 0).unwrap(),
+            Value::Number(6.0),
+        );
+    }
+
+    #[test]
+    fn test_while_statement_execute_break() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var i = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<WhileStatement>(
+                    "
+                    while (i <= 3) {
+                        if (i == 2) {
+                            break;
+                        }
+                        else {
+                            i = i + 1;
+                        }
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing),
+        );
+        assert_eq!(
+            ctx.environment.get("i", 0).unwrap(),
+            Value::Number(2.0),
+        );
+    }
+
+    #[test]
+    fn test_while_statement_execute_return() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var i = 0;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<WhileStatement>(
+                    "
+                    while (i <= 3) {
+                        if (i == 2) {
+                            return i;
+                        }
+                        else {
+                            i = i + 1;
+                        }
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Return(Value::Number(2.0))),
+        );
+        assert_eq!(
+            ctx.environment.get("i", 0).unwrap(),
+            Value::Number(2.0),
+        );
+    }
 
     #[test]
     fn test_while_statement_resolve() {
@@ -144,7 +302,7 @@ mod tests {
                 parse_statement::<WhileStatement>("while (foo) { print foo; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 7, 0, 10)
             )
@@ -159,7 +317,7 @@ mod tests {
                 parse_statement::<WhileStatement>("while (true) { print foo; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 21, 0, 24)
             )

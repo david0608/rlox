@@ -1,5 +1,7 @@
-use crate::value::Value;
-use crate::error::RuntimeError;
+use crate::{
+    value::Value,
+    error::RuntimeError,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum CallError {

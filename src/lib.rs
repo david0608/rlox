@@ -2,14 +2,14 @@
 
 mod code;
 pub mod native;
-mod parse;
-mod scan;
+pub mod parse;
+pub mod scan;
 mod value;
 mod call;
-mod environment;
-mod error;
+pub mod environment;
+pub mod error;
 mod evaluate;
 mod execute;
 mod print;
-mod resolve;
+pub mod resolve;
 mod utils;

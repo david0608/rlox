@@ -2,19 +2,21 @@ use std::time::{
     UNIX_EPOCH,
     SystemTime,
 };
-use crate::value::{
-    Value,
-    native_function::NativeFunction,
+use crate::{
+    value::{
+        Value,
+        native_function::NativeFunction,
+    },
+    call::{
+        CallResult,
+        CallError,
+    },
+    environment::{
+        Environment,
+        EnvironmentOps,
+    },
+    resolve::ResolveCtx,
 };
-use crate::call::{
-    CallResult,
-    CallError,
-};
-use crate::environment::{
-    Environment,
-    EnvironmentOps,
-};
-use crate::resolve::ResolveCtx;
 
 pub fn add_native_clock(
     resolve_context: &mut ResolveCtx,

@@ -1,16 +1,28 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::scan::token::identifier::IdentifierToken;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-    ResolveErrorEnum,
-};
-use crate::resolve_error;
-use super::{
-    Expression,
-    AsExpression,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::expression::{
+        Expression,
+        AsExpression,
+    },
+    scan::token::identifier::IdentifierToken,
+    value::Value,
+    environment::{
+        Environment,
+        EnvironmentOps,
+    },
+    error::RuntimeError,
+    evaluate::Evaluate,
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+        ResolveErrorEnum,
+    },
+    impl_debug_for_printable,
 };
 
 pub struct AssignExpressionNotResolved {
@@ -48,6 +60,20 @@ impl Code for AssignExpressionNotResolved {
     }
 }
 
+impl Print for AssignExpressionNotResolved {
+    fn print(&self) -> String {
+        format!("(= {} {})", self.to().name(), self.value().print())
+    }
+}
+
+impl_debug_for_printable!(AssignExpressionNotResolved);
+
+impl Evaluate for AssignExpressionNotResolved {
+    fn evaluate(&self, _: &Environment) -> Result<Value, RuntimeError> {
+        panic!("AssignExpressionNotResolved can not evaluate.");
+    }
+}
+
 impl AsExpression for AssignExpressionNotResolved {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         if let Some(d) = context.find(self.to.name()) {
@@ -66,7 +92,7 @@ impl AsExpression for AssignExpressionNotResolved {
         }
         else {
             return Err(
-                resolve_error!(
+                ResolveError::new(
                     ResolveErrorEnum::VariableNotDeclared,
                     self.to.code_span()
                 )
@@ -132,14 +158,44 @@ impl Code for AssignExpression {
     }
 }
 
+impl Print for AssignExpression {
+    fn print(&self) -> String {
+        format!("(= {} {})", self.to().name(), self.value().print())
+    }
+}
+
+impl_debug_for_printable!(AssignExpression);
+
+impl Evaluate for AssignExpression {
+    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+        let v = match self.value().evaluate(env) {
+            Ok(val) => val,
+            Err(err) => {
+                return Err(RuntimeError::wrap(err, self.code_span()));
+            }
+        };
+        if env.set(
+            self.to().name(),
+            self.binding(),
+            v.clone(),
+        ).is_ok()
+        {
+            return Ok(v);
+        }
+        else {
+            unreachable!("Variable not declared should not be runtime error.");
+        }
+    }
+}
+
 impl AsExpression for AssignExpression {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
         Ok(
             Expression(
                 Rc::new(
                     AssignExpression::new(
                         self.to.clone(),
-                        self.value.clone(),
+                        self.value.resolve(context)?,
                         self.code_span.clone(),
                         self.binding,
                     )
@@ -167,40 +223,64 @@ macro_rules! assign_expression {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::expression::{
-        assign::{
-            AssignExpression,
-            AssignExpressionNotResolved,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::expression::{
+            assign::{
+                AssignExpressionNotResolved,
+                AssignExpression,
+            },
+            variable::VariableExpression,
         },
-        variable::VariableExpression,
+        value::Value,
+        error::{
+            RuntimeError,
+            RuntimeErrorEnum,
+        },
+        print::Print,
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_expression,
+            parse_expression_unknown
+        }
     };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_expression,
-        parse_expression_unknown,
-    };
-    use crate::resolve_error;
 
     #[test]
-    fn test_assign_expression_resolve() {
+    fn test_assign_expression_not_resolved_print() {
+        assert_eq!(
+            parse_expression::<AssignExpressionNotResolved>("foo = true").print(),
+            "(= foo true)"
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_assign_expression_not_resolved_evaluate_panic() {
+        let mut ctx = TestContext::new();
+        let _ = ctx.evaluate(
+            parse_expression::<AssignExpressionNotResolved>("foo = true").as_ref()
+        );
+    }
+
+    #[test]
+    fn test_assign_expression_not_resolved_resolve() {
         let mut ctx = TestContext::new();
         ctx.execute_src("var foo;");
         ctx.resolve_context.begin();
         ctx.execute_src("var bar;");
 
         let assign_expr = ctx.resolve_expression::<AssignExpression>(
-            parse_expression_unknown("foo = true").as_ref()
+            parse_expression::<AssignExpressionNotResolved>("foo = true").as_ref()
         )
             .unwrap();
         assert_eq!(assign_expr.binding(), 1);
 
         let assign_expr = ctx.resolve_expression::<AssignExpression>(
-            parse_expression_unknown("bar = foo").as_ref()
+            parse_expression::<AssignExpressionNotResolved>("bar = foo").as_ref()
         )
             .unwrap();
         assert_eq!(assign_expr.binding(), 0);
@@ -210,14 +290,14 @@ mod tests {
     }
 
     #[test]
-    fn test_assign_expression_resolve_variable_not_found_error() {
+    fn test_assign_expression_not_resolved_resolve_variable_not_found_error() {
         let mut ctx = TestContext::new();
         assert_eq!(
             ctx.resolve_expression_unknown(
                 parse_expression::<AssignExpressionNotResolved>("foo = true").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 0, 0, 3)
             )
@@ -225,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn test_assign_expression_resolve_value_resolve_error() {
+    fn test_assign_expression_not_resolved_resolve_value_resolve_error() {
         let mut ctx = TestContext::new();
         ctx.execute_src("var foo;");
         assert_eq!(
@@ -233,10 +313,89 @@ mod tests {
                 parse_expression::<AssignExpressionNotResolved>("foo = bar").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 6, 0, 9)
             )
         );
+    }
+
+    #[test]
+    fn test_assign_expression_print() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = false;");
+        assert_eq!(
+            ctx.resolve_expression::<AssignExpression>(
+                parse_expression_unknown("foo = true").as_ref()
+            )
+                .unwrap()
+                .print(),
+            "(= foo true)",
+        );
+    }
+
+    #[test]
+    fn test_assign_expression_evaluate() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = false;");
+        let expr = ctx.resolve_expression::<AssignExpression>(
+            parse_expression_unknown("foo = true").as_ref()
+        )
+            .unwrap();
+        assert_eq!(
+            ctx.evaluate(expr.as_ref()),
+            Ok(Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn test_assign_expression_evaluate_value_evaluate_error() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo;");
+        let expr = ctx.resolve_expression::<AssignExpression>(
+            parse_expression_unknown("foo = 1 < true").as_ref()
+        )
+            .unwrap();
+        assert_eq!(
+            ctx.evaluate(expr.as_ref()).unwrap_err(),
+            RuntimeError::wrap(
+                RuntimeError::new(
+                    RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
+                    new_code_span(0, 6, 0, 14),
+                ),
+                new_code_span(0, 0, 0, 14),
+            )
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_assign_expression_evaluate_var_not_declared_panic() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo;");
+        ctx.execute_src("var bar;");
+        let expr = ctx.resolve_expression::<AssignExpression>(
+            parse_expression_unknown("foo = bar").as_ref()
+        )
+            .unwrap();
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var bar;");
+        ctx.evaluate(expr.as_ref()).expect("evaluate");
+    }
+
+    #[test]
+    fn test_assign_expression_resolve() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo;");
+        ctx.resolve_context.begin();
+        ctx.execute_src("var bar;");
+        let assign_expr = ctx.resolve_expression::<AssignExpression>(
+            parse_expression::<AssignExpressionNotResolved>("bar = foo").as_ref()
+        )
+            .unwrap();
+        let assign_expr = ctx.resolve_expression::<AssignExpression>(assign_expr.as_ref()).unwrap();
+        assert_eq!(assign_expr.binding(), 0);
+        let var_expr = assign_expr.value.downcast_ref::<VariableExpression>().unwrap();
+        assert_eq!(var_expr.binding(), 1);
     }
 }

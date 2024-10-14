@@ -1,13 +1,28 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-};
-use super::{
-    Statement,
-    AsStatement,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::statement::{
+        Statement,
+        AsStatement,
+    },
+    environment::{
+        Environment,
+        EnvironmentOps,
+    },
+    error::RuntimeError,
+    execute::{
+        Execute,
+        ExecuteOk,
+    },
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    },
+    impl_debug_for_printable
 };
 
 pub struct BlockStatement {
@@ -31,6 +46,36 @@ impl BlockStatement {
 impl Code for BlockStatement {
     fn code_span(&self) -> CodeSpan {
         self.code_span
+    }
+}
+
+impl Print for BlockStatement {
+    fn print(&self) -> String {
+        let strs = self.statements().iter().map(|s| s.print()).collect::<Vec<String>>();
+        format!("{{{}}}", strs.join(" "))
+    }
+}
+
+impl_debug_for_printable!(BlockStatement);
+
+impl Execute for BlockStatement {
+    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+        let env = env.new_child();
+        for statement in self.statements() {
+            let ok = statement.execute(&env)?;
+            match ok {
+                ExecuteOk::KeepGoing => {
+                    // do nothing.
+                }
+                ExecuteOk::Break => {
+                    return Ok(ExecuteOk::Break);
+                }
+                ExecuteOk::Return(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+            }
+        }
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
@@ -75,25 +120,173 @@ macro_rules! block_statement {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::{
-        expression::variable::VariableExpression,
-        statement::{
-            block::BlockStatement,
-            expression::ExpressionStatement,
-            var_declare::VarDeclareStatement,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::{
+            expression::variable::VariableExpression,
+            statement::{
+                block::BlockStatement,
+                expression::ExpressionStatement,
+                var_declare::VarDeclareStatement,
+            }
+        },
+        value::Value,
+        environment::EnvironmentOps,
+        error::{
+            RuntimeError,
+            RuntimeErrorEnum,
+        },
+        execute::ExecuteOk,
+        print::Print,
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_statement,
+            parse_statement_unknown,
+        },
+    };
+
+    #[test]
+    fn test_block_statement_print() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("{var foo; var bar = true;}", "{var foo; var bar = true;}"),
+            ("{var a; {a = true;}}", "{var a; {(= a true);}}"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_statement::<BlockStatement>(src).print(), expect);
         }
-    };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_statement,
-        parse_statement_unknown,
-    };
-    use crate::resolve_error;
+    }
+
+    #[test]
+    fn test_block_statement_execute_keep_going() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        var bar = 2;
+                        foo = bar;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(2.0)),
+        );
+    }
+
+    #[test]
+    fn test_block_statement_execute_break() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        foo = 2;
+                        break;
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Break)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(2.0))
+        );
+    }
+
+    #[test]
+    fn test_block_statement_execute_return() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        foo = 2;
+                        return foo;
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::Return(Value::Number(2.0)))
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(2.0))
+        );
+    }
+
+    #[test]
+    fn test_block_shadow() {
+        let mut ctx = TestContext::new();
+        ctx.execute_src("var foo = 1;");
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        var foo = 2;
+                        foo = 3;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Ok(ExecuteOk::KeepGoing)
+        );
+        assert_eq!(
+            ctx.environment.get("foo", 0),
+            Some(Value::Number(1.0))
+        );
+    }
+
+    #[test]
+    fn test_block_execute_error() {
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<BlockStatement>(
+                    "
+                    {
+                        var foo;
+                        foo = true + 1;
+                    }
+                    "
+                )
+                    .as_ref()
+            ),
+            Err(
+                RuntimeError::wrap(
+                    RuntimeError::wrap(
+                        RuntimeError::new(
+                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                            new_code_span(3, 6, 3, 14)
+                        ),
+                        new_code_span(3, 0, 3, 14),
+                    ),
+                    new_code_span(3, 0, 3, 15),
+                )
+            )
+        );
+    }
 
     #[test]
     fn test_block_statement_resolve() {
@@ -122,7 +315,7 @@ mod tests {
                 parse_statement::<BlockStatement>("{ var foo = bar; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 12, 0, 15)
             )
@@ -132,7 +325,7 @@ mod tests {
                 parse_statement::<BlockStatement>("{ var foo = true; bar; }").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 18, 0, 21)
             )

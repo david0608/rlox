@@ -1,10 +1,22 @@
 use std::collections::HashSet;
-use crate::code::code_span::CodeSpan;
+use crate::{
+    code::code_span::CodeSpan,
+    parse::statement::Statement,
+    error::LoxError,
+};
 
 pub trait Resolve {
-    type Target;
+    fn resolve(&self, ctx: &mut ResolveCtx) -> Result<Vec<Statement>, ResolveError>;
+}
 
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Self::Target, ResolveError>;
+impl Resolve for Vec<Statement> {
+    fn resolve(&self, ctx: &mut ResolveCtx) -> Result<Vec<Statement>, ResolveError> {
+        let mut stmts = Vec::new();
+        for s in self {
+            stmts.push(s.resolve(ctx)?);
+        }
+        return Ok(stmts);
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -15,15 +27,15 @@ impl ResolveCtx {
         ResolveCtx(vec![HashSet::new()])
     }
 
-    pub fn begin(&mut self) {
+    pub (in crate) fn begin(&mut self) {
         self.0.push(HashSet::new());
     }
 
-    pub fn end(&mut self) {
+    pub (in crate) fn end(&mut self) {
         self.0.pop();
     }
 
-    pub fn find(&self, name: &str) -> Option<usize> {
+    pub (in crate) fn find(&self, name: &str) -> Option<usize> {
         for (i, s) in self.0.iter().rev().enumerate() {
             if s.contains(name) {
                 return Some(i);
@@ -33,7 +45,7 @@ impl ResolveCtx {
         return None;
     }
 
-    pub fn declare(&mut self, name: &str) -> Result<(), ()> {
+    pub (in crate) fn declare(&mut self, name: &str) -> Result<(), ()> {
         if let Some(s) = self.0.last_mut() {
             if s.contains(name) {
                 return Err(());
@@ -57,7 +69,7 @@ impl ResolveCtx {
 #[derive(Debug, PartialEq)]
 pub enum ResolveErrorEnum {
     VariableNotDeclared,
-    VariableHasBeenDeclared,
+    VariableHaveBeenDeclared,
 }
 
 #[derive(Debug, PartialEq)]
@@ -66,15 +78,28 @@ pub struct ResolveError {
     pub code_span: CodeSpan
 }
 
-#[macro_export]
-macro_rules! resolve_error {
-    (
-        $enum:expr,
-        $code_span:expr
-    ) => {
+impl ResolveError {
+    pub (in crate) fn new(r#enum: ResolveErrorEnum, code_span: CodeSpan) -> Self {
         ResolveError {
-            r#enum: $enum,
-            code_span: $code_span,
+            r#enum,
+            code_span,
+        }
+    }
+}
+
+impl LoxError for ResolveError {
+    fn print(&self, src_lines: &Vec<&str>) -> String {
+        match self.r#enum {
+            ResolveErrorEnum::VariableNotDeclared => {
+                let mut out = "ResolveError: Variable not declared.\r\n".to_string();
+                out += self.code_span.debug_string(src_lines).as_ref();
+                return out;
+            }
+            ResolveErrorEnum::VariableHaveBeenDeclared => {
+                let mut out = "ResolveError: Variable have been declared.\r\n".to_string();
+                out += self.code_span.debug_string(src_lines).as_ref();
+                return out;
+            }
         }
     }
 }

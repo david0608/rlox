@@ -1,14 +1,29 @@
 use std::rc::Rc;
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
-use crate::parse::expression::Expression;
-use crate::resolve::{
-    ResolveCtx,
-    ResolveError,
-};
-use super::{
-    Statement,
-    AsStatement,
+use crate::{
+    code::{
+        Code,
+        code_span::CodeSpan,
+    },
+    parse::{
+        expression::Expression,
+        statement::{
+            Statement,
+            AsStatement,
+        }
+    },
+    scan::token::simple::PRINT_LEXEME,
+    environment::Environment,
+    error::RuntimeError,
+    execute::{
+        Execute,
+        ExecuteOk,
+    },
+    print::Print,
+    resolve::{
+        ResolveCtx,
+        ResolveError,
+    },
+    impl_debug_for_printable,
 };
 
 pub struct PrintStatement {
@@ -32,6 +47,28 @@ impl PrintStatement {
 impl Code for PrintStatement {
     fn code_span(&self) -> CodeSpan {
         self.code_span
+    }
+}
+
+impl Print for PrintStatement {
+    fn print(&self) -> String {
+        format!("{} {};", PRINT_LEXEME, self.value().print())
+    }
+}
+
+impl_debug_for_printable!(PrintStatement);
+
+impl Execute for PrintStatement {
+    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+        match self.value().evaluate(env) {
+            Ok(v) => {
+                println!("{}", v);
+                return Ok(ExecuteOk::KeepGoing);
+            }
+            Err(e) => {
+                return Err(RuntimeError::wrap(e, self.code_span()));
+            }
+        }
     }
 }
 
@@ -66,21 +103,68 @@ macro_rules! print_statement {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::parse::{
-        expression::variable::VariableExpression,
-        statement::print::PrintStatement,
+    use crate::{
+        code::code_span::new_code_span,
+        parse::{
+            expression::variable::VariableExpression,
+            statement::print::PrintStatement,
+        },
+        value::Value,
+        error::{
+            RuntimeError,
+            RuntimeErrorEnum,
+        },
+        print::Print,
+        resolve::{
+            ResolveError,
+            ResolveErrorEnum,
+        },
+        utils::test_utils::{
+            TestContext,
+            parse_statement,
+            parse_statement_unknown,
+        }
     };
-    use crate::resolve::{
-        ResolveError,
-        ResolveErrorEnum,
-    };
-    use crate::utils::test_utils::{
-        TestContext,
-        parse_statement,
-        parse_statement_unknown,
-    };
-    use crate::resolve_error;
+
+    #[test]
+    fn test_print_statement_print() {
+        let tests: Vec<(&str, &str)> = vec![
+            ("print foo;", "print foo;"),
+            ("print 1 + 1;", "print (+ 1 1);"),
+        ];
+        for (src, expect) in tests {
+            assert_eq!(parse_statement::<PrintStatement>(src).print(), expect);
+        }
+    }
+
+    #[test]
+    fn test_print_execute() {
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.execute(
+                parse_statement::<PrintStatement>("print true;").as_ref(),
+            )
+                .is_ok(),
+            true,
+        );
+    }
+
+    #[test]
+    fn test_print_execute_error() {
+        let mut ctx = TestContext::new();
+        assert_eq!(
+            ctx.execute(parse_statement::<PrintStatement>("print true + 1;").as_ref()),
+            Err(
+                RuntimeError::wrap(
+                    RuntimeError::new(
+                        RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                        new_code_span(0, 6, 0, 14),
+                    ),
+                    new_code_span(0, 0, 0, 15),
+                )
+            )
+        );
+    }
 
     #[test]
     fn test_print_statement_resolve() {
@@ -103,7 +187,7 @@ mod tests {
                 parse_statement::<PrintStatement>("print foo;").as_ref()
             )
                 .unwrap_err(),
-            resolve_error!(
+            ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
                 new_code_span(0, 6, 0, 9)
             )

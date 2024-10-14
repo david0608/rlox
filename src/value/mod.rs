@@ -4,11 +4,20 @@ use crate::call::{
     CallError,
 };
 
+pub mod class;
+use class::Class;
+
 pub mod function;
 use function::Function;
 
+pub mod method;
+use method::Method;
+
 pub mod native_function;
 use native_function::NativeFunction;
+
+pub mod object;
+use object::Object;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Value {
@@ -18,6 +27,9 @@ pub enum Value {
     String(String),
     Function(Function),
     NativeFunction(NativeFunction),
+    Class(Class),
+    Object(Object),
+    Method(Method),
 }
 
 impl Value {
@@ -29,6 +41,9 @@ impl Value {
             Value::String(v) => v.len() != 0,
             Value::Function(_) => true,
             Value::NativeFunction(_) => true,
+            Value::Class(_) => true,
+            Value::Object(_) => true,
+            Value::Method(_) => true,
         }
     }
 }
@@ -42,6 +57,9 @@ impl std::fmt::Display for Value {
             Value::String(v) => write!(f, "{}", v),
             Value::Function(v) => write!(f, "{:?}", v),
             Value::NativeFunction(v) => write!(f, "{:?}", v),
+            Value::Class(v) => write!(f, "{:?}", v),
+            Value::Object(v) => write!(f, "{:?}", v),
+            Value::Method(v) => write!(f, "{:?}", v),
         }
     }
 }
@@ -54,6 +72,12 @@ impl Call for Value {
             }
             Value::NativeFunction(f) => {
                 return f.call(arguments);
+            }
+            Value::Class(c) => {
+                return c.call(arguments);
+            }
+            Value::Method(m) => {
+                return m.call(arguments);
             }
             _ => {
                 return Err(CallError::NotCallable);
