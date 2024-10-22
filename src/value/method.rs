@@ -11,7 +11,6 @@ use crate::{
     call::{
         Call,
         CallError,
-        CallResult,
     },
     environment::EnvironmentOps,
     execute::ExecuteOk,
@@ -44,7 +43,7 @@ impl std::cmp::PartialEq for Method {
 }
 
 impl Call for Method {
-    fn call(&self, arguments: Vec<Value>) -> CallResult {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
         let argn_expect = self.definition.parameters().len();
         let argn_found = arguments.len();
         if argn_expect != argn_found {

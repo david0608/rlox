@@ -5,11 +5,11 @@ use crate::{
     },
     call::{
         Call,
-        CallResult,
+        CallError,
     }
 };
 
-pub type NativeFunctionHandler = fn(Vec<Value>) -> CallResult;
+pub type NativeFunctionHandler = fn(Vec<Value>) -> Result<Value, CallError>;
 
 #[derive(Clone)]
 pub struct NativeFunction {
@@ -41,7 +41,7 @@ impl std::cmp::PartialEq for NativeFunction {
 }
 
 impl Call for NativeFunction {
-    fn call(&self, arguments: Vec<Value>) -> CallResult {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
         (self.handler)(arguments)
     }
 }

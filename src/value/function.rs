@@ -6,7 +6,6 @@ use crate::{
     value::Value,
     call::{
         Call,
-        CallResult,
         CallError,
     },
     environment::{
@@ -83,7 +82,7 @@ impl std::cmp::PartialEq for Function {
 }
 
 impl Call for Function {
-    fn call(&self, arguments: Vec<Value>) -> CallResult {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
         let argn_expect = self.parameters.len();
         let argn_found = arguments.len();
         if argn_expect != argn_found {

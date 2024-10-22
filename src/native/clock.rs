@@ -7,10 +7,7 @@ use crate::{
         Value,
         native_function::NativeFunction,
     },
-    call::{
-        CallResult,
-        CallError,
-    },
+    call::CallError,
     environment::{
         Environment,
         EnvironmentOps,
@@ -33,7 +30,7 @@ pub fn add_native_clock(
         .expect("Declare native function clock.");
 }
 
-fn native_function_clock_handler(arguments: Vec<Value>) -> CallResult {
+fn native_function_clock_handler(arguments: Vec<Value>) -> Result<Value, CallError> {
     let argn = arguments.len();
     if argn != 0 {
         return Err(CallError::ArgumentNumberMismatch(0, argn));

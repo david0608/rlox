@@ -10,8 +10,6 @@ pub enum CallError {
     RuntimeError(RuntimeError),
 }
 
-pub type CallResult = std::result::Result<Value, CallError>;
-
 pub trait Call {
-    fn call(&self, arguments: Vec<Value>) -> CallResult;
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError>;
 }

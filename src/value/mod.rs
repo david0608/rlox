@@ -1,6 +1,5 @@
 use crate::call::{
     Call,
-    CallResult,
     CallError,
 };
 
@@ -65,7 +64,7 @@ impl std::fmt::Display for Value {
 }
 
 impl Call for Value {
-    fn call(&self, arguments: Vec<Value>) -> CallResult {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
         match self {
             Value::Function(f) => {
                 return f.call(arguments);

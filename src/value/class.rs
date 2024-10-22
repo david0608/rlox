@@ -12,7 +12,7 @@ use crate::{
     },
     call::{
         Call,
-        CallResult,
+        CallError,
     },
     environment::Environment,
 };
@@ -72,7 +72,7 @@ impl std::cmp::PartialEq for Class {
 }
 
 impl Call for Class {
-    fn call(&self, _: Vec<Value>) -> CallResult {
+    fn call(&self, _: Vec<Value>) -> Result<Value, CallError> {
         Ok(
             Value::Object(
                 Object::new(
