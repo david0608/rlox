@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -59,7 +62,7 @@ impl Print for BlockStatement {
 impl_debug_for_printable!(BlockStatement);
 
 impl Execute for BlockStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         let env = env.new_child();
         for statement in self.statements() {
             let ok = statement.execute(&env)?;

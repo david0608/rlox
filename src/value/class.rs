@@ -1,5 +1,6 @@
 use std::{
     rc::Rc,
+    cell::RefCell,
     collections::HashMap,
 };
 use core::sync::atomic;
@@ -23,18 +24,18 @@ pub fn class_id() -> usize {
     CLASS_COUNTER.fetch_add(1, atomic::Ordering::Relaxed)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Class {
     id: usize,
-    name: IdentifierToken,
-    environment: Environment,
+    name: Rc<IdentifierToken>,
+    environment: Rc<RefCell<Environment>>,
     method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
 }
 
 impl Class {
     pub fn new(
-        name: IdentifierToken,
-        environment: Environment,
+        name: Rc<IdentifierToken>,
+        environment: Rc<RefCell<Environment>>,
         method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
     )
         -> Class
@@ -55,11 +56,11 @@ impl Class {
         &self.name
     }
 
-    pub fn environment(&self) -> &Environment {
+    pub fn environment(&self) -> &Rc<RefCell<Environment>> {
         &self.environment
     }
 
-    pub fn method_definitions(&self) -> &Rc<HashMap<String, Rc<MethodDefinition>>> {
+    pub fn method_definitions(&self) -> &HashMap<String, Rc<MethodDefinition>> {
         &self.method_definitions
     }
 
@@ -71,14 +72,8 @@ impl std::cmp::PartialEq for Class {
     }
 }
 
-impl Call for Class {
+impl Call for Rc<Class> {
     fn call(&self, _: Vec<Value>) -> Result<Value, CallError> {
-        Ok(
-            Value::Object(
-                Object::new(
-                    self.clone(),
-                )
-            )
-        )
+        Ok(Value::Object(Rc::new(RefCell::new(Object::new(self.clone())))))
     }
 }

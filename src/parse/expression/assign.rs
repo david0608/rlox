@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -26,14 +29,14 @@ use crate::{
 };
 
 pub struct AssignExpressionNotResolved {
-    to: IdentifierToken,
+    to: Rc<IdentifierToken>,
     value: Expression,
     code_span: CodeSpan,
 }
 
 impl AssignExpressionNotResolved {
     pub fn new(
-        to: IdentifierToken,
+        to: Rc<IdentifierToken>,
         value: Expression,
         code_span: CodeSpan,
     ) -> AssignExpressionNotResolved
@@ -69,7 +72,7 @@ impl Print for AssignExpressionNotResolved {
 impl_debug_for_printable!(AssignExpressionNotResolved);
 
 impl Evaluate for AssignExpressionNotResolved {
-    fn evaluate(&self, _: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         panic!("AssignExpressionNotResolved can not evaluate.");
     }
 }
@@ -117,7 +120,7 @@ macro_rules! assign_expression_not_resolved {
 }
 
 pub struct AssignExpression {
-    to: IdentifierToken,
+    to: Rc<IdentifierToken>,
     value: Expression,
     code_span: CodeSpan,
     binding: usize,
@@ -125,7 +128,7 @@ pub struct AssignExpression {
 
 impl AssignExpression {
     pub fn new(
-        to: IdentifierToken,
+        to: Rc<IdentifierToken>,
         value: Expression,
         code_span: CodeSpan,
         binding: usize,
@@ -167,7 +170,7 @@ impl Print for AssignExpression {
 impl_debug_for_printable!(AssignExpression);
 
 impl Evaluate for AssignExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let v = match self.value().evaluate(env) {
             Ok(val) => val,
             Err(err) => {

@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -99,7 +102,7 @@ impl Print for BinaryExpression {
 impl_debug_for_printable!(BinaryExpression);
 
 impl Evaluate for BinaryExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let lhs = match self.lhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {

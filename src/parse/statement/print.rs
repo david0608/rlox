@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -59,7 +62,7 @@ impl Print for PrintStatement {
 impl_debug_for_printable!(PrintStatement);
 
 impl Execute for PrintStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         match self.value().evaluate(env) {
             Ok(v) => {
                 println!("{}", v);

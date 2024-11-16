@@ -1,5 +1,9 @@
 use core::sync::atomic;
-use std::iter::zip;
+use std::{
+    iter::zip,
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     parse::statement::Statement,
     scan::token::identifier::IdentifierToken,
@@ -25,19 +29,19 @@ pub fn function_id() -> usize {
 pub struct Function {
     id: usize,
     #[allow(dead_code)]
-    name: IdentifierToken,
-    parameters: Vec<IdentifierToken>,
+    name: Rc<IdentifierToken>,
+    parameters: Vec<Rc<IdentifierToken>>,
     body: Vec<Statement>,
-    environment: Environment,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Function {
     pub fn new(
         id: usize,
-        name: IdentifierToken,
-        parameters: Vec<IdentifierToken>,
+        name: Rc<IdentifierToken>,
+        parameters: Vec<Rc<IdentifierToken>>,
         body: Vec<Statement>,
-        environment: Environment,
+        environment: Rc<RefCell<Environment>>,
     ) -> Function
     {
         Function {
@@ -60,7 +64,7 @@ impl Function {
     }
 
     #[cfg(test)]
-    pub fn parameters(&self) -> &Vec<IdentifierToken> {
+    pub fn parameters(&self) -> &Vec<Rc<IdentifierToken>> {
         &self.parameters
     }
 
@@ -70,7 +74,7 @@ impl Function {
     }
 
     #[allow(dead_code)]
-    pub fn environment(&self) -> &Environment {
+    pub fn environment(&self) -> &Rc<RefCell<Environment>> {
         &self.environment
     }
 }

@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -35,14 +38,14 @@ use crate::{
 };
 
 pub struct VarDeclareStatement {
-    name: IdentifierToken,
+    name: Rc<IdentifierToken>,
     initializer: Option<Expression>,
     code_span: CodeSpan,
 }
 
 impl VarDeclareStatement {
     pub fn new(
-        name: IdentifierToken,
+        name: Rc<IdentifierToken>,
         initializer: Option<Expression>,
         code_span: CodeSpan
     ) -> VarDeclareStatement
@@ -83,7 +86,7 @@ impl Print for VarDeclareStatement {
 impl_debug_for_printable!(VarDeclareStatement);
 
 impl Execute for VarDeclareStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         let mut value = Value::Nil;
         if let Some(i) = self.initializer() {
             match i.evaluate(env) {

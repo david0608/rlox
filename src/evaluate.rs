@@ -1,3 +1,7 @@
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     value::Value,
     environment::Environment,
@@ -5,5 +9,5 @@ use crate::{
 };
 
 pub trait Evaluate {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError>;
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError>;
 }

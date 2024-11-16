@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -74,7 +77,7 @@ impl Print for WhileStatement {
 impl_debug_for_printable!(WhileStatement);
 
 impl Execute for WhileStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         loop {
             if let Some(condition) = self.condition() {
                 match condition.evaluate(env) {

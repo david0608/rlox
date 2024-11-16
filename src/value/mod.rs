@@ -1,3 +1,7 @@
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::call::{
     Call,
     CallError,
@@ -26,9 +30,9 @@ pub enum Value {
     String(String),
     Function(Function),
     NativeFunction(NativeFunction),
-    Class(Class),
-    Object(Object),
-    Method(Method),
+    Class(Rc<Class>),
+    Object(Rc<RefCell<Object>>),
+    Method(Rc<Method>),
 }
 
 impl Value {
@@ -43,6 +47,34 @@ impl Value {
             Value::Class(_) => true,
             Value::Object(_) => true,
             Value::Method(_) => true,
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Result<Value, ()> {
+        let object = if let Value::Object(object) = self {
+            object
+        }
+        else {
+            return Err(());
+        };
+
+        if let Some(v) = object.borrow().properties().get(name) {
+            return Ok(v.clone());
+        }
+        else if let Some(md) = object.borrow().class().method_definitions().get(name) {
+            return Ok(
+                Value::Method(
+                    Rc::new(
+                        Method::new(
+                            md.clone(),
+                            object.clone()
+                        )
+                    )
+                )
+            );
+        }
+        else {
+            return Ok(Value::Nil);
         }
     }
 }

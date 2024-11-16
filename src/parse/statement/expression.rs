@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -58,7 +61,7 @@ impl Print for ExpressionStatement {
 impl_debug_for_printable!(ExpressionStatement);
 
 impl Execute for ExpressionStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         if let Err(e) = self.expression().evaluate(env) {
             return Err(RuntimeError::wrap(e, self.code_span()));
         }

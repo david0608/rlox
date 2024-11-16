@@ -1,5 +1,6 @@
 use std::{
     rc::Rc,
+    cell::RefCell,
     collections::HashMap,
 };
 use crate::{
@@ -34,18 +35,18 @@ use crate::{
     impl_debug_for_printable,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MethodDefinition {
-    name: IdentifierToken,
-    parameters: Vec<IdentifierToken>,
+    name: Rc<IdentifierToken>,
+    parameters: Vec<Rc<IdentifierToken>>,
     body: Vec<Statement>,
     code_span: CodeSpan,
 }
 
 impl MethodDefinition {
     pub fn new(
-        name: IdentifierToken,
-        parameters: Vec<IdentifierToken>,
+        name: Rc<IdentifierToken>,
+        parameters: Vec<Rc<IdentifierToken>>,
         body: Vec<Statement>,
         code_span: CodeSpan,
     )
@@ -63,7 +64,7 @@ impl MethodDefinition {
         &self.name
     }
 
-    pub fn parameters(&self) -> &Vec<IdentifierToken> {
+    pub fn parameters(&self) -> &Vec<Rc<IdentifierToken>> {
         &self.parameters
     }
 
@@ -115,14 +116,14 @@ impl std::fmt::Display for MethodDefinition {
 }
 
 pub struct ClassDeclareStatement {
-    name: IdentifierToken,
+    name: Rc<IdentifierToken>,
     method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
     code_span: CodeSpan,
 }
 
 impl ClassDeclareStatement {
     pub fn new(
-        name: IdentifierToken,
+        name: Rc<IdentifierToken>,
         method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
         code_span: CodeSpan,
     ) -> ClassDeclareStatement
@@ -160,14 +161,16 @@ impl Print for ClassDeclareStatement {
 impl_debug_for_printable!(ClassDeclareStatement);
 
 impl Execute for ClassDeclareStatement {
-    fn execute(&self, env: &Environment) -> ExecuteResult {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
         env.declare(
             self.name().name(),
             Value::Class(
-                Class::new(
-                    self.name.clone(),
-                    env.clone(),
-                    self.method_definitions.clone(),
+                Rc::new(
+                    Class::new(
+                        self.name.clone(),
+                        env.clone(),
+                        self.method_definitions.clone(),
+                    )
                 )
             )
         )

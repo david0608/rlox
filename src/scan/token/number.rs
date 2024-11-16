@@ -3,7 +3,7 @@ use crate::code::{
     code_span::CodeSpan,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct NumberToken {
     literal: f64,
     lexeme: String,

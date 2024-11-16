@@ -153,12 +153,12 @@ impl LoxError for ParserError {
 pub type ParserOutput = (Vec<Statement>, Vec<ParserError>);
 
 pub struct Parser<'tokens> {
-    tokens: &'tokens Vec<Token>,
+    tokens: &'tokens Vec<Rc<Token>>,
     current: usize,
 }
 
 impl<'tokens> Parser<'tokens> {
-    pub fn new(tokens: &'tokens Vec<Token>) -> Parser<'tokens> {
+    pub fn new(tokens: &'tokens Vec<Rc<Token>>) -> Parser<'tokens> {
         Parser {
             tokens,
             current: 0,
@@ -178,7 +178,7 @@ impl<'tokens> Parser<'tokens> {
             return true;
         }
 
-        if let Token::Simple(st) = self.tokens[self.current] {
+        if let Token::Simple(st) = self.tokens[self.current].as_ref() {
             if st.variant() == SimpleTokenEnum::Eof {
                 return true;
             }
@@ -188,7 +188,7 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn peek(&self) -> Option<&'tokens Token> {
-        self.tokens.get(self.current)
+        self.tokens.get(self.current).map(|t| t.as_ref())
     }
 
     fn peek_simple(&self, variant: SimpleTokenEnum) -> Option<&'tokens SimpleToken> {
@@ -233,7 +233,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn consume_identifier(&mut self) -> Result<&'tokens IdentifierToken, ParserError> {
+    fn consume_identifier(&mut self) -> Result<&'tokens Rc<IdentifierToken>, ParserError> {
         if let Some(t) = self.peek() {
             match t {
                 Token::Identifier(ref it) => {
@@ -1027,7 +1027,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn parse(tokens: &Vec<Token>) -> ParserOutput {
+    pub fn parse(tokens: &Vec<Rc<Token>>) -> ParserOutput {
         let mut p = Parser::new(tokens);
         let mut stmts: Vec<Statement> = Vec::new();
         let mut errors: Vec<ParserError> = Vec::new();
@@ -1048,6 +1048,7 @@ impl<'tokens> Parser<'tokens> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
     use crate::{
         code::{
             code_point::CodePoint,
@@ -1404,7 +1405,7 @@ mod tests {
             p.primary().unwrap_err(),
             ParserError::UnexpectedEnd(CodePoint::new(0, 0))
         );
-        let ts: Vec<Token> = vec![];
+        let ts: Vec<Rc<Token>> = vec![];
         let mut p = Parser::new(&ts);
         assert_eq!(
             p.primary().unwrap_err(),

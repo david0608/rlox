@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -26,7 +29,7 @@ use crate::{
 
 pub struct SetExpression {
     object: Expression,
-    name: IdentifierToken,
+    name: Rc<IdentifierToken>,
     value: Expression,
     code_span: CodeSpan,
 }
@@ -34,7 +37,7 @@ pub struct SetExpression {
 impl SetExpression {
     pub fn new(
         object: Expression,
-        name: IdentifierToken,
+        name: Rc<IdentifierToken>,
         value: Expression,
         code_span: CodeSpan,
     )
@@ -64,30 +67,29 @@ impl Print for SetExpression {
 impl_debug_for_printable!(SetExpression);
 
 impl Evaluate for SetExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
-        let value = match self.object.evaluate(env) {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        let lhs = match self.object.evaluate(env) {
             Ok(v) => v,
             Err(e) => {
                 return Err(RuntimeError::wrap(e, self.code_span))
             }
         };
-        let object = if let Value::Object(object) = value {
+
+        let object = if let Value::Object(object) = lhs {
             object
         }
         else {
             return Err(
                 RuntimeError::new(
-                    RuntimeErrorEnum::CanNotSetProperty(value),
+                    RuntimeErrorEnum::CanNotSetProperty(lhs),
                     self.code_span,
                 )
             );
         };
-        return Ok(
-            object.set(
-                self.name.name(),
-                self.value.evaluate(env)?,
-            )
-        );
+
+        let rhs = self.value.evaluate(env)?;
+        object.borrow_mut().set(self.name.name().to_string(), rhs.clone());
+        return Ok(rhs);
     }
 }
 

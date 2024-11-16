@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    rc::Rc,
+};
 use crate::{
     code::{
         code_point::CodePoint,
@@ -33,7 +36,7 @@ impl LoxError for ScannerError {
     }
 }
 
-pub type ScannerOutput = (Vec<Token>, Vec<ScannerError>);
+pub type ScannerOutput = (Vec<Rc<Token>>, Vec<ScannerError>);
 
 pub struct Scanner<'src> {
     src: &'src str,
@@ -41,7 +44,7 @@ pub struct Scanner<'src> {
     char: usize,
     start: usize,
     current: usize,
-    tokens: Vec<Token>,
+    tokens: Vec<Rc<Token>>,
     errors: Vec<ScannerError>,
 }
 
@@ -151,7 +154,7 @@ impl<'src> Scanner<'src> {
     }
 
     fn simple_token(&mut self, variant: SimpleTokenEnum) {
-        self.tokens.push(Token::new_simple(variant, self.get_code_span()));
+        self.tokens.push(Rc::new(Token::new_simple(variant, self.get_code_span())));
     }
 
     fn slash_token_or_comment(&mut self) {
@@ -180,10 +183,12 @@ impl<'src> Scanner<'src> {
                 if c == "\"" {
                     self.advance();
                     self.tokens.push(
-                        Token::new_string(
-                            &self.src[(self.start + 1)..(self.current - 1)],
-                            &self.src[self.start..self.current],
-                            CodeSpan::new(start, CodePoint::new(self.line, self.char)),
+                        Rc::new(
+                            Token::new_string(
+                                &self.src[(self.start + 1)..(self.current - 1)],
+                                &self.src[self.start..self.current],
+                                CodeSpan::new(start, CodePoint::new(self.line, self.char)),
+                            )
                         )
                     );
                     return;
@@ -214,10 +219,12 @@ impl<'src> Scanner<'src> {
         if !self.peek_check_equal(".") {
             let nstr = &self.src[self.start..self.current];
             self.tokens.push(
-                Token::new_number(
-                    f64::from_str(nstr).unwrap(),
-                    nstr,
-                    self.get_code_span(),
+                Rc::new(
+                    Token::new_number(
+                        f64::from_str(nstr).unwrap(),
+                        nstr,
+                        self.get_code_span(),
+                    )
                 )
             );
             return;
@@ -232,10 +239,12 @@ impl<'src> Scanner<'src> {
 
         let nstr = &self.src[self.start..self.current];
         self.tokens.push(
-            Token::new_number(
-                f64::from_str(nstr).unwrap(),
-                nstr,
-                self.get_code_span(),
+            Rc::new(
+                Token::new_number(
+                    f64::from_str(nstr).unwrap(),
+                    nstr,
+                    self.get_code_span(),
+                )
             )
         );
     }
@@ -266,9 +275,11 @@ impl<'src> Scanner<'src> {
             "nil" => self.simple_token(SimpleTokenEnum::Nil),
             _ => {
                 self.tokens.push(
-                    Token::new_identifier(
-                        lexeme,
-                        self.get_code_span(),
+                    Rc::new(
+                        Token::new_identifier(
+                            lexeme,
+                            self.get_code_span(),
+                        )
                     )
                 );
             }
@@ -623,7 +634,7 @@ mod tests {
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 1)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::LeftParen);
             }
@@ -641,7 +652,7 @@ mod tests {
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 1), CodePoint::new(0, 2)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Slash);
             }
@@ -663,7 +674,7 @@ mod tests {
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 6)));
-        match t {
+        match t.as_ref() {
             Token::String(st) => {
                 assert_eq!(st.literal(), "test");
             }
@@ -691,7 +702,7 @@ mod tests {
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 3)));
-        match t {
+        match t.as_ref() {
             Token::Number(nt) => {
                 assert_eq!(nt.literal(), 123.0);
             }
@@ -704,7 +715,7 @@ mod tests {
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[1];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 5), CodePoint::new(0, 10)));
-        match t {
+        match t.as_ref() {
             Token::Number(nt) => {
                 assert_eq!(nt.literal(), 10.01);
             }
@@ -722,7 +733,7 @@ mod tests {
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 2)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::If);
             }
@@ -730,7 +741,7 @@ mod tests {
         }
         let t = &s.tokens[1];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(1, 0), CodePoint::new(1, 4)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Else);
             }
@@ -751,7 +762,7 @@ mod tests {
         assert_eq!(errors.len(), 0);
         let t = &tokens[0];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 3)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Fun);
             }
@@ -759,7 +770,7 @@ mod tests {
         }
         let t = &tokens[1];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 4), CodePoint::new(0, 9)));
-        match t {
+        match t.as_ref() {
             Token::Identifier(it) => {
                 assert_eq!(it.name(), "hello");
             }
@@ -767,7 +778,7 @@ mod tests {
         }
         let t = &tokens[2];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 9), CodePoint::new(0, 10)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::LeftParen);
             }
@@ -775,7 +786,7 @@ mod tests {
         }
         let t = &tokens[3];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 10), CodePoint::new(0, 11)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::RightParen);
             }
@@ -783,7 +794,7 @@ mod tests {
         }
         let t = &tokens[4];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 12), CodePoint::new(0, 13)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::LeftBrace);
             }
@@ -791,7 +802,7 @@ mod tests {
         }
         let t = &tokens[5];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(1, 0), CodePoint::new(1, 5)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Print);
             }
@@ -799,7 +810,7 @@ mod tests {
         }
         let t = &tokens[6];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(1, 6), CodePoint::new(1, 20)));
-        match t {
+        match t.as_ref() {
             Token::String(st) => {
                 assert_eq!(st.literal(), "Hello world!");
             }
@@ -807,7 +818,7 @@ mod tests {
         }
         let t = &tokens[7];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(2, 0), CodePoint::new(2, 1)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::RightBrace);
             }
@@ -815,7 +826,7 @@ mod tests {
         }
         let t = &tokens[8];
         assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(3, 0), CodePoint::new(3, 0)));
-        match t {
+        match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Eof);
             }
@@ -880,7 +891,7 @@ mod tests {
                 CodePoint::new(1, 0),
             ),
         );
-        match tokens[0] {
+        match tokens[0].as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Eof);
             }
@@ -915,7 +926,7 @@ mod tests {
                 CodePoint::new(2, 0),
             ),
         );
-        match tokens[0] {
+        match tokens[0].as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Eof);
             }

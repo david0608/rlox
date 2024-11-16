@@ -1,6 +1,9 @@
 #[cfg(test)]
 pub mod test_utils {
-    use std::rc::Rc;
+    use std::{
+        rc::Rc,
+        cell::RefCell,
+    };
     use crate::{
         parse::{
             expression::{
@@ -65,14 +68,14 @@ pub mod test_utils {
     }
 
     pub struct TestContext {
-        pub environment: Environment,
+        pub environment: Rc<RefCell<Environment>>,
         pub resolve_context: ResolveCtx,
     }
 
     impl TestContext {
         pub fn new() -> TestContext {
             TestContext {
-                environment: <Environment as EnvironmentOps>::new(),
+                environment: <Rc<RefCell<Environment>> as EnvironmentOps>::new(),
                 resolve_context: ResolveCtx::new(),
             }
         }

@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -90,7 +93,7 @@ impl Print for IfStatement {
 impl_debug_for_printable!(IfStatement);
 
 impl Execute for IfStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         let condition = match self.condition().evaluate(env) {
             Ok(val) => val.is_truthy(),
             Err(err) => {

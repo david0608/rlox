@@ -6,19 +6,17 @@ use std::{
 use crate::value::Value;
 
 #[derive(Debug)]
-pub struct EnvironmentStruct {
+pub struct Environment {
     values: HashMap<String, Value>,
-    parent: Option<Environment>,
+    parent: Option<Rc<RefCell<Environment>>>,
 }
 
-pub type Environment = Rc<RefCell<EnvironmentStruct>>;
-
 pub trait EnvironmentOps {
-    fn new() -> Environment;
+    fn new() -> Rc<RefCell<Environment>>;
 
-    fn new_child(&self) -> Environment;
+    fn new_child(&self) -> Rc<RefCell<Environment>>;
 
-    fn parent(&self) -> Option<Environment>;
+    fn parent(&self) -> Option<Rc<RefCell<Environment>>>;
 
     fn has(&self, name: &str, depth: usize) -> bool;
 
@@ -29,11 +27,11 @@ pub trait EnvironmentOps {
     fn declare(&self, name: &str, value: Value) -> Result<(), ()>;
 }
 
-impl EnvironmentOps for Environment {
-    fn new() -> Environment {
+impl EnvironmentOps for Rc<RefCell<Environment>> {
+    fn new() -> Rc<RefCell<Environment>> {
         Rc::new(
             RefCell::new(
-                EnvironmentStruct {
+                Environment {
                     values: HashMap::new(),
                     parent: None,
                 }
@@ -41,10 +39,10 @@ impl EnvironmentOps for Environment {
         )
     }
 
-    fn new_child(&self) -> Environment {
+    fn new_child(&self) -> Rc<RefCell<Environment>> {
         Rc::new(
             RefCell::new(
-                EnvironmentStruct {
+                Environment {
                     values: HashMap::new(),
                     parent: Some(self.clone()),
                 }
@@ -52,7 +50,7 @@ impl EnvironmentOps for Environment {
         )
     }
 
-    fn parent(&self) -> Option<Environment> {
+    fn parent(&self) -> Option<Rc<RefCell<Environment>>> {
         if let Some(e) = self.borrow().parent.as_ref() {
             return Some(e.clone());
         }
@@ -127,15 +125,21 @@ impl EnvironmentOps for Environment {
 
 #[cfg(test)]
 mod tests {
-    use crate::value::Value;
-    use crate::environment::{
-        Environment,
-        EnvironmentOps,
+    use std::{
+        rc::Rc,
+        cell::RefCell,
+    };
+    use crate::{
+        value::Value,
+        environment::{
+            Environment,
+            EnvironmentOps,
+        }
     };
 
     #[test]
     fn test_environment_has() {
-        let penv = <Environment as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
         penv.declare("foo", Value::Bool(true)).expect("declare foo.");
         let cenv = penv.new_child();
         cenv.declare("bar", Value::Bool(false)).expect("declare foo.");
@@ -151,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_environment_get() {
-        let penv = <Environment as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
         penv.declare("foo", Value::Bool(true)).expect("declare foo.");
         let cenv = penv.new_child();
         cenv.declare("bar", Value::Bool(false)).expect("declare foo.");
@@ -167,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_environment_set() {
-        let penv = <Environment as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
         penv.declare("foo", Value::Number(0.0)).expect("declare foo.");
         let cenv = penv.new_child();
         cenv.declare("bar", Value::Number(1.0)).expect("declare foo.");
@@ -186,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_declare() {
-        let penv = <Environment as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
         assert_eq!(penv.declare("foo", Value::Bool(true)), Ok(()));
         assert_eq!(penv.declare("foo", Value::Bool(true)), Err(()));
         let cenv = penv.new_child();

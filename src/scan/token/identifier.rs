@@ -1,7 +1,9 @@
-use crate::code::Code;
-use crate::code::code_span::CodeSpan;
+use crate::code::{
+    Code,
+    code_span::CodeSpan,
+};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct IdentifierToken {
     name: String,
     code_span: CodeSpan,

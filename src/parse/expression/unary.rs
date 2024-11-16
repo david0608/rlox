@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -76,7 +79,7 @@ impl Print for UnaryExpression {
 impl_debug_for_printable!(UnaryExpression);
 
 impl Evaluate for UnaryExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let rhs = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {

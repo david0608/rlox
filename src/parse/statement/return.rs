@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -69,7 +72,7 @@ impl Print for ReturnStatement {
 impl_debug_for_printable!(ReturnStatement);
 
 impl Execute for ReturnStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         if let Some(e) = self.expression() {
             match e.evaluate(env) {
                 Ok(v) => {

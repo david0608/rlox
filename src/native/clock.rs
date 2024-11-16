@@ -1,6 +1,10 @@
-use std::time::{
-    UNIX_EPOCH,
-    SystemTime,
+use std::{
+    time::{
+        UNIX_EPOCH,
+        SystemTime,
+    },
+    rc::Rc,
+    cell::RefCell,
 };
 use crate::{
     value::{
@@ -17,7 +21,7 @@ use crate::{
 
 pub fn add_native_clock(
     resolve_context: &mut ResolveCtx,
-    environment: &Environment,
+    environment: &Rc<RefCell<Environment>>,
 ) {
     resolve_context.declare("clock")
         .expect("Declare native function clock.");
@@ -65,7 +69,7 @@ mod tests {
     #[test]
     fn test_native_function_clock() {
         let mut ctx = ResolveCtx::new();
-        let env = <Environment as EnvironmentOps>::new();
+        let env = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
         add_native_clock(&mut ctx, &env);
 
         assert_eq!(ctx.find("clock").unwrap(), 0);

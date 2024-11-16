@@ -1,3 +1,7 @@
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     value::Value,
     environment::Environment,
@@ -14,5 +18,5 @@ pub enum ExecuteOk {
 pub type ExecuteResult = std::result::Result<ExecuteOk, RuntimeError>;
 
 pub trait Execute {
-    fn execute(&self, env: &Environment) -> ExecuteResult;
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult;
 }

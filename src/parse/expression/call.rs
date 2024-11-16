@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -75,7 +78,7 @@ impl Print for CallExpression {
 impl_debug_for_printable!(CallExpression);
 
 impl Evaluate for CallExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let callee = match self.callee().evaluate(env) {
             Ok(val) => val,
             Err(err) => {

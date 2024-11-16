@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -9,7 +12,10 @@ use crate::{
         AsExpression,
     },
     scan::token::identifier::IdentifierToken,
-    value::Value,
+    value::{
+        Value,
+        method::Method,
+    },
     environment::Environment,
     error::{
         RuntimeError,
@@ -26,14 +32,14 @@ use crate::{
 
 pub struct GetExpression {
     object: Expression,
-    name: IdentifierToken,
+    name: Rc<IdentifierToken>,
     code_span: CodeSpan,
 }
 
 impl GetExpression {
     pub fn new(
         object: Expression,
-        name: IdentifierToken,
+        name: Rc<IdentifierToken>,
         code_span: CodeSpan,
     )
         -> GetExpression
@@ -49,7 +55,7 @@ impl GetExpression {
         &self.object
     }
 
-    pub fn name(&self) -> &IdentifierToken {
+    pub fn name(&self) -> &Rc<IdentifierToken> {
         &self.name
     }
 }
@@ -69,13 +75,14 @@ impl Print for GetExpression {
 impl_debug_for_printable!(GetExpression);
 
 impl Evaluate for GetExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let value = match self.object.evaluate(env) {
             Ok(v) => v,
             Err(e) => {
                 return Err(RuntimeError::wrap(e, self.code_span))
             }
         };
+
         let object = if let Value::Object(object) = value {
             object
         }
@@ -87,7 +94,25 @@ impl Evaluate for GetExpression {
                 )
             );
         };
-        return Ok(object.get(self.name.name()));
+
+        if let Some(v) = object.borrow().properties().get(self.name().name()) {
+            return Ok(v.clone());
+        }
+        else if let Some(md) = object.borrow().class().method_definitions().get(self.name().name()) {
+            return Ok(
+                Value::Method(
+                    Rc::new(
+                        Method::new(
+                            md.clone(),
+                            object.clone(),
+                        )
+                    )
+                )
+            );
+        }
+        else {
+            return Ok(Value::Nil);
+        };
     }
 }
 

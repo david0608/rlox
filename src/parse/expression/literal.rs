@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -31,8 +34,8 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiteralExpressionEnum {
-    Number(NumberToken),
-    String(StringToken),
+    Number(Rc<NumberToken>),
+    String(Rc<StringToken>),
     True,
     False,
     Nil
@@ -77,7 +80,7 @@ impl Print for LiteralExpression {
 impl_debug_for_printable!(LiteralExpression);
 
 impl Evaluate for LiteralExpression {
-    fn evaluate(&self, _: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         match self.variant() {
             LiteralExpressionEnum::Nil => Ok(Value::Nil),
             LiteralExpressionEnum::True => Ok(Value::Bool(true)),

@@ -40,7 +40,7 @@ pub const FALSE_LEXEME: &str = "false";
 pub const NIL_LEXEME: &str = "nil";
 pub const EOF_LEXEME: &str = "eof";
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SimpleTokenEnum {
     LeftParen,
     RightParen,
@@ -123,7 +123,7 @@ impl SimpleTokenEnum {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct SimpleToken {
     variant: SimpleTokenEnum,
     code_span: CodeSpan,

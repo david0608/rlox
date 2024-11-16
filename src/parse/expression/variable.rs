@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -26,12 +29,12 @@ use crate::{
 };
 
 pub struct VariableExpressionNotResolved {
-    from: IdentifierToken,
+    from: Rc<IdentifierToken>,
 }
 
 impl VariableExpressionNotResolved {
     pub fn new(
-        from: IdentifierToken,
+        from: Rc<IdentifierToken>,
     ) -> VariableExpressionNotResolved
     {
         VariableExpressionNotResolved {
@@ -39,7 +42,7 @@ impl VariableExpressionNotResolved {
         }
     }
 
-    pub fn from(&self) -> &IdentifierToken {
+    pub fn from(&self) -> &Rc<IdentifierToken> {
         &self.from
     }
 }
@@ -59,7 +62,7 @@ impl Print for VariableExpressionNotResolved {
 impl_debug_for_printable!(VariableExpressionNotResolved);
 
 impl Evaluate for VariableExpressionNotResolved {
-    fn evaluate(&self, _: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         panic!("VariableExpressionNotResolved can not evaluate");
     }
 }
@@ -105,13 +108,13 @@ macro_rules! variable_expression_not_resolved {
 }
 
 pub struct VariableExpression {
-    from: IdentifierToken,
+    from: Rc<IdentifierToken>,
     binding: usize,
 }
 
 impl VariableExpression {
     pub fn new(
-        from: IdentifierToken,
+        from: Rc<IdentifierToken>,
         binding: usize,
     ) -> VariableExpression
     {
@@ -121,7 +124,7 @@ impl VariableExpression {
         }
     }
 
-    pub fn from(&self) -> &IdentifierToken {
+    pub fn from(&self) -> &Rc<IdentifierToken> {
         &self.from
     }
 
@@ -145,7 +148,7 @@ impl Print for VariableExpression {
 impl_debug_for_printable!(VariableExpression);
 
 impl Evaluate for VariableExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         if let Some(v) = env.get(
             self.from().name(),
             self.binding(),

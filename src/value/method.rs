@@ -1,5 +1,6 @@
 use std::{
     rc::Rc,
+    cell::RefCell,
     iter::zip,
 };
 use crate::{
@@ -16,16 +17,16 @@ use crate::{
     execute::ExecuteOk,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Method {
     definition: Rc<MethodDefinition>,
-    this: Object,
+    this: Rc<RefCell<Object>>,
 }
 
 impl Method {
     pub fn new(
         definition: Rc<MethodDefinition>,
-        this: Object,
+        this: Rc<RefCell<Object>>,
     ) -> Method
     {
         Method {
@@ -37,7 +38,7 @@ impl Method {
 
 impl std::cmp::PartialEq for Method {
     fn eq(&self, other: &Self) -> bool {
-        self.this.class().id() == other.this.class().id()
+        self.this.borrow().class().id() == other.this.borrow().class().id()
         && self.definition.name().name() == other.definition.name().name()
     }
 }
@@ -49,7 +50,7 @@ impl Call for Method {
         if argn_expect != argn_found {
             return Err(CallError::ArgumentNumberMismatch(argn_expect, argn_found));
         }
-        let env = self.this.class().environment().new_child();
+        let env = self.this.borrow().class().environment().new_child();
         if env.declare("this", Value::Object(self.this.clone())).is_err() {
             unreachable!();
         }

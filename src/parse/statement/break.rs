@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -52,7 +55,7 @@ impl Print for BreakStatement {
 impl_debug_for_printable!(BreakStatement);
 
 impl Execute for BreakStatement {
-    fn execute(&self, _: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, _: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         return Ok(ExecuteOk::Break);
     }
 }

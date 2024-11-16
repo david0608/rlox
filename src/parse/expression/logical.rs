@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -84,7 +87,7 @@ impl Print for LogicalExpression {
 impl_debug_for_printable!(LogicalExpression);
 
 impl Evaluate for LogicalExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let lv = match self.lhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {

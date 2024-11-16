@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -35,16 +38,16 @@ use crate::{
 };
 
 pub struct FunDeclareStatement {
-    name: IdentifierToken,
-    parameters: Vec<IdentifierToken>,
+    name: Rc<IdentifierToken>,
+    parameters: Vec<Rc<IdentifierToken>>,
     body: Vec<Statement>,
     code_span: CodeSpan,
 }
 
 impl FunDeclareStatement {
     pub fn new(
-        name: IdentifierToken,
-        parameters: Vec<IdentifierToken>,
+        name: Rc<IdentifierToken>,
+        parameters: Vec<Rc<IdentifierToken>>,
         body: Vec<Statement>,
         code_span: CodeSpan,
     ) -> FunDeclareStatement
@@ -57,11 +60,11 @@ impl FunDeclareStatement {
         }
     }
 
-    pub fn name(&self) -> &IdentifierToken {
+    pub fn name(&self) -> &Rc<IdentifierToken> {
         &self.name
     }
 
-    pub fn parameters(&self) -> &Vec<IdentifierToken> {
+    pub fn parameters(&self) -> &Vec<Rc<IdentifierToken>> {
         &self.parameters
     }
 
@@ -90,7 +93,7 @@ impl Print for FunDeclareStatement {
 impl_debug_for_printable!(FunDeclareStatement);
 
 impl Execute for FunDeclareStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         env.declare(
             self.name().name(),
             Value::Function(

@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -106,7 +109,7 @@ impl Print for ForStatement {
 impl_debug_for_printable!(ForStatement);
 
 impl Execute for ForStatement {
-    fn execute(&self, env: &Environment) -> Result<ExecuteOk, RuntimeError> {
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         let env = env.new_child();
 
         if let Some(initializer) = self.initializer() {

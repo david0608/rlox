@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    cell::RefCell,
+};
 use crate::{
     code::{
         Code,
@@ -53,7 +56,7 @@ impl Print for GroupingExpression {
 impl_debug_for_printable!(GroupingExpression);
 
 impl Evaluate for GroupingExpression {
-    fn evaluate(&self, env: &Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         match self.expression().evaluate(env) {
             Ok(v) => Ok(v),
             Err(e) => Err(RuntimeError::wrap(e, self.code_span))
