@@ -21,7 +21,7 @@ use crate::{
     },
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     error::RuntimeError,
     execute::{
@@ -185,7 +185,7 @@ mod tests {
             },
         },
         value::Value,
-        environment::EnvironmentOps,
+        environment::EnvironmentT,
         execute::{
             Execute,
             ExecuteOk,

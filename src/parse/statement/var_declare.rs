@@ -21,7 +21,7 @@ use crate::{
     value::Value,
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     error::RuntimeError,
     execute::{
@@ -156,7 +156,7 @@ mod tests {
             statement::var_declare::VarDeclareStatement,
         },
         value::Value,
-        environment::EnvironmentOps,
+        environment::EnvironmentT,
         error::{
             RuntimeError,
             RuntimeErrorEnum,

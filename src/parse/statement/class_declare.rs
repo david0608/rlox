@@ -19,7 +19,7 @@ use crate::{
     },
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     execute::{
         Execute,
@@ -235,7 +235,7 @@ mod tests {
             },
         },
         value::Value,
-        environment::EnvironmentOps,
+        environment::EnvironmentT,
         execute::{
             Execute,
             ExecuteOk,

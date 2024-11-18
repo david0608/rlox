@@ -14,7 +14,7 @@ use crate::{
     call::CallError,
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     resolve::ResolveCtx,
 };
@@ -62,14 +62,14 @@ mod tests {
     };
     use crate::environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     };
     use crate::resolve::ResolveCtx;
 
     #[test]
     fn test_native_function_clock() {
         let mut ctx = ResolveCtx::new();
-        let env = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
+        let env = <Rc<RefCell<Environment>> as EnvironmentT>::new();
         add_native_clock(&mut ctx, &env);
 
         assert_eq!(ctx.find("clock").unwrap(), 0);

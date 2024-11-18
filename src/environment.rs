@@ -11,7 +11,7 @@ pub struct Environment {
     parent: Option<Rc<RefCell<Environment>>>,
 }
 
-pub trait EnvironmentOps {
+pub trait EnvironmentT {
     fn new() -> Rc<RefCell<Environment>>;
 
     fn new_child(&self) -> Rc<RefCell<Environment>>;
@@ -27,7 +27,7 @@ pub trait EnvironmentOps {
     fn declare(&self, name: &str, value: Value) -> Result<(), ()>;
 }
 
-impl EnvironmentOps for Rc<RefCell<Environment>> {
+impl EnvironmentT for Rc<RefCell<Environment>> {
     fn new() -> Rc<RefCell<Environment>> {
         Rc::new(
             RefCell::new(
@@ -133,13 +133,13 @@ mod tests {
         value::Value,
         environment::{
             Environment,
-            EnvironmentOps,
+            EnvironmentT,
         }
     };
 
     #[test]
     fn test_environment_has() {
-        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentT>::new();
         penv.declare("foo", Value::Bool(true)).expect("declare foo.");
         let cenv = penv.new_child();
         cenv.declare("bar", Value::Bool(false)).expect("declare foo.");
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_environment_get() {
-        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentT>::new();
         penv.declare("foo", Value::Bool(true)).expect("declare foo.");
         let cenv = penv.new_child();
         cenv.declare("bar", Value::Bool(false)).expect("declare foo.");
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_environment_set() {
-        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentT>::new();
         penv.declare("foo", Value::Number(0.0)).expect("declare foo.");
         let cenv = penv.new_child();
         cenv.declare("bar", Value::Number(1.0)).expect("declare foo.");
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_declare() {
-        let penv = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
+        let penv = <Rc<RefCell<Environment>> as EnvironmentT>::new();
         assert_eq!(penv.declare("foo", Value::Bool(true)), Ok(()));
         assert_eq!(penv.declare("foo", Value::Bool(true)), Err(()));
         let cenv = penv.new_child();

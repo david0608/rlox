@@ -187,7 +187,7 @@ mod tests {
             }
         },
         value::Value,
-        environment::EnvironmentOps,
+        environment::EnvironmentT,
         execute::ExecuteOk,
         print::Print,
         resolve::{

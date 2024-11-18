@@ -23,7 +23,7 @@ pub mod test_utils {
         value::Value,
         environment::{
             Environment,
-            EnvironmentOps,
+            EnvironmentT,
         },
         error::RuntimeError,
         execute::ExecuteResult,
@@ -75,7 +75,7 @@ pub mod test_utils {
     impl TestContext {
         pub fn new() -> TestContext {
             TestContext {
-                environment: <Rc<RefCell<Environment>> as EnvironmentOps>::new(),
+                environment: <Rc<RefCell<Environment>> as EnvironmentT>::new(),
                 resolve_context: ResolveCtx::new(),
             }
         }

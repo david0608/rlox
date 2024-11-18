@@ -15,7 +15,7 @@ use crate::{
     value::Value,
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     error::RuntimeError,
     evaluate::Evaluate,

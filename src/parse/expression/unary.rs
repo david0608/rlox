@@ -157,7 +157,7 @@ mod tests {
             variable::VariableExpression,
         },
         value::Value,
-        environment::EnvironmentOps,
+        environment::EnvironmentT,
         error::{
             RuntimeError,
             RuntimeErrorEnum,

@@ -8,7 +8,7 @@ use rlox::{
     scan::Scan,
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     error::LoxError,
     resolve::{
@@ -28,7 +28,7 @@ fn run_prompt() -> Result {
     let input = std::io::stdin();
     let mut output = std::io::stdout().lock();
     let mut resolve_context = ResolveCtx::new();
-    let env = <Rc<RefCell<Environment>> as EnvironmentOps>::new();
+    let env = <Rc<RefCell<Environment>> as EnvironmentT>::new();
 
     loop {
         output.write(b"> ")?;

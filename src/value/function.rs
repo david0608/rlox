@@ -14,7 +14,7 @@ use crate::{
     },
     environment::{
         Environment,
-        EnvironmentOps,
+        EnvironmentT,
     },
     execute::ExecuteOk,
 };
@@ -128,7 +128,7 @@ mod tests {
         Call,
         CallError,
     };
-    use crate::environment::EnvironmentOps;
+    use crate::environment::EnvironmentT;
     use crate::error::{
         RuntimeError,
         RuntimeErrorEnum,
