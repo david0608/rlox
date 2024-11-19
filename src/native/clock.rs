@@ -52,19 +52,28 @@ fn native_function_clock_handler(arguments: Vec<Value>) -> Result<Value, CallErr
 
 #[cfg(test)]
 mod tests {
-    use std::thread::sleep;
-    use std::time::Duration;
-    use super::*;
-    use crate::value::Value;
-    use crate::call::{
-        Call,
-        CallError,
+    use std::{
+        rc::Rc,
+        cell::RefCell,
+        thread::sleep,
+        time::Duration,
     };
-    use crate::environment::{
-        Environment,
-        EnvironmentT,
+    use crate::{
+        native::{
+            add_native_clock,
+            clock::native_function_clock_handler,
+        },
+        value::Value,
+        call::{
+            Call,
+            CallError,
+        },
+        environment::{
+            Environment,
+            EnvironmentT,
+        },
+        resolve::ResolveCtx
     };
-    use crate::resolve::ResolveCtx;
 
     #[test]
     fn test_native_function_clock() {
