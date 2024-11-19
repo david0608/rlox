@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::statement::{
-        Statement,
-        AsStatement,
-    },
+    parse::statement::Statement,
     environment::{
         Environment,
         EnvironmentT,
@@ -29,19 +26,19 @@ use crate::{
 };
 
 pub struct BlockStatement {
-    statements: Vec<Statement>,
+    statements: Vec<Rc<dyn Statement>>,
     code_span: CodeSpan,
 }
 
 impl BlockStatement {
-    pub fn new(statements: Vec<Statement>, code_span: CodeSpan) -> BlockStatement {
+    pub fn new(statements: Vec<Rc<dyn Statement>>, code_span: CodeSpan) -> BlockStatement {
         BlockStatement {
             statements,
             code_span,
         }
     }
 
-    pub fn statements(&self) -> &Vec<Statement> {
+    pub fn statements(&self) -> &Vec<Rc<dyn Statement>> {
         &self.statements
     }
 }
@@ -82,20 +79,18 @@ impl Execute for BlockStatement {
     }
 }
 
-impl AsStatement for BlockStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for BlockStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         context.begin();
         let stmts = self.statements.iter().map(|s| s.resolve(context)).collect();
         context.end();
         match stmts {
             Ok(stmts) => {
                 return Ok(
-                    Statement(
-                        Rc::new(
-                            BlockStatement::new(
-                                stmts,
-                                self.code_span.clone(),
-                            )
+                    Rc::new(
+                        BlockStatement::new(
+                            stmts,
+                            self.code_span.clone(),
                         )
                     )
                 );
@@ -110,12 +105,10 @@ impl AsStatement for BlockStatement {
 #[macro_export]
 macro_rules! block_statement {
     ( $statements:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                BlockStatement::new(
-                    $statements,
-                    $code_span,
-                )
+        Rc::new(
+            BlockStatement::new(
+                $statements,
+                $code_span,
             )
         )
     }
@@ -145,10 +138,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            },
         },
     };
 

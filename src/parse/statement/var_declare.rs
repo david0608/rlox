@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     scan::token::{
         identifier::IdentifierToken,
@@ -39,14 +36,14 @@ use crate::{
 
 pub struct VarDeclareStatement {
     name: Rc<IdentifierToken>,
-    initializer: Option<Expression>,
+    initializer: Option<Rc<dyn Expression>>,
     code_span: CodeSpan,
 }
 
 impl VarDeclareStatement {
     pub fn new(
         name: Rc<IdentifierToken>,
-        initializer: Option<Expression>,
+        initializer: Option<Rc<dyn Expression>>,
         code_span: CodeSpan
     ) -> VarDeclareStatement
     {
@@ -61,7 +58,7 @@ impl VarDeclareStatement {
         &self.name
     }
 
-    pub fn initializer(&self) -> Option<&Expression> {
+    pub fn initializer(&self) -> Option<&Rc<dyn Expression>> {
         self.initializer.as_ref()
     }
 }
@@ -102,8 +99,8 @@ impl Execute for VarDeclareStatement {
     }
 }
 
-impl AsStatement for VarDeclareStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for VarDeclareStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         let initializer = if let Some(e) = self.initializer.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -119,13 +116,11 @@ impl AsStatement for VarDeclareStatement {
             );
         }
         return Ok(
-            Statement(
-                Rc::new(
-                    VarDeclareStatement::new(
-                        self.name.clone(),
-                        initializer,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                VarDeclareStatement::new(
+                    self.name.clone(),
+                    initializer,
+                    self.code_span.clone(),
                 )
             )
         );
@@ -135,13 +130,11 @@ impl AsStatement for VarDeclareStatement {
 #[macro_export]
 macro_rules! var_declare_statement {
     ( $identifier:expr, $initializer:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                VarDeclareStatement::new(
-                    $identifier,
-                    $initializer,
-                    $code_span,
-                )
+        Rc::new(
+            VarDeclareStatement::new(
+                $identifier,
+                $initializer,
+                $code_span,
             )
         )
     };
@@ -166,10 +159,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            }
         }
     };
 

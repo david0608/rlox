@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     value::Value,
     environment::Environment,
     error::{
@@ -34,14 +31,14 @@ pub enum UnaryExpressionEnum {
 
 pub struct UnaryExpression {
     variant: UnaryExpressionEnum,
-    rhs: Expression,
+    rhs: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl UnaryExpression {
     pub fn new(
         variant: UnaryExpressionEnum, 
-        rhs: Expression,
+        rhs: Rc<dyn Expression>,
         code_span: CodeSpan,
     ) -> UnaryExpression
     {
@@ -56,7 +53,7 @@ impl UnaryExpression {
         self.variant
     }
 
-    pub fn rhs(&self) -> &Expression {
+    pub fn rhs(&self) -> &Rc<dyn Expression> {
         &self.rhs
     }
 }
@@ -116,16 +113,14 @@ impl Evaluate for UnaryExpression {
     }
 }
 
-impl AsExpression for UnaryExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for UnaryExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    UnaryExpression::new(
-                        self.variant,
-                        self.rhs.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                UnaryExpression::new(
+                    self.variant,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -135,13 +130,11 @@ impl AsExpression for UnaryExpression {
 #[macro_export]
 macro_rules! unary_expression {
     ( $variant:ident, $rhs:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                UnaryExpression::new(
-                    UnaryExpressionEnum::$variant,
-                    $rhs,
-                    $code_span,
-                )
+        Rc::new(
+            UnaryExpression::new(
+                UnaryExpressionEnum::$variant,
+                $rhs,
+                $code_span,
             )
         )
     };
@@ -167,11 +160,14 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown,
+            },
+        }
     };
 
     #[test]

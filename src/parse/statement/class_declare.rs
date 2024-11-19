@@ -8,10 +8,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::statement::{
-        Statement,
-        AsStatement,
-    },
+    parse::statement::Statement,
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
@@ -39,7 +36,7 @@ use crate::{
 pub struct MethodDefinition {
     name: Rc<IdentifierToken>,
     parameters: Vec<Rc<IdentifierToken>>,
-    body: Vec<Statement>,
+    body: Vec<Rc<dyn Statement>>,
     code_span: CodeSpan,
 }
 
@@ -47,7 +44,7 @@ impl MethodDefinition {
     pub fn new(
         name: Rc<IdentifierToken>,
         parameters: Vec<Rc<IdentifierToken>>,
-        body: Vec<Statement>,
+        body: Vec<Rc<dyn Statement>>,
         code_span: CodeSpan,
     )
         -> MethodDefinition
@@ -68,7 +65,7 @@ impl MethodDefinition {
         &self.parameters
     }
 
-    pub fn body(&self) -> &Vec<Statement> {
+    pub fn body(&self) -> &Vec<Rc<dyn Statement>> {
         &self.body
     }
 
@@ -90,7 +87,7 @@ impl MethodDefinition {
                 );
             }
         }
-        let body = self.body.iter().map(|s| s.resolve(context)).collect::<Result<Vec<Statement>, ResolveError>>()?;
+        let body = self.body.iter().map(|s| s.resolve(context)).collect::<Result<Vec<Rc<dyn Statement>>, ResolveError>>()?;
         context.end();
         return Ok(
             MethodDefinition::new(
@@ -179,8 +176,8 @@ impl Execute for ClassDeclareStatement {
     }
 }
 
-impl AsStatement for ClassDeclareStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for ClassDeclareStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         if context.declare(self.name.name()).is_err() {
             return Err(
                 ResolveError::new(
@@ -194,13 +191,11 @@ impl AsStatement for ClassDeclareStatement {
             method_defs.insert(key.to_owned(), Rc::new(method.resolve(context)?));
         }
         return Ok(
-            Statement(
-                Rc::new(
-                    ClassDeclareStatement::new(
-                        self.name.clone(),
-                        Rc::new(method_defs),
-                        self.code_span,
-                    )
+            Rc::new(
+                ClassDeclareStatement::new(
+                    self.name.clone(),
+                    Rc::new(method_defs),
+                    self.code_span,
                 )
             )
         );
@@ -210,13 +205,11 @@ impl AsStatement for ClassDeclareStatement {
 #[macro_export]
 macro_rules! class_declare_statement {
     ( $identifier:expr, $method_definitions:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                ClassDeclareStatement::new(
-                    $identifier,
-                    $method_definitions,
-                    $code_span,
-                )
+        Rc::new(
+            ClassDeclareStatement::new(
+                $identifier,
+                $method_definitions,
+                $code_span,
             )
         )
     };
@@ -245,10 +238,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            },
         },
     };
 

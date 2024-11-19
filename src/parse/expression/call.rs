@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     value::Value,
     call::{
         Call,
@@ -31,15 +28,15 @@ use crate::{
 };
 
 pub struct CallExpression {
-    callee: Expression,
-    arguments: Vec<Expression>,
+    callee: Rc<dyn Expression>,
+    arguments: Vec<Rc<dyn Expression>>,
     code_span: CodeSpan,
 }
 
 impl CallExpression {
     pub fn new(
-        callee: Expression,
-        arguments: Vec<Expression>,
+        callee: Rc<dyn Expression>,
+        arguments: Vec<Rc<dyn Expression>>,
         code_span: CodeSpan,
     ) -> CallExpression
     {
@@ -50,11 +47,11 @@ impl CallExpression {
         }
     }
 
-    pub fn callee(&self) -> &Expression {
+    pub fn callee(&self) -> &Rc<dyn Expression> {
         &self.callee
     }
 
-    pub fn arguments(&self) -> &Vec<Expression> {
+    pub fn arguments(&self) -> &Vec<Rc<dyn Expression>> {
         &self.arguments
     }
 }
@@ -127,22 +124,20 @@ impl Evaluate for CallExpression {
     }
 }
 
-impl AsExpression for CallExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for CallExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    CallExpression::new(
-                        self.callee.resolve(context)?,
-                        self.arguments.iter().try_fold(
-                            Vec::new(),
-                            |mut args, a| {
-                                args.push(a.resolve(context)?);
-                                Ok(args)
-                            },
-                        )?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                CallExpression::new(
+                    self.callee.resolve(context)?,
+                    self.arguments.iter().try_fold(
+                        Vec::new(),
+                        |mut args, a| {
+                            args.push(a.resolve(context)?);
+                            Ok(args)
+                        },
+                    )?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -152,13 +147,11 @@ impl AsExpression for CallExpression {
 #[macro_export]
 macro_rules! call_expression {
     ( $callee:expr, $arguments:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                CallExpression::new(
-                    $callee,
-                    $arguments,
-                    $code_span
-                )
+        Rc::new(
+            CallExpression::new(
+                $callee,
+                $arguments,
+                $code_span
             )
         )
     }
@@ -182,10 +175,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown
+            }
         }
     };
 

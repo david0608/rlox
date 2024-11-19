@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     value::Value,
     environment::Environment,
     error::{
@@ -42,16 +39,16 @@ pub enum BinaryExpressionEnum {
 
 pub struct BinaryExpression {
     variant: BinaryExpressionEnum,
-    lhs: Expression,
-    rhs: Expression,
+    lhs: Rc<dyn Expression>,
+    rhs: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl BinaryExpression {
     pub fn new(
         variant: BinaryExpressionEnum,
-        lhs: Expression,
-        rhs: Expression,
+        lhs: Rc<dyn Expression>,
+        rhs: Rc<dyn Expression>,
         code_span: CodeSpan,
     ) -> BinaryExpression
     {
@@ -67,11 +64,11 @@ impl BinaryExpression {
         self.variant
     }
 
-    pub fn lhs(&self) -> &Expression {
+    pub fn lhs(&self) -> &Rc<dyn Expression> {
         &self.lhs
     }
 
-    pub fn rhs(&self) -> &Expression {
+    pub fn rhs(&self) -> &Rc<dyn Expression> {
         &self.rhs
     }
 }
@@ -271,17 +268,15 @@ impl Evaluate for BinaryExpression {
     }
 }
 
-impl AsExpression for BinaryExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for BinaryExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    BinaryExpression::new(
-                        self.variant,
-                        self.lhs.resolve(context)?,
-                        self.rhs.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                BinaryExpression::new(
+                    self.variant,
+                    self.lhs.resolve(context)?,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -291,14 +286,12 @@ impl AsExpression for BinaryExpression {
 #[macro_export]
 macro_rules! binary_expression {
     ( $variant:ident, $lhs:expr, $rhs:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                BinaryExpression::new(
-                    BinaryExpressionEnum::$variant,
-                    $lhs,
-                    $rhs,
-                    $code_span
-                )
+        Rc::new(
+            BinaryExpression::new(
+                BinaryExpressionEnum::$variant,
+                $lhs,
+                $rhs,
+                $code_span
             )
         )
     };
@@ -322,11 +315,14 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-            evaluate_src,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown,
+                evaluate_src,
+            }
         }
     };
 

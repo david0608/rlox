@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     value::Value,
     environment::Environment,
     error::RuntimeError,
@@ -31,16 +28,16 @@ pub enum LogicalExpressionEnum {
 
 pub struct LogicalExpression {
     variant: LogicalExpressionEnum,
-    lhs: Expression,
-    rhs: Expression,
+    lhs: Rc<dyn Expression>,
+    rhs: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl LogicalExpression {
     pub fn new(
         variant: LogicalExpressionEnum,
-        lhs: Expression,
-        rhs: Expression,
+        lhs: Rc<dyn Expression>,
+        rhs: Rc<dyn Expression>,
         code_span: CodeSpan,
     ) -> LogicalExpression
     {
@@ -56,11 +53,11 @@ impl LogicalExpression {
         self.variant
     }
 
-    pub fn lhs(&self) -> &Expression {
+    pub fn lhs(&self) -> &Rc<dyn Expression> {
         &self.lhs
     }
 
-    pub fn rhs(&self) -> &Expression {
+    pub fn rhs(&self) -> &Rc<dyn Expression> {
         &self.rhs
     }
 }
@@ -119,17 +116,15 @@ impl Evaluate for LogicalExpression {
     }
 }
 
-impl AsExpression for LogicalExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for LogicalExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    LogicalExpression::new(
-                        self.variant,
-                        self.lhs.resolve(context)?,
-                        self.rhs.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                LogicalExpression::new(
+                    self.variant,
+                    self.lhs.resolve(context)?,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -139,14 +134,12 @@ impl AsExpression for LogicalExpression {
 #[macro_export]
 macro_rules! logical_expression {
     ( $variant:ident, $lhs:expr, $rhs:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                LogicalExpression::new(
-                    LogicalExpressionEnum::$variant,
-                    $lhs,
-                    $rhs,
-                    $code_span
-                )
+        Rc::new(
+            LogicalExpression::new(
+                LogicalExpressionEnum::$variant,
+                $lhs,
+                $rhs,
+                $code_span
             )
         )
     }
@@ -170,11 +163,14 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-            evaluate_src,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown,
+                evaluate_src,
+            }
         }
     };
 

@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
@@ -31,14 +28,14 @@ use crate::{
 };
 
 pub struct GetExpression {
-    object: Expression,
+    object: Rc<dyn Expression>,
     name: Rc<IdentifierToken>,
     code_span: CodeSpan,
 }
 
 impl GetExpression {
     pub fn new(
-        object: Expression,
+        object: Rc<dyn Expression>,
         name: Rc<IdentifierToken>,
         code_span: CodeSpan,
     )
@@ -51,7 +48,7 @@ impl GetExpression {
         }
     }
 
-    pub fn object(&self) -> &Expression {
+    pub fn object(&self) -> &Rc<dyn Expression> {
         &self.object
     }
 
@@ -116,17 +113,15 @@ impl Evaluate for GetExpression {
     }
 }
 
-impl AsExpression for GetExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for GetExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    GetExpression {
-                        object: self.object.resolve(context)?,
-                        name: self.name.clone(),
-                        code_span: self.code_span,
-                    }
-                )
+            Rc::new(
+                GetExpression {
+                    object: self.object.resolve(context)?,
+                    name: self.name.clone(),
+                    code_span: self.code_span,
+                }
             )
         )
     }
@@ -135,13 +130,11 @@ impl AsExpression for GetExpression {
 #[macro_export]
 macro_rules! get_expression {
     ( $object:expr, $name:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                GetExpression::new(
-                    $object,
-                    $name,
-                    $code_span,
-                )
+        Rc::new(
+            GetExpression::new(
+                $object,
+                $name,
+                $code_span,
             )
         )
     }
@@ -165,11 +158,14 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown,
+            },
+        }
     };
 
     #[test]

@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     scan::token::simple::PRINT_LEXEME,
     environment::Environment,
@@ -30,19 +27,19 @@ use crate::{
 };
 
 pub struct PrintStatement {
-    value: Expression,
+    value: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl PrintStatement {
-    pub fn new(value: Expression, code_span: CodeSpan) -> PrintStatement {
+    pub fn new(value: Rc<dyn Expression>, code_span: CodeSpan) -> PrintStatement {
         PrintStatement {
             value,
             code_span,
         }
     }
 
-    pub fn value(&self) -> &Expression {
+    pub fn value(&self) -> &Rc<dyn Expression> {
         &self.value
     }
 }
@@ -75,15 +72,13 @@ impl Execute for PrintStatement {
     }
 }
 
-impl AsStatement for PrintStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for PrintStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
-            Statement(
-                Rc::new(
-                    PrintStatement::new(
-                        self.value.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                PrintStatement::new(
+                    self.value.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -93,12 +88,10 @@ impl AsStatement for PrintStatement {
 #[macro_export]
 macro_rules! print_statement {
     ( $expression:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                PrintStatement::new(
-                    $expression,
-                    $code_span,
-                )
+        Rc::new(
+            PrintStatement::new(
+                $expression,
+                $code_span,
             )
         )
     }
@@ -122,10 +115,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            }
         }
     };
 

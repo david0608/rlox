@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     environment::Environment,
     error::RuntimeError,
@@ -29,15 +26,15 @@ use crate::{
 };
 
 pub struct WhileStatement {
-    condition: Option<Expression>,
-    body: Statement,
+    condition: Option<Rc<dyn Expression>>,
+    body: Rc<dyn Statement>,
     code_span: CodeSpan,
 }
 
 impl WhileStatement {
     pub fn new(
-        condition: Option<Expression>,
-        body: Statement,
+        condition: Option<Rc<dyn Expression>>,
+        body: Rc<dyn Statement>,
         code_span: CodeSpan
     ) -> WhileStatement
     {
@@ -48,11 +45,11 @@ impl WhileStatement {
         }
     }
 
-    pub fn condition(&self) -> Option<&Expression> {
+    pub fn condition(&self) -> Option<&Rc<dyn Expression>> {
         self.condition.as_ref()
     }
 
-    pub fn body(&self) -> &Statement {
+    pub fn body(&self) -> &Rc<dyn Statement> {
         &self.body
     }
 }
@@ -110,8 +107,8 @@ impl Execute for WhileStatement {
     }
 }
 
-impl AsStatement for WhileStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for WhileStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         let condition = if let Some(e) = self.condition.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -119,13 +116,11 @@ impl AsStatement for WhileStatement {
             None
         };
         return Ok(
-            Statement(
-                Rc::new(
-                    WhileStatement::new(
-                        condition,
-                        self.body.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                WhileStatement::new(
+                    condition,
+                    self.body.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         );
@@ -135,25 +130,21 @@ impl AsStatement for WhileStatement {
 #[macro_export]
 macro_rules! while_statement {
     ( $body:expr, $span:expr ) => {
-        Statement(
-            Rc::new(
-                WhileStatement::new(
-                    None,
-                    $body,
-                    $span,
-                )
+        Rc::new(
+            WhileStatement::new(
+                None,
+                $body,
+                $span,
             )
         )
     };
 
     ( $condition:expr, $body:expr, $span:expr ) => {
-        Statement(
-            Rc::new(
-                WhileStatement::new(
-                    Some($condition),
-                    $body,
-                    $span,
-                )
+        Rc::new(
+            WhileStatement::new(
+                Some($condition),
+                $body,
+                $span,
             )
         )
     }
@@ -179,10 +170,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            }
         }
     };
 

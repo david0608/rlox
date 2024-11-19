@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     value::Value,
     environment::Environment,
     error::RuntimeError,
@@ -24,19 +21,19 @@ use crate::{
 };
 
 pub struct GroupingExpression {
-    expression: Expression,
+    expression: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl GroupingExpression {
-    pub fn new(expression: Expression, code_span: CodeSpan) -> GroupingExpression {
+    pub fn new(expression: Rc<dyn Expression>, code_span: CodeSpan) -> GroupingExpression {
         GroupingExpression {
             expression,
             code_span,
         }
     }
 
-    pub fn expression(&self) -> &Expression {
+    pub fn expression(&self) -> &Rc<dyn Expression> {
         &self.expression
     }
 }
@@ -64,15 +61,13 @@ impl Evaluate for GroupingExpression {
     }
 }
 
-impl AsExpression for GroupingExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for GroupingExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    GroupingExpression::new(
-                        self.expression.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                GroupingExpression::new(
+                    self.expression.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -82,12 +77,10 @@ impl AsExpression for GroupingExpression {
 #[macro_export]
 macro_rules! grouping_expression {
     ( $expression:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                GroupingExpression::new(
-                    $expression,
-                    $code_span
-                )
+        Rc::new(
+            GroupingExpression::new(
+                $expression,
+                $code_span
             )
         )
     };
@@ -110,12 +103,15 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-            evaluate_src
-        },
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown,
+                evaluate_src
+            },
+        }
     };
 
     #[test]

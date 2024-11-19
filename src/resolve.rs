@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use std::{
+    rc::Rc,
+    collections::HashSet,
+};
 use crate::{
     code::code_span::CodeSpan,
     parse::statement::Statement,
@@ -6,11 +9,11 @@ use crate::{
 };
 
 pub trait Resolve {
-    fn resolve(&self, ctx: &mut ResolveCtx) -> Result<Vec<Statement>, ResolveError>;
+    fn resolve(&self, ctx: &mut ResolveCtx) -> Result<Vec<Rc<dyn Statement>>, ResolveError>;
 }
 
-impl Resolve for Vec<Statement> {
-    fn resolve(&self, ctx: &mut ResolveCtx) -> Result<Vec<Statement>, ResolveError> {
+impl Resolve for Vec<Rc<dyn Statement>> {
+    fn resolve(&self, ctx: &mut ResolveCtx) -> Result<Vec<Rc<dyn Statement>>, ResolveError> {
         let mut stmts = Vec::new();
         for s in self {
             stmts.push(s.resolve(ctx)?);

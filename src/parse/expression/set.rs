@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
     value::Value,
     environment::Environment,
@@ -28,17 +25,17 @@ use crate::{
 };
 
 pub struct SetExpression {
-    object: Expression,
+    object: Rc<dyn Expression>,
     name: Rc<IdentifierToken>,
-    value: Expression,
+    value: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl SetExpression {
     pub fn new(
-        object: Expression,
+        object: Rc<dyn Expression>,
         name: Rc<IdentifierToken>,
-        value: Expression,
+        value: Rc<dyn Expression>,
         code_span: CodeSpan,
     )
         -> SetExpression
@@ -93,18 +90,16 @@ impl Evaluate for SetExpression {
     }
 }
 
-impl AsExpression for SetExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for SetExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    SetExpression {
-                        object: self.object.resolve(context)?,
-                        name: self.name.clone(),
-                        value: self.value.resolve(context)?,
-                        code_span: self.code_span.clone(),
-                    }
-                )
+            Rc::new(
+                SetExpression {
+                    object: self.object.resolve(context)?,
+                    name: self.name.clone(),
+                    value: self.value.resolve(context)?,
+                    code_span: self.code_span.clone(),
+                }
             )
         )
     }
@@ -113,14 +108,12 @@ impl AsExpression for SetExpression {
 #[macro_export]
 macro_rules! set_expression {
     ( $object:expr, $name:expr, $value:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                SetExpression::new(
-                    $object,
-                    $name,
-                    $value,
-                    $code_span,
-                )
+        Rc::new(
+            SetExpression::new(
+                $object,
+                $name,
+                $value,
+                $code_span,
             )
         )
     }
@@ -140,11 +133,14 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown,
-        },
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown,
+            },
+        }
     };
 
     #[test]

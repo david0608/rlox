@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
     value::Value,
     environment::{
@@ -30,14 +27,14 @@ use crate::{
 
 pub struct AssignExpressionNotResolved {
     to: Rc<IdentifierToken>,
-    value: Expression,
+    value: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl AssignExpressionNotResolved {
     pub fn new(
         to: Rc<IdentifierToken>,
-        value: Expression,
+        value: Rc<dyn Expression>,
         code_span: CodeSpan,
     ) -> AssignExpressionNotResolved
     {
@@ -52,7 +49,7 @@ impl AssignExpressionNotResolved {
         &self.to
     }
 
-    pub fn value(&self) -> &Expression {
+    pub fn value(&self) -> &Rc<dyn Expression> {
         &self.value
     }
 }
@@ -77,18 +74,16 @@ impl Evaluate for AssignExpressionNotResolved {
     }
 }
 
-impl AsExpression for AssignExpressionNotResolved {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for AssignExpressionNotResolved {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         if let Some(d) = context.find(self.to.name()) {
             return Ok(
-                Expression(
-                    Rc::new(
-                        AssignExpression::new(
-                            self.to.clone(),
-                            self.value.resolve(context)?,
-                            self.code_span.clone(),
-                            d,
-                        )
+                Rc::new(
+                    AssignExpression::new(
+                        self.to.clone(),
+                        self.value.resolve(context)?,
+                        self.code_span.clone(),
+                        d,
                     )
                 )
             );
@@ -107,13 +102,11 @@ impl AsExpression for AssignExpressionNotResolved {
 #[macro_export]
 macro_rules! assign_expression_not_resolved {
     ( $to:expr, $value:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                AssignExpressionNotResolved::new(
-                    $to,
-                    $value,
-                    $code_span
-                )
+        Rc::new(
+            AssignExpressionNotResolved::new(
+                $to,
+                $value,
+                $code_span
             )
         )
     };
@@ -121,7 +114,7 @@ macro_rules! assign_expression_not_resolved {
 
 pub struct AssignExpression {
     to: Rc<IdentifierToken>,
-    value: Expression,
+    value: Rc<dyn Expression>,
     code_span: CodeSpan,
     binding: usize,
 }
@@ -129,7 +122,7 @@ pub struct AssignExpression {
 impl AssignExpression {
     pub fn new(
         to: Rc<IdentifierToken>,
-        value: Expression,
+        value: Rc<dyn Expression>,
         code_span: CodeSpan,
         binding: usize,
     ) -> AssignExpression
@@ -146,7 +139,7 @@ impl AssignExpression {
         &self.to
     }
 
-    pub fn value(&self) -> &Expression {
+    pub fn value(&self) -> &Rc<dyn Expression> {
         &self.value
     }
 
@@ -191,17 +184,15 @@ impl Evaluate for AssignExpression {
     }
 }
 
-impl AsExpression for AssignExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for AssignExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    AssignExpression::new(
-                        self.to.clone(),
-                        self.value.resolve(context)?,
-                        self.code_span.clone(),
-                        self.binding,
-                    )
+            Rc::new(
+                AssignExpression::new(
+                    self.to.clone(),
+                    self.value.resolve(context)?,
+                    self.code_span.clone(),
+                    self.binding,
                 )
             )
         )
@@ -245,10 +236,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_expression,
-            parse_expression_unknown
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_expression,
+                parse_expression_unknown
+            }
         }
     };
 

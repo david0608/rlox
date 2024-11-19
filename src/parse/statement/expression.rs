@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     environment::Environment,
     error::RuntimeError,
@@ -29,19 +26,19 @@ use crate::{
 };
 
 pub struct ExpressionStatement {
-    expression: Expression,
+    expression: Rc<dyn Expression>,
     code_span: CodeSpan,
 }
 
 impl ExpressionStatement {
-    pub fn new(expression: Expression, code_span: CodeSpan) -> ExpressionStatement {
+    pub fn new(expression: Rc<dyn Expression>, code_span: CodeSpan) -> ExpressionStatement {
         ExpressionStatement {
             expression,
             code_span,
         }
     }
 
-    pub fn expression(&self) -> &Expression {
+    pub fn expression(&self) -> &Rc<dyn Expression> {
         &self.expression
     }
 }
@@ -71,15 +68,13 @@ impl Execute for ExpressionStatement {
     }
 }
 
-impl AsStatement for ExpressionStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for ExpressionStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
-            Statement(
-                Rc::new(
-                    ExpressionStatement::new(
-                        self.expression.resolve(context)?,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                ExpressionStatement::new(
+                    self.expression.resolve(context)?,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -89,12 +84,10 @@ impl AsStatement for ExpressionStatement {
 #[macro_export]
 macro_rules! expression_statement {
     ( $expression:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                ExpressionStatement::new(
-                    $expression,
-                    $code_span,
-                )
+        Rc::new(
+            ExpressionStatement::new(
+                $expression,
+                $code_span,
             )
         )
     }
@@ -119,11 +112,14 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        },
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            },
+        }
     };
 
     #[test]

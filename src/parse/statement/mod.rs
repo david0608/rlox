@@ -1,7 +1,7 @@
 use std::{
     any::Any,
     rc::Rc,
-    ops::Deref,
+    fmt::Debug,
 };
 use crate::{
     code::Code,
@@ -10,7 +10,8 @@ use crate::{
     resolve::{
         ResolveCtx,
         ResolveError,
-    }
+    },
+    utils::Downcast,
 };
 
 pub mod block;
@@ -25,36 +26,23 @@ pub mod r#return;
 pub mod var_declare;
 pub mod r#while;
 
-pub trait AsStatement
+pub trait Statement
     where
     Self: Code
         + Print
         + Execute
-        + std::fmt::Debug
+        + Debug
         + Any
 {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError>;
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError>;
 }
 
-#[derive(Clone, Debug)]
-pub struct Statement(pub Rc<dyn AsStatement>);
+impl Downcast for Rc<dyn Statement> {
+    fn downcast<T: Any>(self) -> Option<Rc<T>> {
+        (self as Rc<dyn Any>).downcast::<T>().ok()
+    }
 
-impl Statement {
-    #[cfg(test)]
-    pub fn downcast_ref<T: AsStatement>(&self) -> Option<&T> {
+    fn downcast_ref<T: 'static>(&self) -> Option<&T> {
         (self.as_ref() as &dyn Any).downcast_ref::<T>()
-    }
-
-    #[cfg(test)]
-    pub fn downcast<T: AsStatement>(self) -> Result<Rc<T>, Rc<dyn Any>> {
-        (self.0 as Rc<dyn Any>).downcast::<T>()
-    }
-}
-
-impl Deref for Statement {
-    type Target = Rc<dyn AsStatement>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

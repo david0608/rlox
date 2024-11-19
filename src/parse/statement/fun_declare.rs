@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::statement::{
-        Statement,
-        AsStatement,
-    },
+    parse::statement::Statement,
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
@@ -40,7 +37,7 @@ use crate::{
 pub struct FunDeclareStatement {
     name: Rc<IdentifierToken>,
     parameters: Vec<Rc<IdentifierToken>>,
-    body: Vec<Statement>,
+    body: Vec<Rc<dyn Statement>>,
     code_span: CodeSpan,
 }
 
@@ -48,7 +45,7 @@ impl FunDeclareStatement {
     pub fn new(
         name: Rc<IdentifierToken>,
         parameters: Vec<Rc<IdentifierToken>>,
-        body: Vec<Statement>,
+        body: Vec<Rc<dyn Statement>>,
         code_span: CodeSpan,
     ) -> FunDeclareStatement
     {
@@ -68,7 +65,7 @@ impl FunDeclareStatement {
         &self.parameters
     }
 
-    pub fn body(&self) -> &Vec<Statement> {
+    pub fn body(&self) -> &Vec<Rc<dyn Statement>> {
         &self.body
     }
 }
@@ -111,8 +108,8 @@ impl Execute for FunDeclareStatement {
     }
 }
 
-impl AsStatement for FunDeclareStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for FunDeclareStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         if context.declare(self.name.name()).is_err() {
             return Err(
                 ResolveError::new(
@@ -138,14 +135,12 @@ impl AsStatement for FunDeclareStatement {
         match body {
             Ok(body) => {
                 return Ok(
-                    Statement(
-                        Rc::new(
-                            FunDeclareStatement::new(
-                                self.name.clone(),
-                                self.parameters.clone(),
-                                body,
-                                self.code_span.clone(),
-                            )
+                    Rc::new(
+                        FunDeclareStatement::new(
+                            self.name.clone(),
+                            self.parameters.clone(),
+                            body,
+                            self.code_span.clone(),
                         )
                     )
                 );
@@ -160,14 +155,12 @@ impl AsStatement for FunDeclareStatement {
 #[macro_export]
 macro_rules! fun_declare_statement {
     ( $identifier:expr, $parameters:expr, $body:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                FunDeclareStatement::new(
-                    $identifier,
-                    $parameters,
-                    $body,
-                    $code_span,
-                )
+        Rc::new(
+            FunDeclareStatement::new(
+                $identifier,
+                $parameters,
+                $body,
+                $code_span,
             )
         )
     };
@@ -195,10 +188,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            },
         },
     };
 

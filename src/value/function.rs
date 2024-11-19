@@ -31,7 +31,7 @@ pub struct Function {
     #[allow(dead_code)]
     name: Rc<IdentifierToken>,
     parameters: Vec<Rc<IdentifierToken>>,
-    body: Vec<Statement>,
+    body: Vec<Rc<dyn Statement>>,
     environment: Rc<RefCell<Environment>>,
 }
 
@@ -40,7 +40,7 @@ impl Function {
         id: usize,
         name: Rc<IdentifierToken>,
         parameters: Vec<Rc<IdentifierToken>>,
-        body: Vec<Statement>,
+        body: Vec<Rc<dyn Statement>>,
         environment: Rc<RefCell<Environment>>,
     ) -> Function
     {
@@ -69,7 +69,7 @@ impl Function {
     }
 
     #[cfg(test)]
-    pub fn body(&self) -> &Vec<Statement> {
+    pub fn body(&self) -> &Vec<Rc<dyn Statement>> {
         &self.body
     }
 

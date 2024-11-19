@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     environment::Environment,
     error::RuntimeError,
@@ -29,17 +26,17 @@ use crate::{
 };
 
 pub struct IfStatement {
-    condition: Expression,
-    then_statement: Statement,
-    else_statement: Option<Statement>,
+    condition: Rc<dyn Expression>,
+    then_statement: Rc<dyn Statement>,
+    else_statement: Option<Rc<dyn Statement>>,
     code_span: CodeSpan,
 }
 
 impl IfStatement {
     pub fn new(
-        condition: Expression,
-        then_statement: Statement,
-        else_statement: Option<Statement>,
+        condition: Rc<dyn Expression>,
+        then_statement: Rc<dyn Statement>,
+        else_statement: Option<Rc<dyn Statement>>,
         code_span: CodeSpan,
     ) -> IfStatement
     {
@@ -51,15 +48,15 @@ impl IfStatement {
         }
     }
 
-    pub fn condition(&self) -> &Expression {
+    pub fn condition(&self) -> &Rc<dyn Expression> {
         &self.condition
     }
 
-    pub fn then_statement(&self) -> &Statement {
+    pub fn then_statement(&self) -> &Rc<dyn Statement> {
         &self.then_statement
     }
 
-    pub fn else_statement(&self) -> Option<&Statement> {
+    pub fn else_statement(&self) -> Option<&Rc<dyn Statement>> {
         self.else_statement.as_ref()
     }
 }
@@ -120,8 +117,8 @@ impl Execute for IfStatement {
     }
 }
 
-impl AsStatement for IfStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for IfStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         let condition = self.condition.resolve(context)?;
         let then = self.then_statement.resolve(context)?;
         let r#else = if let Some(stmt) = self.else_statement.as_ref() {
@@ -131,14 +128,12 @@ impl AsStatement for IfStatement {
             None
         };
         return Ok(
-            Statement(
-                Rc::new(
-                    IfStatement::new(
-                        condition,
-                        then,
-                        r#else,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                IfStatement::new(
+                    condition,
+                    then,
+                    r#else,
+                    self.code_span.clone(),
                 )
             )
         );
@@ -148,27 +143,23 @@ impl AsStatement for IfStatement {
 #[macro_export]
 macro_rules! if_statement {
     ( $condition:expr, $then_statement:expr, $else_statement:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                IfStatement::new(
-                    $condition,
-                    $then_statement,
-                    Some($else_statement),
-                    $code_span,
-                )
+        Rc::new(
+            IfStatement::new(
+                $condition,
+                $then_statement,
+                Some($else_statement),
+                $code_span,
             )
         )
     };
 
     ( $condition:expr, $then_statement:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                IfStatement::new(
-                    $condition,
-                    $then_statement,
-                    None,
-                    $code_span,
-                )
+        Rc::new(
+            IfStatement::new(
+                $condition,
+                $then_statement,
+                None,
+                $code_span,
             )
         )
     };
@@ -194,10 +185,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            },
         }
     };
 

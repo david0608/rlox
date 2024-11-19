@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::statement::{
-        Statement,
-        AsStatement,
-    },
+    parse::statement::Statement,
     environment::Environment,
     error::RuntimeError,
     execute::{
@@ -60,14 +57,12 @@ impl Execute for BreakStatement {
     }
 }
 
-impl AsStatement for BreakStatement {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for BreakStatement {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
-            Statement(
-                Rc::new(
-                    BreakStatement::new(
-                        self.code_span.clone()
-                    )
+            Rc::new(
+                BreakStatement::new(
+                    self.code_span.clone()
                 )
             )
         )
@@ -77,11 +72,9 @@ impl AsStatement for BreakStatement {
 #[macro_export]
 macro_rules! break_statement {
     ( $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                BreakStatement::new(
-                    $code_span,
-                )
+        Rc::new(
+            BreakStatement::new(
+                $code_span,
             )
         )
     }
@@ -92,10 +85,7 @@ mod tests {
     use std::rc::Rc;
     use crate::{
         code::code_span::new_code_span,
-        parse::statement::{
-            Statement,
-            r#break::BreakStatement,
-        },
+        parse::statement::r#break::BreakStatement,
         execute::ExecuteOk,
         print::Print,
         utils::test_utils::{

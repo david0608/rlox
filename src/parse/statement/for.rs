@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     environment::{
         Environment,
@@ -32,19 +29,19 @@ use crate::{
 };
 
 pub struct ForStatement {
-    initializer: Option<Statement>,
-    condition: Option<Expression>,
-    increment: Option<Expression>,
-    body: Statement,
+    initializer: Option<Rc<dyn Statement>>,
+    condition: Option<Rc<dyn Expression>>,
+    increment: Option<Rc<dyn Expression>>,
+    body: Rc<dyn Statement>,
     code_span: CodeSpan,
 }
 
 impl ForStatement {
     pub fn new(
-        initializer: Option<Statement>,
-        condition: Option<Expression>,
-        increment: Option<Expression>,
-        body: Statement,
+        initializer: Option<Rc<dyn Statement>>,
+        condition: Option<Rc<dyn Expression>>,
+        increment: Option<Rc<dyn Expression>>,
+        body: Rc<dyn Statement>,
         code_span: CodeSpan,
     ) -> ForStatement
     {
@@ -57,19 +54,19 @@ impl ForStatement {
         }
     }
 
-    pub fn initializer(&self) -> Option<&Statement> {
+    pub fn initializer(&self) -> Option<&Rc<dyn Statement>> {
         self.initializer.as_ref()
     }
 
-    pub fn condition(&self) -> Option<&Expression> {
+    pub fn condition(&self) -> Option<&Rc<dyn Expression>> {
         self.condition.as_ref()
     }
 
-    pub fn increment(&self) -> Option<&Expression> {
+    pub fn increment(&self) -> Option<&Rc<dyn Expression>> {
         self.increment.as_ref()
     }
 
-    pub fn body(&self) -> &Statement {
+    pub fn body(&self) -> &Rc<dyn Statement> {
         &self.body
     }
 }
@@ -156,8 +153,8 @@ impl Execute for ForStatement {
     }
 }
 
-impl AsStatement for ForStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for ForStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         context.begin();
         let initializer = if let Some(s) = self.initializer.as_ref() {
             match s.resolve(context) {
@@ -204,15 +201,13 @@ impl AsStatement for ForStatement {
         };
         context.end();
         Ok(
-            Statement(
-                Rc::new(
-                    ForStatement::new(
-                        initializer,
-                        condition,
-                        increment,
-                        body,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                ForStatement::new(
+                    initializer,
+                    condition,
+                    increment,
+                    body,
+                    self.code_span.clone(),
                 )
             )
         )
@@ -228,15 +223,13 @@ macro_rules! for_statement {
         $body:expr,
         $code_span:expr,
     ) => {
-        Statement(
-            Rc::new(
-                ForStatement::new(
-                    $initializer,
-                    $condition,
-                    $increment,
-                    $body,
-                    $code_span,
-                )
+        Rc::new(
+            ForStatement::new(
+                $initializer,
+                $condition,
+                $increment,
+                $body,
+                $code_span,
             )
         )
     }
@@ -271,11 +264,14 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
-        }
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            }
+        },
     };
 
     #[test]

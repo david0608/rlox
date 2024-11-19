@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
     value::Value,
     environment::{
@@ -67,8 +64,8 @@ impl Evaluate for VariableExpressionNotResolved {
     }
 }
 
-impl AsExpression for VariableExpressionNotResolved {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for VariableExpressionNotResolved {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         let binding = if let Some(d) = context.find(self.from.name()) {
             d
         }
@@ -82,12 +79,10 @@ impl AsExpression for VariableExpressionNotResolved {
         };
 
         Ok(
-            Expression(
-                Rc::new(
-                    VariableExpression::new(
-                        self.from.clone(),
-                        binding,
-                    )
+            Rc::new(
+                VariableExpression::new(
+                    self.from.clone(),
+                    binding,
                 )
             )
         )
@@ -97,11 +92,9 @@ impl AsExpression for VariableExpressionNotResolved {
 #[macro_export]
 macro_rules! variable_expression_not_resolved {
     ( $identifier:expr ) => {
-        Expression(
-            Rc::new(
-                VariableExpressionNotResolved::new(
-                    $identifier
-                )
+        Rc::new(
+            VariableExpressionNotResolved::new(
+                $identifier
             )
         )
     }
@@ -162,15 +155,13 @@ impl Evaluate for VariableExpression {
     }
 }
 
-impl AsExpression for VariableExpression {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for VariableExpression {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    VariableExpression::new(
-                        self.from.clone(),
-                        self.binding,
-                    )
+            Rc::new(
+                VariableExpression::new(
+                    self.from.clone(),
+                    self.binding,
                 )
             )
         )

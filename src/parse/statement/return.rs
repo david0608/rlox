@@ -9,10 +9,7 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::{
-            Statement,
-            AsStatement,
-        }
+        statement::Statement,
     },
     scan::token::simple::RETURN_LEXEME,
     value::Value,
@@ -31,13 +28,13 @@ use crate::{
 };
 
 pub struct ReturnStatement {
-    expression: Option<Expression>,
+    expression: Option<Rc<dyn Expression>>,
     code_span: CodeSpan,
 }
 
 impl ReturnStatement {
     pub fn new(
-        expression: Option<Expression>,
+        expression: Option<Rc<dyn Expression>>,
         code_span: CodeSpan,
     ) -> ReturnStatement
     {
@@ -47,7 +44,7 @@ impl ReturnStatement {
         }
     }
 
-    pub fn expression(&self) -> Option<&Expression> {
+    pub fn expression(&self) -> Option<&Rc<dyn Expression>> {
         self.expression.as_ref()
     }
 }
@@ -89,8 +86,8 @@ impl Execute for ReturnStatement {
     }
 }
 
-impl AsStatement for ReturnStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Statement, ResolveError> {
+impl Statement for ReturnStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         let expr = if let Some(e) = self.expression.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -98,12 +95,10 @@ impl AsStatement for ReturnStatement {
             None
         };
         return Ok(
-            Statement(
-                Rc::new(
-                    ReturnStatement::new(
-                        expr,
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                ReturnStatement::new(
+                    expr,
+                    self.code_span.clone(),
                 )
             )
         );
@@ -113,12 +108,10 @@ impl AsStatement for ReturnStatement {
 #[macro_export]
 macro_rules! return_statement {
     ( $expression:expr, $code_span:expr ) => {
-        Statement(
-            Rc::new(
-                ReturnStatement::new(
-                    $expression,
-                    $code_span,
-                )
+        Rc::new(
+            ReturnStatement::new(
+                $expression,
+                $code_span,
             )
         )
     }
@@ -143,10 +136,13 @@ mod tests {
             ResolveError,
             ResolveErrorEnum,
         },
-        utils::test_utils::{
-            TestContext,
-            parse_statement,
-            parse_statement_unknown,
+        utils::{
+            Downcast,
+            test_utils::{
+                TestContext,
+                parse_statement,
+                parse_statement_unknown,
+            }
         }
     };
 

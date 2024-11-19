@@ -7,10 +7,7 @@ use crate::{
         Code,
         code_span::CodeSpan,
     },
-    parse::expression::{
-        Expression,
-        AsExpression,
-    },
+    parse::expression::Expression,
     scan::token::{
         number::NumberToken,
         simple::{
@@ -91,15 +88,13 @@ impl Evaluate for LiteralExpression {
     }
 }
 
-impl AsExpression for LiteralExpression {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Expression, ResolveError> {
+impl Expression for LiteralExpression {
+    fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
-            Expression(
-                Rc::new(
-                    LiteralExpression::new(
-                        self.variant.clone(),
-                        self.code_span.clone(),
-                    )
+            Rc::new(
+                LiteralExpression::new(
+                    self.variant.clone(),
+                    self.code_span.clone(),
                 )
             )
         )
@@ -109,23 +104,19 @@ impl AsExpression for LiteralExpression {
 #[macro_export]
 macro_rules! literal_expression {
     ( $variant:ident, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                LiteralExpression::new(
-                    LiteralExpressionEnum::$variant,
-                    $code_span,
-                )
+        Rc::new(
+            LiteralExpression::new(
+                LiteralExpressionEnum::$variant,
+                $code_span,
             )
         )
     };
 
     ( $variant:ident, $token:expr, $code_span:expr ) => {
-        Expression(
-            Rc::new(
-                LiteralExpression::new(
-                    LiteralExpressionEnum::$variant($token),
-                    $code_span,
-                )
+        Rc::new(
+            LiteralExpression::new(
+                LiteralExpressionEnum::$variant($token),
+                $code_span,
             )
         )
     }

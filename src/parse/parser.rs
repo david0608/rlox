@@ -64,6 +64,7 @@ use crate::{
         }
     },
     error::LoxError,
+    utils::Downcast,
     assign_expression_not_resolved,
     binary_expression,
     call_expression,
@@ -150,7 +151,7 @@ impl LoxError for ParserError {
     }
 }
 
-pub type ParserOutput = (Vec<Statement>, Vec<ParserError>);
+pub type ParserOutput = (Vec<Rc<dyn Statement>>, Vec<ParserError>);
 
 pub struct Parser<'tokens> {
     tokens: &'tokens Vec<Rc<Token>>,
@@ -283,11 +284,11 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    pub fn expression(&mut self) -> Result<Expression, ParserError> {
+    pub fn expression(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<Expression, ParserError> {
+    fn assignment(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let lhs = self.logical_or()?;
         if let Some(get_expr) = lhs.downcast_ref::<GetExpression>() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
@@ -313,7 +314,7 @@ impl<'tokens> Parser<'tokens> {
         return Ok(lhs);
     }
 
-    fn logical_or(&mut self) -> Result<Expression, ParserError> {
+    fn logical_or(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut lhs = self.logical_and()?;
         while self.consume(SimpleTokenEnum::Or).is_ok() {
             let rhs = self.logical_and()?;
@@ -323,7 +324,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn logical_and(&mut self) -> Result<Expression, ParserError> {
+    fn logical_and(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut lhs = self.equality()?;
         while self.consume(SimpleTokenEnum::And).is_ok() {
             let rhs = self.equality()?;
@@ -333,7 +334,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn equality(&mut self) -> Result<Expression, ParserError> {
+    fn equality(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut lhs = self.comparison()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -362,7 +363,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn comparison(&mut self) -> Result<Expression, ParserError> {
+    fn comparison(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut lhs = self.term()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -405,7 +406,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn term(&mut self) -> Result<Expression, ParserError> {
+    fn term(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut lhs = self.factor()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -434,7 +435,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn factor(&mut self) -> Result<Expression, ParserError> {
+    fn factor(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut lhs = self.unary()?;
         loop {
             if let Some(Token::Simple(st)) = self.peek() {
@@ -463,7 +464,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(lhs)
     }
 
-    fn unary(&mut self) -> Result<Expression, ParserError> {
+    fn unary(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -490,12 +491,12 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn call(&mut self) -> Result<Expression, ParserError> {
+    fn call(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         let mut e = self.primary()?;
         loop {
             if self.peek_simple(SimpleTokenEnum::LeftParen).is_some() {
                 self.advance();
-                let mut arguments = Vec::<Expression>::new();
+                let mut arguments = Vec::<Rc<dyn Expression>>::new();
 
                 if let Some(rp) = self.peek_simple(SimpleTokenEnum::RightParen) {
                     self.advance();
@@ -534,7 +535,7 @@ impl<'tokens> Parser<'tokens> {
         return Ok(e);
     }
 
-    fn primary(&mut self) -> Result<Expression, ParserError> {
+    fn primary(&mut self) -> Result<Rc<dyn Expression>, ParserError> {
         if let Some(t) = self.peek() {
             match t {
                 Token::Number(nt) => {
@@ -637,7 +638,7 @@ impl<'tokens> Parser<'tokens> {
         );
     }
 
-    pub fn statement(&mut self, can_break: bool) -> Result<Statement, ParserError> {
+    pub fn statement(&mut self, can_break: bool) -> Result<Rc<dyn Statement>, ParserError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -700,7 +701,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn not_declaration_statement(&mut self, can_break: bool) -> Result<Statement, ParserError> {
+    fn not_declaration_statement(&mut self, can_break: bool) -> Result<Rc<dyn Statement>, ParserError> {
         if let Some(t) = self.peek() {
             if let Token::Simple(st) = t {
                 match st.variant() {
@@ -751,7 +752,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn var_declare_statement(&mut self) -> Result<Statement, ParserError> {
+    fn var_declare_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
 
         let identifier = self.consume_identifier()?;
@@ -774,7 +775,7 @@ impl<'tokens> Parser<'tokens> {
         );
     }
 
-    fn fun_declare_statement(&mut self) -> Result<Statement, ParserError> {
+    fn fun_declare_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
 
         let name = self.consume_identifier()?;
@@ -821,7 +822,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn class_declare_statement(&mut self) -> Result<Statement, ParserError> {
+    fn class_declare_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
 
         let name = self.consume_identifier()?;
@@ -854,7 +855,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn ifelse(&mut self, can_break: bool) -> Result<Statement, ParserError> {
+    fn ifelse(&mut self, can_break: bool) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
         self.consume(SimpleTokenEnum::LeftParen)?;
         let condition = self.expression()?;
@@ -882,7 +883,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn r#while(&mut self) -> Result<Statement, ParserError> {
+    fn r#while(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
@@ -902,7 +903,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn r#for(&mut self) -> Result<Statement, ParserError> {
+    fn r#for(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
 
         self.consume(SimpleTokenEnum::LeftParen)?;
@@ -949,7 +950,7 @@ impl<'tokens> Parser<'tokens> {
         ));
     }
 
-    fn block(&mut self, can_break: bool) -> Result<Statement, ParserError> {
+    fn block(&mut self, can_break: bool) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
         let mut stmts = Vec::new();
         loop {
@@ -965,7 +966,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
-    fn print_statement(&mut self) -> Result<Statement, ParserError> {
+    fn print_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
         let value = self.expression()?;
         self.consume(SimpleTokenEnum::Semicolon)?;
@@ -976,7 +977,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn return_statement(&mut self) -> Result<Statement, ParserError> {
+    fn return_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cp_start = self.peek_last().code_span().start();
         let mut e = Option::None;
         if self.peek_simple(SimpleTokenEnum::Semicolon).is_none() {
@@ -990,7 +991,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn break_statement(&mut self) -> Result<Statement, ParserError> {
+    fn break_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let cs = self.peek_last().code_span();
         self.consume(SimpleTokenEnum::Semicolon)?;
         Ok(break_statement!(
@@ -998,7 +999,7 @@ impl<'tokens> Parser<'tokens> {
         ))
     }
 
-    fn expression_statement(&mut self) -> Result<Statement, ParserError> {
+    fn expression_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
         let expr = self.expression()?;
         let cp_start = expr.code_span().start();
         self.consume(SimpleTokenEnum::Semicolon)?;
@@ -1029,7 +1030,7 @@ impl<'tokens> Parser<'tokens> {
 
     pub fn parse(tokens: &Vec<Rc<Token>>) -> ParserOutput {
         let mut p = Parser::new(tokens);
-        let mut stmts: Vec<Statement> = Vec::new();
+        let mut stmts: Vec<Rc<dyn Statement>> = Vec::new();
         let mut errors: Vec<ParserError> = Vec::new();
 
         while !p.is_end() {

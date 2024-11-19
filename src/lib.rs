@@ -12,4 +12,4 @@ mod evaluate;
 mod execute;
 mod print;
 pub mod resolve;
-mod utils;
+pub mod utils;
