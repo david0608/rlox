@@ -8,8 +8,8 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_point::CodePoint,
-        code_span::CodeSpan,
+        CodePoint,
+        CodeSpan,
     },
     parse::{
         expression::{
@@ -225,7 +225,7 @@ impl<'tokens> Parser<'tokens> {
             return Err(
                 ParserError::ExpectTokenMismatch(
                     variant.lexeme().to_string(),
-                    t.code_span(),
+                    t.code_span().clone(),
                 )
             );
         }
@@ -241,7 +241,7 @@ impl<'tokens> Parser<'tokens> {
                     self.advance();
                     Ok(it)
                 }
-                _ => Err(ParserError::ExpectIdentifier(t.code_span()))
+                _ => Err(ParserError::ExpectIdentifier(t.code_span().clone()))
             }
         }
         else {
@@ -293,7 +293,7 @@ impl<'tokens> Parser<'tokens> {
         if let Some(get_expr) = lhs.downcast_ref::<GetExpression>() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
                 let rhs = self.assignment()?;
-                let span = CodeSpan::new(get_expr.code_span().start(), rhs.code_span().end());
+                let span = CodeSpan::new_from_point(get_expr.code_span().start(), rhs.code_span().end());
                 return Ok(
                     set_expression!(
                         get_expr.object().clone(),
@@ -307,7 +307,7 @@ impl<'tokens> Parser<'tokens> {
         else if let Some(var_expr) = lhs.downcast_ref::<VariableExpressionNotResolved>() {
             if self.consume(SimpleTokenEnum::Equal).is_ok() {
                 let rhs = self.assignment()?;
-                let span = CodeSpan::new(var_expr.code_span().start(), rhs.code_span().end());
+                let span = CodeSpan::new_from_point(var_expr.code_span().start(), rhs.code_span().end());
                 return Ok(assign_expression_not_resolved!(var_expr.from().clone(), rhs, span));
             }
         }
@@ -318,7 +318,7 @@ impl<'tokens> Parser<'tokens> {
         let mut lhs = self.logical_and()?;
         while self.consume(SimpleTokenEnum::Or).is_ok() {
             let rhs = self.logical_and()?;
-            let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+            let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
             lhs = logical_expression!(Or, lhs, rhs, span);
         }
         Ok(lhs)
@@ -328,7 +328,7 @@ impl<'tokens> Parser<'tokens> {
         let mut lhs = self.equality()?;
         while self.consume(SimpleTokenEnum::And).is_ok() {
             let rhs = self.equality()?;
-            let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+            let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
             lhs = logical_expression!(And, lhs, rhs, span);
         }
         Ok(lhs)
@@ -342,14 +342,14 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::EqualEqual => {
                         self.advance();
                         let rhs = self.comparison()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Equal, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::BangEqual => {
                         self.advance();
                         let rhs = self.comparison()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(NotEqual, lhs, rhs, span);
                         continue;
                     }
@@ -371,28 +371,28 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Less => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Less, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::LessEqual => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(LessEqual, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::Greater => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Greater, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::GreaterEqual => {
                         self.advance();
                         let rhs = self.term()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(GreaterEqual, lhs, rhs, span);
                         continue;
                     }
@@ -414,14 +414,14 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Plus => {
                         self.advance();
                         let rhs = self.factor()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Plus, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::Minus => {
                         self.advance();
                         let rhs = self.factor()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Minus, lhs, rhs, span);
                         continue;
                     }
@@ -443,14 +443,14 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Star => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Multiply, lhs, rhs, span);
                         continue;
                     }
                     SimpleTokenEnum::Slash => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = CodeSpan::new(lhs.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(lhs.code_span().start(), rhs.code_span().end());
                         lhs = binary_expression!(Divide, lhs, rhs, span);
                         continue;
                     }
@@ -471,13 +471,13 @@ impl<'tokens> Parser<'tokens> {
                     SimpleTokenEnum::Bang  => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = CodeSpan::new(t.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(t.code_span().start(), rhs.code_span().end());
                         return Ok(unary_expression!(Not, rhs, span));
                     }
                     SimpleTokenEnum::Minus  => {
                         self.advance();
                         let rhs = self.unary()?;
-                        let span = CodeSpan::new(t.code_span().start(), rhs.code_span().end());
+                        let span = CodeSpan::new_from_point(t.code_span().start(), rhs.code_span().end());
                         return Ok(unary_expression!(Negative, rhs, span));
                     }
                     _ => { }
@@ -500,7 +500,7 @@ impl<'tokens> Parser<'tokens> {
 
                 if let Some(rp) = self.peek_simple(SimpleTokenEnum::RightParen) {
                     self.advance();
-                    let span = CodeSpan::new(e.code_span().start(), rp.code_span().end());
+                    let span = CodeSpan::new_from_point(e.code_span().start(), rp.code_span().end());
                     e = call_expression!(e, arguments, span);
                     continue;
                 }
@@ -513,7 +513,7 @@ impl<'tokens> Parser<'tokens> {
                         }
                         else {
                             let rp = self.consume(SimpleTokenEnum::RightParen)?;
-                            let span = CodeSpan::new(e.code_span().start(), rp.code_span().end());
+                            let span = CodeSpan::new_from_point(e.code_span().start(), rp.code_span().end());
                             e = call_expression!(e, arguments, span);
                             break;
                         }
@@ -524,7 +524,7 @@ impl<'tokens> Parser<'tokens> {
             else if self.peek_simple(SimpleTokenEnum::Dot).is_some() {
                 self.advance();
                 let ident = self.consume_identifier()?;
-                let span = CodeSpan::new(e.code_span().start(), ident.code_span().end());
+                let span = CodeSpan::new_from_point(e.code_span().start(), ident.code_span().end());
                 e = get_expression!(e, ident.clone(), span);
                 continue;
             }
@@ -540,11 +540,11 @@ impl<'tokens> Parser<'tokens> {
             match t {
                 Token::Number(nt) => {
                     self.advance();
-                    Ok(literal_expression!(Number, nt.clone(), nt.code_span()))
+                    Ok(literal_expression!(Number, nt.clone(), nt.code_span().clone()))
                 }
                 Token::String(st) => {
                     self.advance();
-                    Ok(literal_expression!(String, st.clone(), st.code_span()))
+                    Ok(literal_expression!(String, st.clone(), st.code_span().clone()))
                 }
                 Token::Identifier(it) => {
                     self.advance();
@@ -554,22 +554,22 @@ impl<'tokens> Parser<'tokens> {
                     match st.variant() {
                         SimpleTokenEnum::True => {
                             self.advance();
-                            Ok(literal_expression!(True, st.code_span()))
+                            Ok(literal_expression!(True, st.code_span().clone()))
                         }
                         SimpleTokenEnum::False => {
                             self.advance();
-                            Ok(literal_expression!(False, st.code_span()))
+                            Ok(literal_expression!(False, st.code_span().clone()))
                         }
                         SimpleTokenEnum::Nil => {
                             self.advance();
-                            Ok(literal_expression!(Nil, st.code_span()))
+                            Ok(literal_expression!(Nil, st.code_span().clone()))
                         }
                         SimpleTokenEnum::LeftParen => {
                             self.advance();
                             let e = self.expression()?;
                             Ok(grouping_expression!(
                                 e,
-                                CodeSpan::new(
+                                CodeSpan::new_from_point(
                                     st.code_span().start(),
                                     self.consume(SimpleTokenEnum::RightParen)?.code_span().end(),
                                 )
@@ -579,7 +579,7 @@ impl<'tokens> Parser<'tokens> {
                             Err(self.unexpected_end_error())
                         }
                         _ => {
-                            Err(ParserError::UnexpectedToken(t.code_span()))
+                            Err(ParserError::UnexpectedToken(t.code_span().clone()))
                         }
                     }
                 }
@@ -602,7 +602,7 @@ impl<'tokens> Parser<'tokens> {
             loop {
                 let p = self.consume_identifier()?;
                 if !used.insert(p.name()) {
-                    return Err(ParserError::DuplicatedFunctionParameter(p.code_span()));
+                    return Err(ParserError::DuplicatedFunctionParameter(p.code_span().clone()));
                 }
                 parameters.push(p.clone());
                 if self.consume(SimpleTokenEnum::Comma).is_ok() {
@@ -633,7 +633,7 @@ impl<'tokens> Parser<'tokens> {
                 name.clone(),
                 parameters,
                 body,
-                CodeSpan::new(cp_start, cp_end),
+                CodeSpan::new_from_point(cp_start, cp_end),
             )
         );
     }
@@ -684,7 +684,7 @@ impl<'tokens> Parser<'tokens> {
                             self.break_statement()
                         }
                         else {
-                            Err(ParserError::ContextNotSupportBreak(t.code_span()))
+                            Err(ParserError::ContextNotSupportBreak(t.code_span().clone()))
                         }
                     }
                     _ => {
@@ -735,7 +735,7 @@ impl<'tokens> Parser<'tokens> {
                             self.break_statement()
                         }
                         else {
-                            Err(ParserError::ContextNotSupportBreak(t.code_span()))
+                            Err(ParserError::ContextNotSupportBreak(t.code_span().clone()))
                         }
                     }
                     _ => {
@@ -770,7 +770,7 @@ impl<'tokens> Parser<'tokens> {
             var_declare_statement!(
                 identifier.clone(),
                 initializer,
-                CodeSpan::new(cp_start, cp_end)
+                CodeSpan::new_from_point(cp_start, cp_end)
             )
         );
     }
@@ -787,7 +787,7 @@ impl<'tokens> Parser<'tokens> {
             loop {
                 let p = self.consume_identifier()?;
                 if used.get(p.name()).is_some() {
-                    return Err(ParserError::DuplicatedFunctionParameter(p.code_span()));
+                    return Err(ParserError::DuplicatedFunctionParameter(p.code_span().clone()));
                 }
                 used.insert(p.name());
                 parameters.push(p.clone());
@@ -818,7 +818,7 @@ impl<'tokens> Parser<'tokens> {
             name.clone(),
             parameters,
             body,
-            CodeSpan::new(cp_start, cp_end)
+            CodeSpan::new_from_point(cp_start, cp_end)
         ));
     }
 
@@ -836,7 +836,7 @@ impl<'tokens> Parser<'tokens> {
             let method_def = self.method_definition()?;
             if method_definitions.contains_key(method_def.name().name()) {
                 return Err(
-                    ParserError::DuplicatedMethodDefinition(method_def.code_span())
+                    ParserError::DuplicatedMethodDefinition(method_def.code_span().clone())
                 );
             }
             else {
@@ -851,7 +851,7 @@ impl<'tokens> Parser<'tokens> {
         return Ok(class_declare_statement!(
             name.clone(),
             Rc::new(method_definitions),
-            CodeSpan::new(cp_start, cp_end)
+            CodeSpan::new_from_point(cp_start, cp_end)
         ));
     }
 
@@ -871,14 +871,14 @@ impl<'tokens> Parser<'tokens> {
                 condition,
                 then_stmt,
                 else_stmt,
-                CodeSpan::new(cp_start, cp_end)
+                CodeSpan::new_from_point(cp_start, cp_end)
             ))
         }
         else {
             Ok(if_statement!(
                 condition,
                 then_stmt,
-                CodeSpan::new(cp_start, cp_end)
+                CodeSpan::new_from_point(cp_start, cp_end)
             ))
         }
     }
@@ -899,7 +899,7 @@ impl<'tokens> Parser<'tokens> {
         Ok(while_statement!(
             condition,
             body,
-            CodeSpan::new(cp_start, cp_end)
+            CodeSpan::new_from_point(cp_start, cp_end)
         ))
     }
 
@@ -946,7 +946,7 @@ impl<'tokens> Parser<'tokens> {
             condition,
             increment,
             body,
-            CodeSpan::new(cp_start, cp_end),
+            CodeSpan::new_from_point(cp_start, cp_end),
         ));
     }
 
@@ -955,7 +955,7 @@ impl<'tokens> Parser<'tokens> {
         let mut stmts = Vec::new();
         loop {
             if let Ok(t) = self.consume(SimpleTokenEnum::RightBrace) {
-                return Ok(block_statement!(stmts, CodeSpan::new(cp_start, t.code_span().end())));
+                return Ok(block_statement!(stmts, CodeSpan::new_from_point(cp_start, t.code_span().end())));
             }
             else if self.is_end() {
                 return Err(self.expect_token_not_found_error(SimpleTokenEnum::RightBrace.lexeme()));
@@ -973,7 +973,7 @@ impl<'tokens> Parser<'tokens> {
         let cp_end = self.peek_last().code_span().end();
         Ok(print_statement!(
             value,
-            CodeSpan::new(cp_start, cp_end)
+            CodeSpan::new_from_point(cp_start, cp_end)
         ))
     }
 
@@ -987,12 +987,12 @@ impl<'tokens> Parser<'tokens> {
         let cp_end = self.peek_last().code_span().end();
         Ok(return_statement!(
             e,
-            CodeSpan::new(cp_start, cp_end)
+            CodeSpan::new_from_point(cp_start, cp_end)
         ))
     }
 
     fn break_statement(&mut self) -> Result<Rc<dyn Statement>, ParserError> {
-        let cs = self.peek_last().code_span();
+        let cs = self.peek_last().code_span().clone();
         self.consume(SimpleTokenEnum::Semicolon)?;
         Ok(break_statement!(
             cs
@@ -1006,7 +1006,7 @@ impl<'tokens> Parser<'tokens> {
         let cp_end = self.peek_last().code_span().end();
         Ok(expression_statement!(
             expr,
-            CodeSpan::new(cp_start, cp_end)
+            CodeSpan::new_from_point(cp_start, cp_end)
         ))
     }
 
@@ -1052,11 +1052,9 @@ mod tests {
     use std::rc::Rc;
     use crate::{
         code::{
-            code_point::CodePoint,
-            code_span::{
-                new_code_span,
-                CodeSpan,
-            },
+            Code,
+            CodePoint,
+            CodeSpan,
         },
         parse::{
             Parse,
@@ -1075,7 +1073,6 @@ mod tests {
             token::Token,
             Scan,
         },
-        print::Print,
         utils::test_utils::{
             TestContext,
             parse_expression,
@@ -1099,7 +1096,7 @@ mod tests {
         ];
         for (src, ast) in tests {
             let expr = parse_expression::<SetExpression>(src);
-            assert_eq!(expr.print(), ast);
+            assert_eq!(expr.to_string(), ast);
         }
     }
 
@@ -1127,7 +1124,7 @@ mod tests {
                 parse_expression_unknown(src).as_ref()
             )
                 .unwrap();
-            assert_eq!(expr.print(), ast);
+            assert_eq!(expr.to_string(), ast);
         }
     }
 
@@ -1142,7 +1139,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.logical_or().unwrap().print(), ast);
+            assert_eq!(p.logical_or().unwrap().to_string(), ast);
         }
     }
 
@@ -1157,7 +1154,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.logical_and().unwrap().print(), ast);
+            assert_eq!(p.logical_and().unwrap().to_string(), ast);
         }
     }
 
@@ -1173,7 +1170,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.equality().unwrap().print(), ast);
+            assert_eq!(p.equality().unwrap().to_string(), ast);
         }
     }
 
@@ -1191,7 +1188,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.comparison().unwrap().print(), ast);
+            assert_eq!(p.comparison().unwrap().to_string(), ast);
         }
     }
 
@@ -1208,7 +1205,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.term().unwrap().print(), ast);
+            assert_eq!(p.term().unwrap().to_string(), ast);
         }
     }
 
@@ -1224,7 +1221,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.factor().unwrap().print(), ast);
+            assert_eq!(p.factor().unwrap().to_string(), ast);
         }
     }
 
@@ -1239,7 +1236,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.unary().unwrap().print(), ast);
+            assert_eq!(p.unary().unwrap().to_string(), ast);
         }
     }
 
@@ -1266,7 +1263,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.call().unwrap().print(), ast);
+            assert_eq!(p.call().unwrap().to_string(), ast);
         }
     }
 
@@ -1282,7 +1279,7 @@ mod tests {
             (
                 "hello(}",
                 ParserError::UnexpectedToken(
-                    CodeSpan::new(
+                    CodeSpan::new_from_point(
                         CodePoint::new(0, 6),
                         CodePoint::new(0, 7),
                     ),
@@ -1299,7 +1296,7 @@ mod tests {
                 "hello(123}",
                 ParserError::ExpectTokenMismatch(
                     ")".to_owned(),
-                    CodeSpan::new(
+                    CodeSpan::new_from_point(
                         CodePoint::new(0, 9),
                         CodePoint::new(0, 10),
                     ),
@@ -1331,7 +1328,7 @@ mod tests {
         ];
         for (src, ast) in tests {
             let expr = parse_expression::<GetExpression>(src);
-            assert_eq!(expr.print(), ast);
+            assert_eq!(expr.to_string(), ast);
         }
     }
 
@@ -1340,7 +1337,7 @@ mod tests {
         assert_eq!(
             try_parse_statement("foo.true").unwrap_err(),
             ParserError::ExpectIdentifier(
-                new_code_span(0, 4, 0, 8)
+                CodeSpan::new(0, 4, 0, 8)
             ),
         );
     }
@@ -1366,7 +1363,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.primary().unwrap().print(), ast);
+            assert_eq!(p.primary().unwrap().to_string(), ast);
         }
     }
 
@@ -1384,7 +1381,7 @@ mod tests {
                 "(1 + 2}",
                 ParserError::ExpectTokenMismatch(
                     ")".to_owned(),
-                    CodeSpan::new(
+                    CodeSpan::new_from_point(
                         CodePoint::new(0, 6),
                         CodePoint::new(0, 7),
                     ),
@@ -1421,7 +1418,7 @@ mod tests {
         assert_eq!(
             p.primary().unwrap_err(),
             ParserError::UnexpectedToken(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 0),
                     CodePoint::new(0, 1),
                 )
@@ -1439,7 +1436,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.statement(false).unwrap().print(), ast);
+            assert_eq!(p.statement(false).unwrap().to_string(), ast);
         }
     }
 
@@ -1450,7 +1447,7 @@ mod tests {
         assert_eq!(
             p.statement(false).unwrap_err(),
             ParserError::ExpectIdentifier(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 4),
                     CodePoint::new(0, 8),
                 )
@@ -1529,7 +1526,7 @@ mod tests {
         for (src, ast) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.statement(false).unwrap().print(), ast);
+            assert_eq!(p.statement(false).unwrap().to_string(), ast);
         }
     }
 
@@ -1540,7 +1537,7 @@ mod tests {
         assert_eq!(
             p.statement(false).unwrap_err(),
             ParserError::ExpectIdentifier(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 4),
                     CodePoint::new(0, 5),
                 )
@@ -1568,7 +1565,7 @@ mod tests {
         assert_eq!(
             p.statement(false).unwrap_err(),
             ParserError::ExpectIdentifier(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 8),
                     CodePoint::new(0, 11),
                 )
@@ -1583,7 +1580,7 @@ mod tests {
         assert_eq!(
             p.statement(false).unwrap_err(),
             ParserError::DuplicatedFunctionParameter(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 11),
                     CodePoint::new(0, 12),
                 )
@@ -1625,7 +1622,7 @@ mod tests {
             p.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ";".to_owned(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 26),
                     CodePoint::new(0, 27),
                 )
@@ -1661,7 +1658,7 @@ mod tests {
             "
         );
         assert_eq!(
-            stmt.print(),
+            stmt.to_string(),
             "class Foo {bar() {print \"hello\";} foo(a, b) {return (+ a b);}}"
         );
     }
@@ -1680,7 +1677,7 @@ mod tests {
             )
                 .unwrap_err(),
             ParserError::ExpectIdentifier(
-                new_code_span(1, 6, 1, 10)
+                CodeSpan::new(1, 6, 1, 10)
             )
         );
     }
@@ -1714,7 +1711,7 @@ mod tests {
             )
                 .unwrap_err(),
             ParserError::DuplicatedMethodDefinition(
-                new_code_span(3, 0, 3, 8)
+                CodeSpan::new(3, 0, 3, 8)
             )
         );
     }
@@ -1735,7 +1732,7 @@ mod tests {
         for (src, expect) in tests {
             let ts = src.scan().0;
             let mut p = Parser::new(&ts);
-            assert_eq!(p.statement(false).unwrap().print(), expect);
+            assert_eq!(p.statement(false).unwrap().to_string(), expect);
         }
     }
 
@@ -1747,7 +1744,7 @@ mod tests {
             p.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 "(".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 3),
                     CodePoint::new(0, 7),
                 )
@@ -1763,7 +1760,7 @@ mod tests {
             p.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ")".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 9),
                     CodePoint::new(0, 14),
                 )
@@ -1776,7 +1773,7 @@ mod tests {
         let ts = "while (foo) print 1;".scan().0;
         let mut p = Parser::new(&ts);
         assert_eq!(
-            p.statement(false).unwrap().print(),
+            p.statement(false).unwrap().to_string(),
             "while foo print 1;"
         );
     }
@@ -1789,7 +1786,7 @@ mod tests {
             p.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 "(".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 6),
                     CodePoint::new(0, 9),
                 )
@@ -1805,7 +1802,7 @@ mod tests {
             p.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ")".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 11),
                     CodePoint::new(0, 16),
                 )
@@ -1828,7 +1825,7 @@ mod tests {
         for (src, expect) in tests {
             let tokens = src.scan().0;
             let mut parser = Parser::new(&tokens);
-            assert_eq!(parser.statement(false).unwrap().print(), expect);
+            assert_eq!(parser.statement(false).unwrap().to_string(), expect);
         }
     }
 
@@ -1840,7 +1837,7 @@ mod tests {
             parser.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 "(".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 4),
                     CodePoint::new(0, 7),
                 )
@@ -1856,7 +1853,7 @@ mod tests {
             parser.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ";".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 14),
                     CodePoint::new(0, 15),
                 )
@@ -1872,7 +1869,7 @@ mod tests {
             parser.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ";".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 10),
                     CodePoint::new(0, 11),
                 )
@@ -1887,7 +1884,7 @@ mod tests {
         assert_eq!(
             parser.statement(false).unwrap_err(),
             ParserError::UnexpectedToken(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 12),
                     CodePoint::new(0, 13),
                 )
@@ -1903,7 +1900,7 @@ mod tests {
             parser.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ";".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 18),
                     CodePoint::new(0, 19),
                 )
@@ -1918,7 +1915,7 @@ mod tests {
         assert_eq!(
             parser.statement(false).unwrap_err(),
             ParserError::UnexpectedToken(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 20),
                     CodePoint::new(0, 21),
                 )
@@ -1957,7 +1954,7 @@ mod tests {
         let tokens = "{var foo = true; foo = false;}".scan().0;
         let mut parser = Parser::new(&tokens);
         assert_eq!(
-            parser.statement(false).unwrap().print(),
+            parser.statement(false).unwrap().to_string(),
             "{var foo = true; (= foo false);}"
         );
     }
@@ -1970,7 +1967,7 @@ mod tests {
             parser.statement(false).unwrap_err(),
             ParserError::ExpectTokenMismatch(
                 ";".to_string(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 8),
                     CodePoint::new(0, 9),
                 )
@@ -1996,7 +1993,7 @@ mod tests {
         let tokens = "print \"hello\";".scan().0;
         let mut parser = Parser::new(&tokens);
         assert_eq!(
-            parser.statement(false).unwrap().print(),
+            parser.statement(false).unwrap().to_string(),
             "print \"hello\";",
         );
     }
@@ -2008,7 +2005,7 @@ mod tests {
         assert_eq!(
             parser.statement(false).unwrap_err(),
             ParserError::UnexpectedToken(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(0, 6),
                     CodePoint::new(0, 7),
                 )
@@ -2052,7 +2049,7 @@ mod tests {
         for (src, expect) in tests {
             let tokens = src.scan().0;
             let mut parser = Parser::new(&tokens);
-            assert_eq!(parser.statement(false).unwrap().print(), expect);
+            assert_eq!(parser.statement(false).unwrap().to_string(), expect);
         }
     }
 
@@ -2092,7 +2089,7 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(
-            stmts[0].print(),
+            stmts[0].to_string(),
             "while true {break;}"
         );
     }
@@ -2109,7 +2106,7 @@ mod tests {
         let (stmts, errors) = &tokens.parse();
         assert_eq!(errors.len(), 0);
         assert_eq!(
-            stmts[0].print(),
+            stmts[0].to_string(),
             "for (;;) {break;}"
         );
     }
@@ -2125,7 +2122,7 @@ mod tests {
         assert_eq!(
             errors[0],
             ParserError::ContextNotSupportBreak(
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(1, 0),
                     CodePoint::new(1, 5),
                 )
@@ -2147,7 +2144,7 @@ mod tests {
             errors[0],
             ParserError::ExpectTokenMismatch(
                 ";".to_owned(),
-                CodeSpan::new(
+                CodeSpan::new_from_point(
                     CodePoint::new(3, 0),
                     CodePoint::new(3, 1),
                 )
@@ -2160,7 +2157,7 @@ mod tests {
         let tokens = "true;".scan().0;
         let mut parser = Parser::new(&tokens);
         assert_eq!(
-            parser.statement(false).unwrap().print(),
+            parser.statement(false).unwrap().to_string(),
             "true;",
         );
     }

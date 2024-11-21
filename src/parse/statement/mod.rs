@@ -6,7 +6,6 @@ use std::{
 use crate::{
     code::Code,
     execute::Execute,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -29,7 +28,6 @@ pub mod r#while;
 pub trait Statement
     where
     Self: Code
-        + Print
         + Execute
         + Debug
         + Any

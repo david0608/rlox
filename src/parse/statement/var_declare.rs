@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::{
         expression::Expression,
@@ -25,15 +25,14 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
         ResolveErrorEnum,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct VarDeclareStatement {
     name: Rc<IdentifierToken>,
     initializer: Option<Rc<dyn Expression>>,
@@ -64,23 +63,19 @@ impl VarDeclareStatement {
 }
 
 impl Code for VarDeclareStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for VarDeclareStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         if let Some(i) = self.initializer() {
-            format!("{} {} = {};", VAR_LEXEME, self.name().name(), i.print())
+            format!("{} {} = {};", VAR_LEXEME, self.name().name(), i.to_string())
         }
         else {
             format!("{} {};", VAR_LEXEME, self.name().name())
         }
     }
 }
-
-impl_debug_for_printable!(VarDeclareStatement);
 
 impl Execute for VarDeclareStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -89,7 +84,7 @@ impl Execute for VarDeclareStatement {
             match i.evaluate(env) {
                 Ok(v) => value = v,
                 Err(e) => {
-                    return Err(RuntimeError::wrap(e, self.code_span()));
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
                 }
             }
         };
@@ -111,7 +106,7 @@ impl Statement for VarDeclareStatement {
             return Err(
                 ResolveError::new(
                     ResolveErrorEnum::VariableHaveBeenDeclared,
-                    self.name.code_span()
+                    self.name.code_span().clone()
                 )
             );
         }
@@ -143,7 +138,10 @@ macro_rules! var_declare_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::var_declare::VarDeclareStatement,
@@ -154,7 +152,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -177,7 +174,7 @@ mod tests {
             ("var foo = 1 + 1;", "var foo = (+ 1 1);"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<VarDeclareStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<VarDeclareStatement>(src).to_string(), expect);
         }
     }
 
@@ -239,9 +236,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                        new_code_span(0, 10, 0, 18),
+                        CodeSpan::new(0, 10, 0, 18),
                     ),
-                    new_code_span(0, 0, 0, 19),
+                    CodeSpan::new(0, 0, 0, 19),
                 )
             )
         );
@@ -257,7 +254,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 10, 0, 13)
+                CodeSpan::new(0, 10, 0, 13)
             )
         );
     }
@@ -273,7 +270,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableHaveBeenDeclared,
-                new_code_span(0, 4, 0, 7)
+                CodeSpan::new(0, 4, 0, 7)
             )
         );
     }

@@ -1,7 +1,4 @@
-use crate::code::{
-    Code,
-    code_span::CodeSpan,
-};
+use crate::code::CodeSpan;
 
 pub const LEFT_PAREN_LEXEME: &str = "(";
 pub const RIGHT_PAREN_LEXEME: &str = ")";
@@ -144,10 +141,8 @@ impl SimpleToken {
     pub fn lexeme(&self) -> &'static str {
         self.variant.lexeme()
     }
-}
 
-impl Code for SimpleToken {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    pub fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
 }

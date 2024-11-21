@@ -1,5 +1,5 @@
 use crate::{
-    code::code_span::CodeSpan,
+    code::CodeSpan,
     value::Value,
 };
 

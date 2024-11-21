@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
@@ -15,15 +15,13 @@ use crate::{
         RuntimeError,
         RuntimeErrorEnum,
     },
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct SetExpression {
     object: Rc<dyn Expression>,
     name: Rc<IdentifierToken>,
@@ -50,20 +48,29 @@ impl SetExpression {
 }
 
 impl Code for SetExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
+    }
+
+    fn to_string(&self) -> String {
+        format!("(.{}= {} {})", self.name.name(), self.object.to_string(), self.value.to_string())
     }
 }
 
-impl Print for SetExpression {
-    fn print(&self) -> String {
-        format!("(.{}= {} {})", self.name.name(), self.object.print(), self.value.print())
+impl Expression for SetExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+        Ok(
+            Rc::new(
+                SetExpression {
+                    object: self.object.resolve(context)?,
+                    name: self.name.clone(),
+                    value: self.value.resolve(context)?,
+                    code_span: self.code_span.clone(),
+                }
+            )
+        )
     }
-}
 
-impl_debug_for_printable!(SetExpression);
-
-impl Evaluate for SetExpression {
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let lhs = match self.object.evaluate(env) {
             Ok(v) => v,
@@ -90,21 +97,6 @@ impl Evaluate for SetExpression {
     }
 }
 
-impl Expression for SetExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
-        Ok(
-            Rc::new(
-                SetExpression {
-                    object: self.object.resolve(context)?,
-                    name: self.name.clone(),
-                    value: self.value.resolve(context)?,
-                    code_span: self.code_span.clone(),
-                }
-            )
-        )
-    }
-}
-
 #[macro_export]
 macro_rules! set_expression {
     ( $object:expr, $name:expr, $value:expr, $code_span:expr ) => {
@@ -122,13 +114,15 @@ macro_rules! set_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::{
             set::SetExpression,
             variable::VariableExpression,
         },
         value::Value,
-        print::Print,
         error::{
             RuntimeError,
             RuntimeErrorEnum,
@@ -151,7 +145,7 @@ mod tests {
             parse_expression_unknown("foo.bar = true").as_ref()
         )
             .unwrap();
-        assert_eq!(expr.print(), "(.bar= foo true)");
+        assert_eq!(expr.to_string(), "(.bar= foo true)");
     }
 
     #[test]
@@ -181,11 +175,11 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                        new_code_span(0, 1, 0, 9),
+                        CodeSpan::new(0, 1, 0, 9),
                     ),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 ),
-                new_code_span(0, 0, 0, 21),
+                CodeSpan::new(0, 0, 0, 21),
             )
         );
     }
@@ -202,7 +196,7 @@ mod tests {
             ctx.evaluate(set_expr.as_ref()).unwrap_err(),
             RuntimeError::new(
                 RuntimeErrorEnum::CanNotSetProperty(Value::Bool(true)),
-                new_code_span(0, 0, 0, 15),
+                CodeSpan::new(0, 0, 0, 15),
             )
         );
     }

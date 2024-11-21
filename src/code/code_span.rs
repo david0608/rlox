@@ -7,7 +7,11 @@ pub struct CodeSpan {
 }
 
 impl CodeSpan {
-    pub fn new(start: CodePoint, end: CodePoint) -> CodeSpan {
+    pub fn new(start_line: usize, start_char: usize, end_line: usize, end_char: usize) -> CodeSpan {
+        CodeSpan::new_from_point(CodePoint::new(start_line, start_char), CodePoint::new(end_line, end_char))
+    }
+
+    pub fn new_from_point(start: CodePoint, end: CodePoint) -> CodeSpan {
         CodeSpan {
             start,
             end,
@@ -119,11 +123,6 @@ impl CodeSpan {
 }
 
 #[cfg(test)]
-pub fn new_code_span(sl: usize, sc: usize, el: usize, ec: usize) -> CodeSpan {
-    CodeSpan::new(CodePoint::new(sl, sc), CodePoint::new(el, ec))
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -132,28 +131,28 @@ mod tests {
         let src = "hello\r\n    world!\r\n";
         let lines = src.lines().collect();
         assert_eq!(
-            CodeSpan::new(
+            CodeSpan::new_from_point(
                 CodePoint::new(0, 0),
                 CodePoint::new(0, 5),
             ).code_string(&lines, 10),
             "hello",
         );
         assert_eq!(
-            CodeSpan::new(
+            CodeSpan::new_from_point(
                 CodePoint::new(1, 5),
                 CodePoint::new(1, 7),
             ).code_string(&lines, 10),
             "",
         );
         assert_eq!(
-            CodeSpan::new(
+            CodeSpan::new_from_point(
                 CodePoint::new(0, 0),
                 CodePoint::new(1, 6),
             ).code_string(&lines, 20),
             "helloworld!",
         );
         assert_eq!(
-            CodeSpan::new(
+            CodeSpan::new_from_point(
                 CodePoint::new(0, 0),
                 CodePoint::new(1, 6),
             ).code_string(&lines, 10),
@@ -166,7 +165,7 @@ mod tests {
         let src = "print \"hello\r\n    world!\"\r\n";
         let lines = src.lines().collect();
         assert_eq!(
-            CodeSpan::new(
+            CodeSpan::new_from_point(
                 CodePoint::new(0, 0),
                 CodePoint::new(0, 5),
             ).debug_string(&lines),
@@ -176,7 +175,7 @@ mod tests {
             ),
         );
         assert_eq!(
-            CodeSpan::new(
+            CodeSpan::new_from_point(
                 CodePoint::new(0, 6),
                 CodePoint::new(1, 7),
             ).debug_string(&lines),

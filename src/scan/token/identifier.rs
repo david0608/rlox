@@ -1,7 +1,4 @@
-use crate::code::{
-    Code,
-    code_span::CodeSpan,
-};
+use crate::code::CodeSpan;
 
 #[derive(Debug)]
 pub struct IdentifierToken {
@@ -24,10 +21,8 @@ impl IdentifierToken {
     pub fn lexeme(&self) -> &str {
         &self.name
     }
-}
 
-impl Code for IdentifierToken {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    pub fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
 }

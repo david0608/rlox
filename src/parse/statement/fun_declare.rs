@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::statement::Statement,
     scan::token::identifier::IdentifierToken,
@@ -25,15 +25,14 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
         ResolveErrorEnum,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct FunDeclareStatement {
     name: Rc<IdentifierToken>,
     parameters: Vec<Rc<IdentifierToken>>,
@@ -71,23 +70,19 @@ impl FunDeclareStatement {
 }
 
 impl Code for FunDeclareStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for FunDeclareStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         return format!(
             "fun {}({}) {{{}}}",
             self.name().name(),
             self.parameters().iter().map(|i| i.name().to_owned()).collect::<Vec<String>>().join(", "),
-            self.body().iter().map(|s| s.print()).collect::<Vec<String>>().join(" "),
+            self.body().iter().map(|s| s.to_string()).collect::<Vec<String>>().join(" "),
         );
     }
 }
-
-impl_debug_for_printable!(FunDeclareStatement);
 
 impl Execute for FunDeclareStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -114,7 +109,7 @@ impl Statement for FunDeclareStatement {
             return Err(
                 ResolveError::new(
                     ResolveErrorEnum::VariableHaveBeenDeclared,
-                    self.name.code_span()
+                    self.name.code_span().clone()
                 )
             );
         }
@@ -125,7 +120,7 @@ impl Statement for FunDeclareStatement {
                 return Err(
                     ResolveError::new(
                         ResolveErrorEnum::VariableHaveBeenDeclared,
-                        p.code_span()
+                        p.code_span().clone()
                     )
                 );
             }
@@ -169,7 +164,10 @@ macro_rules! fun_declare_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::{
@@ -183,7 +181,6 @@ mod tests {
             Execute,
             ExecuteOk,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -205,7 +202,7 @@ mod tests {
             ("fun bar(a, b) {var c = a + b; print c;}", "fun bar(a, b) {var c = (+ a b); print c;}"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<FunDeclareStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<FunDeclareStatement>(src).to_string(), expect);
         }
     }
 
@@ -240,8 +237,8 @@ mod tests {
         assert_eq!(params[1].name(), "b");
         let body = f.body();
         assert_eq!(body.len(), 2);
-        assert_eq!(body[0].print(), "var c = (+ a b);");
-        assert_eq!(body[1].print(), "print c;");
+        assert_eq!(body[0].to_string(), "var c = (+ a b);");
+        assert_eq!(body[1].to_string(), "print c;");
     }
 
     #[test]
@@ -297,7 +294,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableHaveBeenDeclared,
-                new_code_span(0, 4, 0, 8)
+                CodeSpan::new(0, 4, 0, 8)
             )
         );
     }
@@ -312,7 +309,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableHaveBeenDeclared,
-                new_code_span(0, 18, 0, 19)
+                CodeSpan::new(0, 18, 0, 19)
             )
         );
         let mut ctx = TestContext::new();
@@ -323,7 +320,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 21, 0, 22)
+                CodeSpan::new(0, 21, 0, 22)
             )
         );
     }

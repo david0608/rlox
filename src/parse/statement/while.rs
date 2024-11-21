@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::{
         expression::Expression,
@@ -17,14 +17,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct WhileStatement {
     condition: Option<Rc<dyn Expression>>,
     body: Rc<dyn Statement>,
@@ -55,23 +54,19 @@ impl WhileStatement {
 }
 
 impl Code for WhileStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for WhileStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         if let Some(condition) = self.condition() {
-            format!("while {} {}", condition.print(), self.body().print())
+            format!("while {} {}", condition.to_string(), self.body().to_string())
         }
         else {
-            format!("while true {}", self.body().print())
+            format!("while true {}", self.body().to_string())
         }
     }
 }
-
-impl_debug_for_printable!(WhileStatement);
 
 impl Execute for WhileStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -84,7 +79,7 @@ impl Execute for WhileStatement {
                         }
                     }
                     Err(e) => {
-                        return Err(RuntimeError::wrap(e, self.code_span()));
+                        return Err(RuntimeError::wrap(e, self.code_span().clone()));
                     }
                 }
             }
@@ -100,7 +95,7 @@ impl Execute for WhileStatement {
                     return Ok(ExecuteOk::Return(v));
                 }
                 Err(err) => {
-                    return Err(RuntimeError::wrap(err, self.code_span()));
+                    return Err(RuntimeError::wrap(err, self.code_span().clone()));
                 }
             }
         }
@@ -153,7 +148,10 @@ macro_rules! while_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::{
@@ -165,7 +163,6 @@ mod tests {
         value::Value,
         environment::EnvironmentT,
         execute::ExecuteOk,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -187,7 +184,7 @@ mod tests {
             ("while (foo == true) print \"hello\";", "while (== foo true) print \"hello\";"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<WhileStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<WhileStatement>(src).to_string(), expect);
         }
     }
 
@@ -301,7 +298,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 7, 0, 10)
+                CodeSpan::new(0, 7, 0, 10)
             )
         );
     }
@@ -316,7 +313,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 21, 0, 24)
+                CodeSpan::new(0, 21, 0, 24)
             )
         );
     }

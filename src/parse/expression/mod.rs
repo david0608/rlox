@@ -1,12 +1,14 @@
 use std::{
     any::Any,
     rc::Rc,
+    cell::RefCell,
     fmt::Debug,
 };
 use crate::{
     code::Code,
-    evaluate::Evaluate,
-    print::Print,
+    value::Value,
+    environment::Environment,
+    error::RuntimeError,
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -28,12 +30,12 @@ pub mod variable;
 pub trait Expression
     where
     Self: Code
-        + Print
-        + Evaluate
         + Debug
         + Any
 {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError>;
+
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError>;
 }
 
 impl Downcast for Rc<dyn Expression> {

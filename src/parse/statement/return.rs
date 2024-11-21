@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::{
         expression::Expression,
@@ -19,14 +19,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable
 };
 
+#[derive(Debug)]
 pub struct ReturnStatement {
     expression: Option<Rc<dyn Expression>>,
     code_span: CodeSpan,
@@ -50,23 +49,19 @@ impl ReturnStatement {
 }
 
 impl Code for ReturnStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for ReturnStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         if let Some(e) = self.expression() {
-            format!("{} {};", RETURN_LEXEME, e.print())
+            format!("{} {};", RETURN_LEXEME, e.to_string())
         }
         else {
             format!("{};", RETURN_LEXEME)
         }
     }
 }
-
-impl_debug_for_printable!(ReturnStatement);
 
 impl Execute for ReturnStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -76,7 +71,7 @@ impl Execute for ReturnStatement {
                     return Ok(ExecuteOk::Return(v));
                 }
                 Err(e) => {
-                    return Err(RuntimeError::wrap(e, self.code_span()));
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
                 }
             }
         }
@@ -120,7 +115,10 @@ macro_rules! return_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::r#return::ReturnStatement,
@@ -131,7 +129,6 @@ mod tests {
             RuntimeErrorEnum,
         },
         execute::ExecuteOk,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -156,7 +153,7 @@ mod tests {
             ("return bar();", "return (call bar );"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<ReturnStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<ReturnStatement>(src).to_string(), expect);
         }
     }
 
@@ -188,9 +185,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                        new_code_span(0, 7, 0, 15),
+                        CodeSpan::new(0, 7, 0, 15),
                     ),
-                    new_code_span(0, 0, 0, 16),
+                    CodeSpan::new(0, 0, 0, 16),
                 )
             )
         );
@@ -219,7 +216,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 7, 0, 10)
+                CodeSpan::new(0, 7, 0, 10)
             )
         );
     }

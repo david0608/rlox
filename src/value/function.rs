@@ -122,18 +122,20 @@ impl Call for Function {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::code_span::new_code_span;
-    use crate::value::Value;
-    use crate::call::{
-        Call,
-        CallError,
+    use crate::{
+        code::CodeSpan,
+        value::Value,
+        call::{
+            Call,
+            CallError,
+        },
+        environment::EnvironmentT,
+        error::{
+            RuntimeError,
+            RuntimeErrorEnum,
+        },
+        utils::test_utils::TestContext
     };
-    use crate::environment::EnvironmentT;
-    use crate::error::{
-        RuntimeError,
-        RuntimeErrorEnum,
-    };
-    use crate::utils::test_utils::TestContext;
 
     #[test]
     fn test_function_call() {
@@ -187,9 +189,9 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(2, 7, 2, 15),
+                            CodeSpan::new(2, 7, 2, 15),
                         ),
-                        new_code_span(2, 0, 2, 16),
+                        CodeSpan::new(2, 0, 2, 16),
                     )
                 )
             )

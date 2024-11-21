@@ -1,8 +1,5 @@
 use std::rc::Rc;
-use crate::code::{
-    Code,
-    code_span::CodeSpan,
-};
+use crate::code::CodeSpan;
 
 pub mod identifier;
 use identifier::IdentifierToken;
@@ -53,10 +50,8 @@ impl Token {
             Token::Identifier(t) => t.lexeme(),
         }
     }
-}
 
-impl Code for Token {
-    fn code_span(&self) -> CodeSpan {
+    pub fn code_span(&self) -> &CodeSpan {
         match self {
             Token::Identifier(t) => t.code_span(),
             Token::Number(t) => t.code_span(),

@@ -8,8 +8,6 @@ mod value;
 mod call;
 pub mod environment;
 pub mod error;
-mod evaluate;
 mod execute;
-mod print;
 pub mod resolve;
 pub mod utils;

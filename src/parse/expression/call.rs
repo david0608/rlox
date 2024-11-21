@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     value::Value,
@@ -18,15 +18,13 @@ use crate::{
         RuntimeError,
         RuntimeErrorEnum,
     },
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct CallExpression {
     callee: Rc<dyn Expression>,
     arguments: Vec<Rc<dyn Expression>>,
@@ -57,70 +55,16 @@ impl CallExpression {
 }
 
 impl Code for CallExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for CallExpression {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         format!(
             "(call {} {})",
-            self.callee().print(),
-            self.arguments().iter().map(|s| s.print()).collect::<Vec<String>>().join(" "),
+            self.callee().to_string(),
+            self.arguments().iter().map(|s| s.to_string()).collect::<Vec<String>>().join(" "),
         )
-    }
-}
-
-impl_debug_for_printable!(CallExpression);
-
-impl Evaluate for CallExpression {
-    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        let callee = match self.callee().evaluate(env) {
-            Ok(val) => val,
-            Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
-            }
-        };
-        let mut arguments = Vec::new();
-        for a in self.arguments() {
-            arguments.push(
-                match a.evaluate(env) {
-                    Ok(val) => val,
-                    Err(err) => {
-                        return Err(RuntimeError::wrap(err, self.code_span()));
-                    }
-                }
-            );
-        }
-        match callee.call(arguments) {
-            Ok(v) => {
-                return Ok(v);
-            }
-            Err(err) => {
-                match err {
-                    CallError::ArgumentNumberMismatch(ec, pc) => {
-                        return Err(
-                            RuntimeError::new(
-                                RuntimeErrorEnum::ArgumentNumberMismatch(ec, pc),
-                                self.code_span(),
-                            )
-                        );
-                    }
-                    CallError::NotCallable => {
-                        return Err(
-                            RuntimeError::new(
-                                RuntimeErrorEnum::NotCallable(callee),
-                                self.code_span(),
-                            )
-                        );
-                    }
-                    CallError::RuntimeError(err) => {
-                        return Err(RuntimeError::wrap(err, self.code_span()));
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -142,6 +86,54 @@ impl Expression for CallExpression {
             )
         )
     }
+
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        let callee = match self.callee().evaluate(env) {
+            Ok(val) => val,
+            Err(err) => {
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
+            }
+        };
+        let mut arguments = Vec::new();
+        for a in self.arguments() {
+            arguments.push(
+                match a.evaluate(env) {
+                    Ok(val) => val,
+                    Err(err) => {
+                        return Err(RuntimeError::wrap(err, self.code_span().clone()));
+                    }
+                }
+            );
+        }
+        match callee.call(arguments) {
+            Ok(v) => {
+                return Ok(v);
+            }
+            Err(err) => {
+                match err {
+                    CallError::ArgumentNumberMismatch(ec, pc) => {
+                        return Err(
+                            RuntimeError::new(
+                                RuntimeErrorEnum::ArgumentNumberMismatch(ec, pc),
+                                self.code_span().clone(),
+                            )
+                        );
+                    }
+                    CallError::NotCallable => {
+                        return Err(
+                            RuntimeError::new(
+                                RuntimeErrorEnum::NotCallable(callee),
+                                self.code_span().clone(),
+                            )
+                        );
+                    }
+                    CallError::RuntimeError(err) => {
+                        return Err(RuntimeError::wrap(err, self.code_span().clone()));
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[macro_export]
@@ -160,7 +152,10 @@ macro_rules! call_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::{
             call::CallExpression,
             variable::VariableExpression,
@@ -170,7 +165,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -193,7 +187,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             assert_eq!(
-                parse_expression::<CallExpression>(src).print(),
+                parse_expression::<CallExpression>(src).to_string(),
                 expect
             );
         }
@@ -229,11 +223,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(0, 1, 0, 9),
+                            CodeSpan::new(0, 1, 0, 9),
                         ),
-                        new_code_span(0, 0, 0, 10)
+                        CodeSpan::new(0, 0, 0, 10)
                     ),
-                    new_code_span(0, 0, 0, 16),
+                    CodeSpan::new(0, 0, 0, 16),
                 )
             )
         );
@@ -253,9 +247,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                        new_code_span(0, 4, 0, 12),
+                        CodeSpan::new(0, 4, 0, 12),
                     ),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -276,7 +270,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::ArgumentNumberMismatch(2, 3),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -295,7 +289,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::NotCallable(Value::Bool(true)),
-                    new_code_span(0, 0, 0, 5),
+                    CodeSpan::new(0, 0, 0, 5),
                 )
             ),
         );
@@ -322,11 +316,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(2, 7, 2, 15),
+                            CodeSpan::new(2, 7, 2, 15),
                         ),
-                        new_code_span(2, 0, 2, 16),
+                        CodeSpan::new(2, 0, 2, 16),
                     ),
-                    new_code_span(0, 0, 0, 5),
+                    CodeSpan::new(0, 0, 0, 5),
                 )
             )
         );
@@ -369,7 +363,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 5)
+                CodeSpan::new(0, 0, 0, 5)
             )
         );
     }
@@ -385,7 +379,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 6, 0, 9)
+                CodeSpan::new(0, 6, 0, 9)
             )
         );
         assert_eq!(
@@ -395,7 +389,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 9, 0, 12)
+                CodeSpan::new(0, 9, 0, 12)
             )
         );
     }

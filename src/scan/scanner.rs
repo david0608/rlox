@@ -4,8 +4,8 @@ use std::{
 };
 use crate::{
     code::{
-        code_point::CodePoint,
-        code_span::CodeSpan,
+        CodePoint,
+        CodeSpan,
     },
     scan::token::{
         Token,
@@ -114,7 +114,7 @@ impl<'src> Scanner<'src> {
     }
 
     fn get_code_span(&self) -> CodeSpan {
-        CodeSpan::new(
+        CodeSpan::new_from_point(
             CodePoint::new(self.line, self.char - (self.current - self.start)),
             CodePoint::new(self.line, self.char),
         )
@@ -187,7 +187,7 @@ impl<'src> Scanner<'src> {
                             Token::new_string(
                                 &self.src[(self.start + 1)..(self.current - 1)],
                                 &self.src[self.start..self.current],
-                                CodeSpan::new(start, CodePoint::new(self.line, self.char)),
+                                CodeSpan::new_from_point(start, CodePoint::new(self.line, self.char)),
                             )
                         )
                     );
@@ -440,9 +440,8 @@ fn is_alphanumeric(c: &str) -> bool {
 mod tests {
     use crate::{
         code::{
-            Code,
-            code_point::CodePoint,
-            code_span::CodeSpan,
+            CodePoint,
+            CodeSpan,
         },
         scan::token::{
             Token,
@@ -633,7 +632,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 1)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 0), CodePoint::new(0, 1)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::LeftParen);
@@ -651,7 +650,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 1), CodePoint::new(0, 2)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 1), CodePoint::new(0, 2)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Slash);
@@ -673,7 +672,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 6)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 0), CodePoint::new(0, 6)));
         match t.as_ref() {
             Token::String(st) => {
                 assert_eq!(st.literal(), "test");
@@ -701,7 +700,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 1);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 3)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 0), CodePoint::new(0, 3)));
         match t.as_ref() {
             Token::Number(nt) => {
                 assert_eq!(nt.literal(), 123.0);
@@ -714,7 +713,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 2);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[1];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 5), CodePoint::new(0, 10)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 5), CodePoint::new(0, 10)));
         match t.as_ref() {
             Token::Number(nt) => {
                 assert_eq!(nt.literal(), 10.01);
@@ -732,7 +731,7 @@ mod tests {
         assert_eq!(s.tokens.len(), 2);
         assert_eq!(s.errors.len(), 0);
         let t = &s.tokens[0];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 2)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 0), CodePoint::new(0, 2)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::If);
@@ -740,7 +739,7 @@ mod tests {
             _ => panic!("Should be IfToken.")
         }
         let t = &s.tokens[1];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(1, 0), CodePoint::new(1, 4)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(1, 0), CodePoint::new(1, 4)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Else);
@@ -761,7 +760,7 @@ mod tests {
         assert_eq!(tokens.len(), 9);
         assert_eq!(errors.len(), 0);
         let t = &tokens[0];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 0), CodePoint::new(0, 3)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 0), CodePoint::new(0, 3)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Fun);
@@ -769,7 +768,7 @@ mod tests {
             _ => panic!("Should be Fun.")
         }
         let t = &tokens[1];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 4), CodePoint::new(0, 9)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 4), CodePoint::new(0, 9)));
         match t.as_ref() {
             Token::Identifier(it) => {
                 assert_eq!(it.name(), "hello");
@@ -777,7 +776,7 @@ mod tests {
             _ => panic!("Should be Ident.")
         }
         let t = &tokens[2];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 9), CodePoint::new(0, 10)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 9), CodePoint::new(0, 10)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::LeftParen);
@@ -785,7 +784,7 @@ mod tests {
             _ => panic!("Should be LeftParen.")
         }
         let t = &tokens[3];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 10), CodePoint::new(0, 11)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 10), CodePoint::new(0, 11)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::RightParen);
@@ -793,7 +792,7 @@ mod tests {
             _ => panic!("Should be RightParen.")
         }
         let t = &tokens[4];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(0, 12), CodePoint::new(0, 13)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(0, 12), CodePoint::new(0, 13)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::LeftBrace);
@@ -801,7 +800,7 @@ mod tests {
             _ => panic!("Should be LeftBrace.")
         }
         let t = &tokens[5];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(1, 0), CodePoint::new(1, 5)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(1, 0), CodePoint::new(1, 5)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Print);
@@ -809,7 +808,7 @@ mod tests {
             _ => panic!("Should be Print.")
         }
         let t = &tokens[6];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(1, 6), CodePoint::new(1, 20)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(1, 6), CodePoint::new(1, 20)));
         match t.as_ref() {
             Token::String(st) => {
                 assert_eq!(st.literal(), "Hello world!");
@@ -817,7 +816,7 @@ mod tests {
             _ => panic!("Should be String.")
         }
         let t = &tokens[7];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(2, 0), CodePoint::new(2, 1)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(2, 0), CodePoint::new(2, 1)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::RightBrace);
@@ -825,7 +824,7 @@ mod tests {
             _ => panic!("Should be RightBrace.")
         }
         let t = &tokens[8];
-        assert_eq!(t.code_span(), CodeSpan::new(CodePoint::new(3, 0), CodePoint::new(3, 0)));
+        assert_eq!(t.code_span(), &CodeSpan::new_from_point(CodePoint::new(3, 0), CodePoint::new(3, 0)));
         match t.as_ref() {
             Token::Simple(st) => {
                 assert_eq!(st.variant(), SimpleTokenEnum::Eof);
@@ -886,7 +885,7 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(
             tokens[0].code_span(),
-            CodeSpan::new(
+            &CodeSpan::new_from_point(
                 CodePoint::new(1, 0),
                 CodePoint::new(1, 0),
             ),
@@ -921,7 +920,7 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(
             tokens[0].code_span(),
-            CodeSpan::new(
+            &CodeSpan::new_from_point(
                 CodePoint::new(2, 0),
                 CodePoint::new(2, 0),
             ),

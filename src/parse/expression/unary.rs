@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     value::Value,
@@ -14,21 +14,19 @@ use crate::{
         RuntimeError,
         RuntimeErrorEnum,
     },
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum UnaryExpressionEnum {
     Negative,
     Not
 }
 
+#[derive(Debug)]
 pub struct UnaryExpression {
     variant: UnaryExpressionEnum,
     rhs: Rc<dyn Expression>,
@@ -59,28 +57,36 @@ impl UnaryExpression {
 }
 
 impl Code for UnaryExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for UnaryExpression {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         match self.variant() {
-            UnaryExpressionEnum::Negative => format!("(- {})", self.rhs().print()),
-            UnaryExpressionEnum::Not => format!("(! {})", self.rhs().print()),
+            UnaryExpressionEnum::Negative => format!("(- {})", self.rhs().to_string()),
+            UnaryExpressionEnum::Not => format!("(! {})", self.rhs().to_string()),
         }
     }
 }
 
-impl_debug_for_printable!(UnaryExpression);
+impl Expression for UnaryExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+        Ok(
+            Rc::new(
+                UnaryExpression::new(
+                    self.variant,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
+                )
+            )
+        )
+    }
 
-impl Evaluate for UnaryExpression {
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let rhs = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
             }
         };
         match self.variant() {
@@ -97,7 +103,7 @@ impl Evaluate for UnaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidNegate(rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -110,20 +116,6 @@ impl Evaluate for UnaryExpression {
                 Ok(Value::Bool(!rhs.is_truthy()))
             }
         }
-    }
-}
-
-impl Expression for UnaryExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
-        Ok(
-            Rc::new(
-                UnaryExpression::new(
-                    self.variant,
-                    self.rhs.resolve(context)?,
-                    self.code_span.clone(),
-                )
-            )
-        )
     }
 }
 
@@ -143,7 +135,10 @@ macro_rules! unary_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         native::add_native_clock,
         parse::expression::{
             unary::UnaryExpression,
@@ -155,7 +150,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -177,7 +171,7 @@ mod tests {
             ("!123", "(! 123)"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_expression::<UnaryExpression>(src).print(), expect);
+            assert_eq!(parse_expression::<UnaryExpression>(src).to_string(), expect);
         }
     }
 
@@ -199,7 +193,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidNegate(Value::Nil),
-                    new_code_span(0, 0, 0, 4),
+                    CodeSpan::new(0, 0, 0, 4),
                 )
             ),
         );
@@ -210,7 +204,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidNegate(Value::Bool(true)),
-                    new_code_span(0, 0, 0, 5),
+                    CodeSpan::new(0, 0, 0, 5),
                 )
             ),
         );
@@ -221,7 +215,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidNegate(Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             ),
         );
@@ -232,7 +226,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidNegate(ctx.environment.get("foo", 0).unwrap()),
-                    new_code_span(0, 0, 0, 4),
+                    CodeSpan::new(0, 0, 0, 4),
                 )
             ),
         );
@@ -243,7 +237,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidNegate(ctx.environment.get("clock", 0).unwrap()),
-                    new_code_span(0, 0, 0, 6),
+                    CodeSpan::new(0, 0, 0, 6),
                 )
             ),
         );
@@ -302,11 +296,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(0, 2, 0, 10),
+                            CodeSpan::new(0, 2, 0, 10),
                         ),
-                        new_code_span(0, 1, 0, 11)
+                        CodeSpan::new(0, 1, 0, 11)
                     ),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -337,7 +331,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 1, 0, 4)
+                CodeSpan::new(0, 1, 0, 4)
             )
         );
     }

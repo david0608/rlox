@@ -3,7 +3,7 @@ use std::{
     collections::HashSet,
 };
 use crate::{
-    code::code_span::CodeSpan,
+    code::CodeSpan,
     parse::statement::Statement,
     error::LoxError,
 };

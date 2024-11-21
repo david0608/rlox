@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
@@ -15,16 +15,14 @@ use crate::{
         EnvironmentT,
     },
     error::RuntimeError,
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
         ResolveErrorEnum,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct AssignExpressionNotResolved {
     to: Rc<IdentifierToken>,
     value: Rc<dyn Expression>,
@@ -55,22 +53,12 @@ impl AssignExpressionNotResolved {
 }
 
 impl Code for AssignExpressionNotResolved {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for AssignExpressionNotResolved {
-    fn print(&self) -> String {
-        format!("(= {} {})", self.to().name(), self.value().print())
-    }
-}
-
-impl_debug_for_printable!(AssignExpressionNotResolved);
-
-impl Evaluate for AssignExpressionNotResolved {
-    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        panic!("AssignExpressionNotResolved can not evaluate.");
+    fn to_string(&self) -> String {
+        format!("(= {} {})", self.to().name(), self.value.to_string())
     }
 }
 
@@ -92,10 +80,14 @@ impl Expression for AssignExpressionNotResolved {
             return Err(
                 ResolveError::new(
                     ResolveErrorEnum::VariableNotDeclared,
-                    self.to.code_span()
+                    self.to.code_span().clone()
                 )
             );
         }
+    }
+
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        panic!("AssignExpressionNotResolved can not evaluate.");
     }
 }
 
@@ -112,6 +104,7 @@ macro_rules! assign_expression_not_resolved {
     };
 }
 
+#[derive(Debug)]
 pub struct AssignExpression {
     to: Rc<IdentifierToken>,
     value: Rc<dyn Expression>,
@@ -149,38 +142,12 @@ impl AssignExpression {
 }
 
 impl Code for AssignExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for AssignExpression {
-    fn print(&self) -> String {
-        format!("(= {} {})", self.to().name(), self.value().print())
-    }
-}
-
-impl_debug_for_printable!(AssignExpression);
-
-impl Evaluate for AssignExpression {
-    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        let v = match self.value().evaluate(env) {
-            Ok(val) => val,
-            Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
-            }
-        };
-        if env.set(
-            self.to().name(),
-            self.binding(),
-            v.clone(),
-        ).is_ok()
-        {
-            return Ok(v);
-        }
-        else {
-            unreachable!("Variable not declared should not be runtime error.");
-        }
+    fn to_string(&self) -> String {
+        format!("(= {} {})", self.to().name(), self.value().to_string())
     }
 }
 
@@ -196,6 +163,26 @@ impl Expression for AssignExpression {
                 )
             )
         )
+    }
+
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        let v = match self.value().evaluate(env) {
+            Ok(val) => val,
+            Err(err) => {
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
+            }
+        };
+        if env.set(
+            self.to().name(),
+            self.binding(),
+            v.clone(),
+        ).is_ok()
+        {
+            return Ok(v);
+        }
+        else {
+            unreachable!("Variable not declared should not be runtime error.");
+        }
     }
 }
 
@@ -218,7 +205,10 @@ macro_rules! assign_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::{
             assign::{
                 AssignExpressionNotResolved,
@@ -231,7 +221,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -249,7 +238,7 @@ mod tests {
     #[test]
     fn test_assign_expression_not_resolved_print() {
         assert_eq!(
-            parse_expression::<AssignExpressionNotResolved>("foo = true").print(),
+            parse_expression::<AssignExpressionNotResolved>("foo = true").to_string(),
             "(= foo true)"
         );
     }
@@ -296,7 +285,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 3)
+                CodeSpan::new(0, 0, 0, 3)
             )
         );
     }
@@ -312,7 +301,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 6, 0, 9)
+                CodeSpan::new(0, 6, 0, 9)
             )
         );
     }
@@ -326,7 +315,7 @@ mod tests {
                 parse_expression_unknown("foo = true").as_ref()
             )
                 .unwrap()
-                .print(),
+                .to_string(),
             "(= foo true)",
         );
     }
@@ -358,9 +347,9 @@ mod tests {
             RuntimeError::wrap(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 6, 0, 14),
+                    CodeSpan::new(0, 6, 0, 14),
                 ),
-                new_code_span(0, 0, 0, 14),
+                CodeSpan::new(0, 0, 0, 14),
             )
         );
     }

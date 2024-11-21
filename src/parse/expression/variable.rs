@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
@@ -15,16 +15,14 @@ use crate::{
         EnvironmentT,
     },
     error::RuntimeError,
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
         ResolveErrorEnum,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct VariableExpressionNotResolved {
     from: Rc<IdentifierToken>,
 }
@@ -45,22 +43,12 @@ impl VariableExpressionNotResolved {
 }
 
 impl Code for VariableExpressionNotResolved {
-    fn code_span(&self) -> CodeSpan {
+    fn code_span(&self) -> &CodeSpan {
         self.from.code_span()
     }
-}
 
-impl Print for VariableExpressionNotResolved {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         self.from().name().to_string()
-    }
-}
-
-impl_debug_for_printable!(VariableExpressionNotResolved);
-
-impl Evaluate for VariableExpressionNotResolved {
-    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        panic!("VariableExpressionNotResolved can not evaluate");
     }
 }
 
@@ -73,7 +61,7 @@ impl Expression for VariableExpressionNotResolved {
             return Err(
                 ResolveError::new(
                     ResolveErrorEnum::VariableNotDeclared,
-                    self.from.code_span()
+                    self.from.code_span().clone()
                 )
             );
         };
@@ -86,6 +74,10 @@ impl Expression for VariableExpressionNotResolved {
                 )
             )
         )
+    }
+
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        panic!("VariableExpressionNotResolved can not evaluate");
     }
 }
 
@@ -100,6 +92,7 @@ macro_rules! variable_expression_not_resolved {
     }
 }
 
+#[derive(Debug)]
 pub struct VariableExpression {
     from: Rc<IdentifierToken>,
     binding: usize,
@@ -127,31 +120,12 @@ impl VariableExpression {
 }
 
 impl Code for VariableExpression {
-    fn code_span(&self) -> CodeSpan {
+    fn code_span(&self) -> &CodeSpan {
         self.from.code_span()
     }
-}
 
-impl Print for VariableExpression {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         self.from().name().to_string()
-    }
-}
-
-impl_debug_for_printable!(VariableExpression);
-
-impl Evaluate for VariableExpression {
-    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        if let Some(v) = env.get(
-            self.from().name(),
-            self.binding(),
-        )
-        {
-            return Ok(v);
-        }
-        else {
-            unreachable!("Variable not declared should not be runtime error.");
-        }
     }
 }
 
@@ -166,18 +140,33 @@ impl Expression for VariableExpression {
             )
         )
     }
+
+    fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        if let Some(v) = env.get(
+            self.from().name(),
+            self.binding(),
+        )
+        {
+            return Ok(v);
+        }
+        else {
+            unreachable!("Variable not declared should not be runtime error.");
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::variable::{
             VariableExpressionNotResolved,
             VariableExpression,
         },
         value::Value,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -192,7 +181,7 @@ mod tests {
     #[test]
     fn test_variable_expression_not_resolved_print() {
         assert_eq!(
-            parse_expression::<VariableExpressionNotResolved>("foo").print(),
+            parse_expression::<VariableExpressionNotResolved>("foo").to_string(),
             "foo"
         );
     }
@@ -206,7 +195,7 @@ mod tests {
                 parse_expression_unknown("foo").as_ref(),
             )
                 .unwrap()
-                .print(),
+                .to_string(),
             "foo"
         );
     }
@@ -274,7 +263,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 3)
+                CodeSpan::new(0, 0, 0, 3)
             )
         );
     }

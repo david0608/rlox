@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     scan::token::{
@@ -20,13 +20,10 @@ use crate::{
     value::Value,
     environment::Environment,
     error::RuntimeError,
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,6 +35,7 @@ pub enum LiteralExpressionEnum {
     Nil
 }
 
+#[derive(Debug)]
 pub struct LiteralExpression {
     variant: LiteralExpressionEnum,
     code_span: CodeSpan,
@@ -57,33 +55,17 @@ impl LiteralExpression {
 }
 
 impl Code for LiteralExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for LiteralExpression {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         match self.variant() {
             LiteralExpressionEnum::True => TRUE_LEXEME.to_string(),
             LiteralExpressionEnum::False => FALSE_LEXEME.to_string(),
             LiteralExpressionEnum::Nil => NIL_LEXEME.to_string(),
             LiteralExpressionEnum::Number(t) => t.lexeme().to_string(),
             LiteralExpressionEnum::String(t) => t.lexeme().to_string(),
-        }
-    }
-}
-
-impl_debug_for_printable!(LiteralExpression);
-
-impl Evaluate for LiteralExpression {
-    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        match self.variant() {
-            LiteralExpressionEnum::Nil => Ok(Value::Nil),
-            LiteralExpressionEnum::True => Ok(Value::Bool(true)),
-            LiteralExpressionEnum::False => Ok(Value::Bool(false)),
-            LiteralExpressionEnum::Number(t) => Ok(Value::Number(t.literal())),
-            LiteralExpressionEnum::String(t) => Ok(Value::String(t.literal().to_string())),
         }
     }
 }
@@ -98,6 +80,16 @@ impl Expression for LiteralExpression {
                 )
             )
         )
+    }
+
+    fn evaluate(&self, _: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
+        match self.variant() {
+            LiteralExpressionEnum::Nil => Ok(Value::Nil),
+            LiteralExpressionEnum::True => Ok(Value::Bool(true)),
+            LiteralExpressionEnum::False => Ok(Value::Bool(false)),
+            LiteralExpressionEnum::Number(t) => Ok(Value::Number(t.literal())),
+            LiteralExpressionEnum::String(t) => Ok(Value::String(t.literal().to_string())),
+        }
     }
 }
 
@@ -127,14 +119,13 @@ mod tests {
     use crate::{
         code::{
             Code,
-            code_span::new_code_span,
+            CodeSpan,
         },
         parse::expression::literal::{
             LiteralExpression,
             LiteralExpressionEnum,
         },
         value::Value,
-        print::Print,
         utils::test_utils::{
             TestContext,
             parse_expression,
@@ -153,7 +144,7 @@ mod tests {
             ("\"hello\"", "\"hello\""),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_expression::<LiteralExpression>(src).print(), expect);
+            assert_eq!(parse_expression::<LiteralExpression>(src).to_string(), expect);
         }
     }
 
@@ -180,7 +171,7 @@ mod tests {
         );
         assert_eq!(
             literal_expr.code_span(),
-            new_code_span(0, 0, 0, 4),
+            &CodeSpan::new(0, 0, 0, 4),
         );
     }
 }

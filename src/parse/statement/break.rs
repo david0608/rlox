@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::statement::Statement,
     environment::Environment,
@@ -14,14 +14,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct BreakStatement {
     code_span: CodeSpan,
 }
@@ -38,18 +37,14 @@ impl BreakStatement {
 }
 
 impl Code for BreakStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for BreakStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         "break;".to_owned()
     }
 }
-
-impl_debug_for_printable!(BreakStatement);
 
 impl Execute for BreakStatement {
     fn execute(&self, _: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -84,10 +79,12 @@ macro_rules! break_statement {
 mod tests {
     use std::rc::Rc;
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::statement::r#break::BreakStatement,
         execute::ExecuteOk,
-        print::Print,
         utils::test_utils::{
             TestContext,
             parse_statement,
@@ -101,7 +98,7 @@ mod tests {
             ("break;", "break;"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<BreakStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<BreakStatement>(src).to_string(), expect);
         }
     }
 
@@ -116,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_break_statement_resolve() {
-        let stmt = break_statement!(new_code_span(0, 0, 0, 0));
+        let stmt = break_statement!(CodeSpan::new(0, 0, 0, 0));
         let mut ctx = TestContext::new();
         ctx.resolve_statement_unknown(stmt.as_ref()).expect("resolve break statement");
     }

@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::statement::Statement,
     environment::{
@@ -17,14 +17,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable
 };
 
+#[derive(Debug)]
 pub struct BlockStatement {
     statements: Vec<Rc<dyn Statement>>,
     code_span: CodeSpan,
@@ -44,19 +43,15 @@ impl BlockStatement {
 }
 
 impl Code for BlockStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for BlockStatement {
-    fn print(&self) -> String {
-        let strs = self.statements().iter().map(|s| s.print()).collect::<Vec<String>>();
+    fn to_string(&self) -> String {
+        let strs = self.statements().iter().map(|s| s.to_string()).collect::<Vec<String>>();
         format!("{{{}}}", strs.join(" "))
     }
 }
-
-impl_debug_for_printable!(BlockStatement);
 
 impl Execute for BlockStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -117,7 +112,10 @@ macro_rules! block_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::{
@@ -133,7 +131,6 @@ mod tests {
             RuntimeErrorEnum,
         },
         execute::ExecuteOk,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -155,7 +152,7 @@ mod tests {
             ("{var a; {a = true;}}", "{var a; {(= a true);}}"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<BlockStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<BlockStatement>(src).to_string(), expect);
         }
     }
 
@@ -277,11 +274,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(3, 6, 3, 14)
+                            CodeSpan::new(3, 6, 3, 14)
                         ),
-                        new_code_span(3, 0, 3, 14),
+                        CodeSpan::new(3, 0, 3, 14),
                     ),
-                    new_code_span(3, 0, 3, 15),
+                    CodeSpan::new(3, 0, 3, 15),
                 )
             )
         );
@@ -316,7 +313,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 12, 0, 15)
+                CodeSpan::new(0, 12, 0, 15)
             )
         );
         assert_eq!(
@@ -326,7 +323,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 18, 0, 21)
+                CodeSpan::new(0, 18, 0, 21)
             )
         );
     }

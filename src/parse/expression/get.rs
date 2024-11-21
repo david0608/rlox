@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
@@ -18,15 +18,13 @@ use crate::{
         RuntimeError,
         RuntimeErrorEnum,
     },
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct GetExpression {
     object: Rc<dyn Expression>,
     name: Rc<IdentifierToken>,
@@ -58,20 +56,28 @@ impl GetExpression {
 }
 
 impl Code for GetExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
+    }
+
+    fn to_string(&self) -> String {
+        format!("(. {} {})", self.object.to_string(), self.name.name())
     }
 }
 
-impl Print for GetExpression {
-    fn print(&self) -> String {
-        format!("(. {} {})", self.object.print(), self.name.name())
+impl Expression for GetExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+        Ok(
+            Rc::new(
+                GetExpression {
+                    object: self.object.resolve(context)?,
+                    name: self.name.clone(),
+                    code_span: self.code_span,
+                }
+            )
+        )
     }
-}
 
-impl_debug_for_printable!(GetExpression);
-
-impl Evaluate for GetExpression {
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let value = match self.object.evaluate(env) {
             Ok(v) => v,
@@ -113,20 +119,6 @@ impl Evaluate for GetExpression {
     }
 }
 
-impl Expression for GetExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
-        Ok(
-            Rc::new(
-                GetExpression {
-                    object: self.object.resolve(context)?,
-                    name: self.name.clone(),
-                    code_span: self.code_span,
-                }
-            )
-        )
-    }
-}
-
 #[macro_export]
 macro_rules! get_expression {
     ( $object:expr, $name:expr, $code_span:expr ) => {
@@ -143,13 +135,15 @@ macro_rules! get_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::{
             get::GetExpression,
             variable::VariableExpression,
         },
         value::Value,
-        print::Print,
         error::{
             RuntimeError,
             RuntimeErrorEnum,
@@ -176,7 +170,7 @@ mod tests {
             parse_expression_unknown("foo.bar").as_ref()
         )
             .unwrap();
-        assert_eq!(expr.print(), "(. foo bar)");
+        assert_eq!(expr.to_string(), "(. foo bar)");
     }
 
     #[test]
@@ -208,11 +202,11 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                        new_code_span(0, 1, 0, 9),
+                        CodeSpan::new(0, 1, 0, 9),
                     ),
-                    new_code_span(0, 0, 0, 10)
+                    CodeSpan::new(0, 0, 0, 10)
                 ),
-                new_code_span(0, 0, 0, 14),
+                CodeSpan::new(0, 0, 0, 14),
             )
         );
     }
@@ -229,7 +223,7 @@ mod tests {
             ctx.evaluate(get_expr.as_ref()).unwrap_err(),
             RuntimeError::new(
                 RuntimeErrorEnum::CanNotGetProperty(Value::Bool(true)),
-                new_code_span(0, 0, 0, 7),
+                CodeSpan::new(0, 0, 0, 7),
             )
         );
     }
@@ -258,7 +252,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 3),
+                CodeSpan::new(0, 0, 0, 3),
             )
         );
     }

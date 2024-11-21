@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::{
         expression::Expression,
@@ -17,14 +17,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct IfStatement {
     condition: Rc<dyn Expression>,
     then_statement: Rc<dyn Statement>,
@@ -62,39 +61,35 @@ impl IfStatement {
 }
 
 impl Code for IfStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for IfStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         if let Some(else_statement) = self.else_statement() {
             format!(
                 "if {} {} else {}",
-                self.condition().print(),
-                self.then_statement().print(),
-                else_statement.print()
+                self.condition().to_string(),
+                self.then_statement().to_string(),
+                else_statement.to_string()
             )
         }
         else {
             format!(
                 "if {} {}",
-                self.condition().print(),
-                self.then_statement().print()
+                self.condition().to_string(),
+                self.then_statement().to_string()
             )
         }
     }
 }
-
-impl_debug_for_printable!(IfStatement);
 
 impl Execute for IfStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         let condition = match self.condition().evaluate(env) {
             Ok(val) => val.is_truthy(),
             Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
             }
         };
         let statement = if condition {
@@ -109,7 +104,7 @@ impl Execute for IfStatement {
                     return Ok(ok);
                 }
                 Err(err) => {
-                    return Err(RuntimeError::wrap(err, self.code_span()));
+                    return Err(RuntimeError::wrap(err, self.code_span().clone()));
                 }
             }
         }
@@ -168,7 +163,10 @@ macro_rules! if_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::{
@@ -180,7 +178,6 @@ mod tests {
         value::Value,
         environment::EnvironmentT,
         execute::ExecuteOk,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -202,7 +199,7 @@ mod tests {
             ("if (1 + 1 == 2) { print 1; } else { print 2; }", "if (== (+ 1 1) 2) {print 1;} else {print 2;}"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<IfStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<IfStatement>(src).to_string(), expect);
         }
     }
 
@@ -273,7 +270,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 4, 0, 7)
+                CodeSpan::new(0, 4, 0, 7)
             )
         );
     }
@@ -288,7 +285,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 18, 0, 21)
+                CodeSpan::new(0, 18, 0, 21)
             )
         );
     }
@@ -303,7 +300,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 39, 0, 42)
+                CodeSpan::new(0, 39, 0, 42)
             )
         );
     }

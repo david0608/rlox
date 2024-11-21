@@ -1,7 +1,4 @@
-use crate::code::{
-    Code,
-    code_span::CodeSpan,
-};
+use crate::code::CodeSpan;
 
 #[derive(Debug, PartialEq)]
 pub struct NumberToken {
@@ -26,10 +23,8 @@ impl NumberToken {
     pub fn lexeme(&self) -> &str {
         &self.lexeme
     }
-}
 
-impl Code for NumberToken {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    pub fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
 }

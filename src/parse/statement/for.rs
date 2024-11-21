@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::{
         expression::Expression,
@@ -20,14 +20,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct ForStatement {
     initializer: Option<Rc<dyn Statement>>,
     condition: Option<Rc<dyn Expression>>,
@@ -72,38 +71,34 @@ impl ForStatement {
 }
 
 impl Code for ForStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for ForStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         let mut inparen;
 
         if let Some(initializer) = self.initializer() {
-            inparen = format!("{}", initializer.print());
+            inparen = format!("{}", initializer.to_string());
         }
         else {
             inparen = ";".to_owned();
         }
 
         if let Some(condition) = self.condition() {
-            inparen = format!("{} {};", inparen, condition.print());
+            inparen = format!("{} {};", inparen, condition.to_string());
         }
         else {
             inparen = format!("{};", inparen);
         }
 
         if let Some(increment) = self.increment() {
-            inparen = format!("{} {}", inparen, increment.print());
+            inparen = format!("{} {}", inparen, increment.to_string());
         }
 
-        return format!("for ({}) {}", inparen, self.body().print());
+        return format!("for ({}) {}", inparen, self.body().to_string());
     }
 }
-
-impl_debug_for_printable!(ForStatement);
 
 impl Execute for ForStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
@@ -111,7 +106,7 @@ impl Execute for ForStatement {
 
         if let Some(initializer) = self.initializer() {
             if let Err(e) = initializer.execute(&env) {
-                return Err(RuntimeError::wrap(e, self.code_span()));
+                return Err(RuntimeError::wrap(e, self.code_span().clone()));
             }
         }
 
@@ -124,7 +119,7 @@ impl Execute for ForStatement {
                         }
                     }
                     Err(e) => {
-                        return Err(RuntimeError::wrap(e, self.code_span()));
+                        return Err(RuntimeError::wrap(e, self.code_span().clone()));
                     }
                 }
             }
@@ -140,13 +135,13 @@ impl Execute for ForStatement {
                     return Ok(ExecuteOk::Return(v));
                 }
                 Err(e) => {
-                    return Err(RuntimeError::wrap(e, self.code_span()));
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
                 }
             }
 
             if let Some(increment) = self.increment() {
                 if let Err(e) = increment.evaluate(&env) {
-                    return Err(RuntimeError::wrap(e, self.code_span()));
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
                 }
             }
         }
@@ -238,7 +233,10 @@ macro_rules! for_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::{
                 assign::AssignExpression,
@@ -259,7 +257,6 @@ mod tests {
             RuntimeErrorEnum,
         },
         execute::ExecuteOk,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -285,7 +282,7 @@ mod tests {
             ("for (var i; i < 10;) { print i; i = i + 1; }", "for (var i; (< i 10);) {print i; (= i (+ i 1));}"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<ForStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<ForStatement>(src).to_string(), expect);
         }
     }
 
@@ -379,11 +376,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(1, 13, 1, 21),
+                            CodeSpan::new(1, 13, 1, 21),
                         ),
-                        new_code_span(1, 5, 1, 22),
+                        CodeSpan::new(1, 5, 1, 22),
                     ),
-                    new_code_span(1, 0, 3, 1),
+                    CodeSpan::new(1, 0, 3, 1),
                 )
             )
         );
@@ -407,9 +404,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidCompare(Value::Number(0.0), Value::Bool(true)),
-                        new_code_span(1, 16, 1, 24),
+                        CodeSpan::new(1, 16, 1, 24),
                     ),
-                    new_code_span(1, 0, 3, 1),
+                    CodeSpan::new(1, 0, 3, 1),
                 )
             )
         );
@@ -434,11 +431,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(2, 6, 2, 14),
+                            CodeSpan::new(2, 6, 2, 14),
                         ),
-                        new_code_span(2, 0, 2, 15),
+                        CodeSpan::new(2, 0, 2, 15),
                     ),
-                    new_code_span(1, 0, 3, 1),
+                    CodeSpan::new(1, 0, 3, 1),
                 )
             )
         );
@@ -463,11 +460,11 @@ mod tests {
                     RuntimeError::wrap(
                         RuntimeError::new(
                             RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            new_code_span(1, 28, 1, 36),
+                            CodeSpan::new(1, 28, 1, 36),
                         ),
-                        new_code_span(1, 24, 1, 36),
+                        CodeSpan::new(1, 24, 1, 36),
                     ),
-                    new_code_span(1, 0, 3, 1),
+                    CodeSpan::new(1, 0, 3, 1),
                 )
             )
         );
@@ -516,7 +513,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 13, 0, 14)
+                CodeSpan::new(0, 13, 0, 14)
             )
         );
     }
@@ -531,7 +528,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 16, 0, 17)
+                CodeSpan::new(0, 16, 0, 17)
             )
         );
     }
@@ -546,7 +543,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 28, 0, 29)
+                CodeSpan::new(0, 28, 0, 29)
             )
         );
     }
@@ -561,7 +558,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 37, 0, 38)
+                CodeSpan::new(0, 37, 0, 38)
             )
         );
     }

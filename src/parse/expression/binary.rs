@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     value::Value,
@@ -14,16 +14,13 @@ use crate::{
         RuntimeError,
         RuntimeErrorEnum,
     },
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum BinaryExpressionEnum {
     Equal,
     NotEqual,
@@ -37,6 +34,7 @@ pub enum BinaryExpressionEnum {
     Divide,
 }
 
+#[derive(Debug)]
 pub struct BinaryExpression {
     variant: BinaryExpressionEnum,
     lhs: Rc<dyn Expression>,
@@ -74,42 +72,51 @@ impl BinaryExpression {
 }
 
 impl Code for BinaryExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for BinaryExpression {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         match self.variant() {
-            BinaryExpressionEnum::Equal => format!("(== {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::NotEqual => format!("(!= {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::Less => format!("(< {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::LessEqual => format!("(<= {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::Greater => format!("(> {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::GreaterEqual => format!("(>= {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::Plus => format!("(+ {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::Minus => format!("(- {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::Multiply => format!("(* {} {})", self.lhs().print(), self.rhs().print()),
-            BinaryExpressionEnum::Divide => format!("(/ {} {})", self.lhs().print(), self.rhs().print()),
+            BinaryExpressionEnum::Equal => format!("(== {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::NotEqual => format!("(!= {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::Less => format!("(< {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::LessEqual => format!("(<= {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::Greater => format!("(> {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::GreaterEqual => format!("(>= {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::Plus => format!("(+ {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::Minus => format!("(- {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::Multiply => format!("(* {} {})", self.lhs().to_string(), self.rhs().to_string()),
+            BinaryExpressionEnum::Divide => format!("(/ {} {})", self.lhs().to_string(), self.rhs().to_string()),
         }
     }
 }
 
-impl_debug_for_printable!(BinaryExpression);
+impl Expression for BinaryExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+        Ok(
+            Rc::new(
+                BinaryExpression::new(
+                    self.variant,
+                    self.lhs.resolve(context)?,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
+                )
+            )
+        )
+    }
 
-impl Evaluate for BinaryExpression {
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let lhs = match self.lhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
             }
         };
         let rhs = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
             }
         };
         match self.variant() {
@@ -131,7 +138,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidCompare(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -149,7 +156,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidCompare(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -167,7 +174,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidCompare(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -185,7 +192,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidCompare(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -203,7 +210,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidArithmetic(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -218,7 +225,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidArithmetic(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -233,7 +240,7 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidArithmetic(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
@@ -246,7 +253,7 @@ impl Evaluate for BinaryExpression {
                             Err(
                                 RuntimeError::new(
                                     RuntimeErrorEnum::DivideByZero,
-                                    self.code_span(),
+                                    self.code_span().clone(),
                                 )
                             )
                         }
@@ -258,28 +265,13 @@ impl Evaluate for BinaryExpression {
                         Err(
                             RuntimeError::new(
                                 RuntimeErrorEnum::InvalidArithmetic(lhs, rhs),
-                                self.code_span(),
+                                self.code_span().clone(),
                             )
                         )
                     }
                 }
             }
         }
-    }
-}
-
-impl Expression for BinaryExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
-        Ok(
-            Rc::new(
-                BinaryExpression::new(
-                    self.variant,
-                    self.lhs.resolve(context)?,
-                    self.rhs.resolve(context)?,
-                    self.code_span.clone(),
-                )
-            )
-        )
     }
 }
 
@@ -300,7 +292,10 @@ macro_rules! binary_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::{
             binary::BinaryExpression,
             variable::VariableExpression,
@@ -310,7 +305,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -342,7 +336,7 @@ mod tests {
         ];
         for (src, expect) in tests {
             assert_eq!(
-                parse_expression::<BinaryExpression>(src).print(),
+                parse_expression::<BinaryExpression>(src).to_string(),
                 expect,
             );
         }
@@ -461,7 +455,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -470,7 +464,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -479,7 +473,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -488,7 +482,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -497,7 +491,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -506,7 +500,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -515,7 +509,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -524,7 +518,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -533,7 +527,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -542,7 +536,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -554,7 +548,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -563,7 +557,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -572,7 +566,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -581,7 +575,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -597,7 +591,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -606,7 +600,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -615,7 +609,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -624,7 +618,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -633,7 +627,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -642,7 +636,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -651,7 +645,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -660,7 +654,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 15),
+                    CodeSpan::new(0, 0, 0, 15),
                 )
             )
         );
@@ -669,7 +663,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -678,7 +672,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -690,7 +684,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -699,7 +693,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -708,7 +702,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 15),
+                    CodeSpan::new(0, 0, 0, 15),
                 )
             )
         );
@@ -717,7 +711,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -733,7 +727,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -742,7 +736,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -751,7 +745,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -760,7 +754,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -769,7 +763,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -778,7 +772,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -787,7 +781,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -796,7 +790,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -805,7 +799,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -814,7 +808,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -826,7 +820,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -835,7 +829,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -844,7 +838,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -853,7 +847,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -869,7 +863,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -878,7 +872,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -887,7 +881,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -896,7 +890,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -905,7 +899,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -914,7 +908,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -923,7 +917,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -932,7 +926,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 15),
+                    CodeSpan::new(0, 0, 0, 15),
                 )
             )
         );
@@ -941,7 +935,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -950,7 +944,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -962,7 +956,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -971,7 +965,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -980,7 +974,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 15),
+                    CodeSpan::new(0, 0, 0, 15),
                 )
             )
         );
@@ -989,7 +983,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidCompare(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 12),
+                    CodeSpan::new(0, 0, 0, 12),
                 )
             )
         );
@@ -1005,7 +999,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -1014,7 +1008,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1023,7 +1017,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1032,7 +1026,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1041,7 +1035,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1050,7 +1044,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1059,7 +1053,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1068,7 +1062,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1077,7 +1071,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1086,7 +1080,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1096,7 +1090,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1105,7 +1099,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1114,7 +1108,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1123,7 +1117,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1137,7 +1131,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -1146,7 +1140,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1155,7 +1149,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1164,7 +1158,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1173,7 +1167,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1182,7 +1176,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1191,7 +1185,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1200,7 +1194,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1209,7 +1203,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1218,7 +1212,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1228,7 +1222,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1237,7 +1231,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1246,7 +1240,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1255,7 +1249,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1264,7 +1258,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 17),
+                    CodeSpan::new(0, 0, 0, 17),
                 )
             )
         );
@@ -1277,7 +1271,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -1286,7 +1280,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1295,7 +1289,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1304,7 +1298,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1313,7 +1307,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1322,7 +1316,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1331,7 +1325,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1340,7 +1334,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1349,7 +1343,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1358,7 +1352,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1368,7 +1362,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1377,7 +1371,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1386,7 +1380,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1395,7 +1389,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1404,7 +1398,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 17),
+                    CodeSpan::new(0, 0, 0, 17),
                 )
             )
         );
@@ -1417,7 +1411,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Nil),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -1426,7 +1420,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Bool(true)),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1435,7 +1429,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1444,7 +1438,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Nil, Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1453,7 +1447,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Nil),
-                    new_code_span(0, 0, 0, 10),
+                    CodeSpan::new(0, 0, 0, 10),
                 )
             )
         );
@@ -1462,7 +1456,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1471,7 +1465,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1480,7 +1474,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1489,7 +1483,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Nil),
-                    new_code_span(0, 0, 0, 7),
+                    CodeSpan::new(0, 0, 0, 7),
                 )
             )
         );
@@ -1498,7 +1492,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 8),
+                    CodeSpan::new(0, 0, 0, 8),
                 )
             )
         );
@@ -1508,7 +1502,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::DivideByZero,
-                    new_code_span(0, 0, 0, 5),
+                    CodeSpan::new(0, 0, 0, 5),
                 )
             )
         );
@@ -1517,7 +1511,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1526,7 +1520,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Nil),
-                    new_code_span(0, 0, 0, 13),
+                    CodeSpan::new(0, 0, 0, 13),
                 )
             )
         );
@@ -1535,7 +1529,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Bool(true)),
-                    new_code_span(0, 0, 0, 14),
+                    CodeSpan::new(0, 0, 0, 14),
                 )
             )
         );
@@ -1544,7 +1538,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::Number(1.0)),
-                    new_code_span(0, 0, 0, 11),
+                    CodeSpan::new(0, 0, 0, 11),
                 )
             )
         );
@@ -1553,7 +1547,7 @@ mod tests {
             Err(
                 RuntimeError::new(
                     RuntimeErrorEnum::InvalidArithmetic(Value::String("hello".to_owned()), Value::String("hello".to_owned())),
-                    new_code_span(0, 0, 0, 17),
+                    CodeSpan::new(0, 0, 0, 17),
                 )
             )
         );
@@ -1572,9 +1566,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(true)),
-                        new_code_span(0, 0, 0, 8),
+                        CodeSpan::new(0, 0, 0, 8),
                     ),
-                    new_code_span(0, 0, 0, 17),
+                    CodeSpan::new(0, 0, 0, 17),
                 )
             )
         );
@@ -1588,9 +1582,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Bool(false), Value::Number(1.0)),
-                        new_code_span(0, 8, 0, 17),
+                        CodeSpan::new(0, 8, 0, 17),
                     ),
-                    new_code_span(0, 0, 0, 17),
+                    CodeSpan::new(0, 0, 0, 17),
                 )
             )
         );
@@ -1627,7 +1621,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 3)
+                CodeSpan::new(0, 0, 0, 3)
             )
         );
     }
@@ -1643,7 +1637,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 7, 0, 10)
+                CodeSpan::new(0, 7, 0, 10)
             )
         );
     }

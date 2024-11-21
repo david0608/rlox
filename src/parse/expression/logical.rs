@@ -5,27 +5,25 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::expression::Expression,
     value::Value,
     environment::Environment,
     error::RuntimeError,
-    evaluate::Evaluate,
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum LogicalExpressionEnum {
     And,
     Or,
 }
 
+#[derive(Debug)]
 pub struct LogicalExpression {
     variant: LogicalExpressionEnum,
     lhs: Rc<dyn Expression>,
@@ -63,32 +61,41 @@ impl LogicalExpression {
 }
 
 impl Code for LogicalExpression {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for LogicalExpression {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         match self.variant() {
             LogicalExpressionEnum::And => {
-                format!("(and {} {})", self.lhs().print(), self.rhs().print())
+                format!("(and {} {})", self.lhs().to_string(), self.rhs().to_string())
             }
             LogicalExpressionEnum::Or => {
-                format!("(or {} {})", self.lhs().print(), self.rhs().print())
+                format!("(or {} {})", self.lhs().to_string(), self.rhs().to_string())
             }
         }
     }
 }
 
-impl_debug_for_printable!(LogicalExpression);
+impl Expression for LogicalExpression {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+        Ok(
+            Rc::new(
+                LogicalExpression::new(
+                    self.variant,
+                    self.lhs.resolve(context)?,
+                    self.rhs.resolve(context)?,
+                    self.code_span.clone(),
+                )
+            )
+        )
+    }
 
-impl Evaluate for LogicalExpression {
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
         let lv = match self.lhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
             }
         };
 
@@ -108,26 +115,11 @@ impl Evaluate for LogicalExpression {
         let rv = match self.rhs().evaluate(env) {
             Ok(val) => val,
             Err(err) => {
-                return Err(RuntimeError::wrap(err, self.code_span()));
+                return Err(RuntimeError::wrap(err, self.code_span().clone()));
             }
         };
 
         return Ok(rv);
-    }
-}
-
-impl Expression for LogicalExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
-        Ok(
-            Rc::new(
-                LogicalExpression::new(
-                    self.variant,
-                    self.lhs.resolve(context)?,
-                    self.rhs.resolve(context)?,
-                    self.code_span.clone(),
-                )
-            )
-        )
     }
 }
 
@@ -148,7 +140,10 @@ macro_rules! logical_expression {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::expression::{
             logical::LogicalExpression,
             variable::VariableExpression,
@@ -158,7 +153,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -182,7 +176,7 @@ mod tests {
             ("x or y and z", "(or x (and y z))"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_expression::<LogicalExpression>(src).print(), expect);
+            assert_eq!(parse_expression::<LogicalExpression>(src).to_string(), expect);
         }
     }
 
@@ -213,9 +207,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                        new_code_span(0, 0, 0, 8),
+                        CodeSpan::new(0, 0, 0, 8),
                     ),
-                    new_code_span(0, 0, 0, 17),
+                    CodeSpan::new(0, 0, 0, 17),
                 )
             )
         );
@@ -225,9 +219,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Number(1.0), Value::Bool(false)),
-                        new_code_span(0, 9, 0, 18),
+                        CodeSpan::new(0, 9, 0, 18),
                     ),
-                    new_code_span(0, 0, 0, 18),
+                    CodeSpan::new(0, 0, 0, 18),
                 )
             )
         );
@@ -264,7 +258,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 3)
+                CodeSpan::new(0, 0, 0, 3)
             )
         );
         assert_eq!(
@@ -274,7 +268,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 8, 0, 11)
+                CodeSpan::new(0, 8, 0, 11)
             )
         );
     }

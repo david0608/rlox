@@ -6,7 +6,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::statement::Statement,
     scan::token::identifier::IdentifierToken,
@@ -23,13 +23,11 @@ use crate::{
         ExecuteResult,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
         ResolveErrorEnum,
     },
-    impl_debug_for_printable,
 };
 
 #[derive(Debug)]
@@ -82,7 +80,7 @@ impl MethodDefinition {
                 return Err(
                     ResolveError::new(
                         ResolveErrorEnum::VariableHaveBeenDeclared,
-                        p.code_span()
+                        p.code_span().clone()
                     )
                 );
             }
@@ -107,11 +105,12 @@ impl std::fmt::Display for MethodDefinition {
             "{}({}) {{{}}}",
             self.name.name(),
             self.parameters.iter().map(|p| p.name().to_owned()).collect::<Vec<String>>().join(", "),
-            self.body.iter().map(|s| s.print()).collect::<Vec<String>>().join(" "),
+            self.body.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(" "),
         )
     }
 }
 
+#[derive(Debug)]
 pub struct ClassDeclareStatement {
     name: Rc<IdentifierToken>,
     method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
@@ -138,13 +137,11 @@ impl ClassDeclareStatement {
 }
 
 impl Code for ClassDeclareStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
     }
-}
 
-impl Print for ClassDeclareStatement {
-    fn print(&self) -> String {
+    fn to_string(&self) -> String {
         let mut methods = self.method_definitions.iter().collect::<Vec<(&String, &Rc<MethodDefinition>)>>();
         methods.sort_by_key(|m| m.0);
         format!(
@@ -154,8 +151,6 @@ impl Print for ClassDeclareStatement {
         )
     }
 }
-
-impl_debug_for_printable!(ClassDeclareStatement);
 
 impl Execute for ClassDeclareStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
@@ -182,7 +177,7 @@ impl Statement for ClassDeclareStatement {
             return Err(
                 ResolveError::new(
                     ResolveErrorEnum::VariableHaveBeenDeclared,
-                    self.name.code_span()
+                    self.name.code_span().clone()
                 )
             );
         }
@@ -218,7 +213,10 @@ macro_rules! class_declare_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::
                 variable::VariableExpression,
@@ -233,7 +231,6 @@ mod tests {
             Execute,
             ExecuteOk,
         },
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -260,7 +257,7 @@ mod tests {
             "
         );
         assert_eq!(
-            stmt.print(),
+            stmt.to_string(),
             "class Foo {foo(a, b) {return (+ a b);}}"
         );
     }
@@ -382,7 +379,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableHaveBeenDeclared,
-                new_code_span(0, 6, 0, 9)
+                CodeSpan::new(0, 6, 0, 9)
             )
         );
     }
@@ -406,7 +403,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(3, 6, 3, 9)
+                CodeSpan::new(3, 6, 3, 9)
             )
         );
     }

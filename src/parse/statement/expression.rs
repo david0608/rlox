@@ -5,7 +5,7 @@ use std::{
 use crate::{
     code::{
         Code,
-        code_span::CodeSpan,
+        CodeSpan,
     },
     parse::{
         expression::Expression,
@@ -17,14 +17,13 @@ use crate::{
         Execute,
         ExecuteOk,
     },
-    print::Print,
     resolve::{
         ResolveCtx,
         ResolveError,
     },
-    impl_debug_for_printable,
 };
 
+#[derive(Debug)]
 pub struct ExpressionStatement {
     expression: Rc<dyn Expression>,
     code_span: CodeSpan,
@@ -44,23 +43,19 @@ impl ExpressionStatement {
 }
 
 impl Code for ExpressionStatement {
-    fn code_span(&self) -> CodeSpan {
-        self.code_span
+    fn code_span(&self) -> &CodeSpan {
+        &self.code_span
+    }
+
+    fn to_string(&self) -> String {
+        format!("{};", self.expression().to_string())
     }
 }
-
-impl Print for ExpressionStatement {
-    fn print(&self) -> String {
-        format!("{};", self.expression().print())
-    }
-}
-
-impl_debug_for_printable!(ExpressionStatement);
 
 impl Execute for ExpressionStatement {
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         if let Err(e) = self.expression().evaluate(env) {
-            return Err(RuntimeError::wrap(e, self.code_span()));
+            return Err(RuntimeError::wrap(e, self.code_span().clone()));
         }
         else {
             return Ok(ExecuteOk::KeepGoing);
@@ -96,7 +91,10 @@ macro_rules! expression_statement {
 #[cfg(test)]
 mod tests {
     use crate::{
-        code::code_span::new_code_span,
+        code::{
+            Code,
+            CodeSpan,
+        },
         parse::{
             expression::variable::VariableExpression,
             statement::expression::ExpressionStatement,
@@ -107,7 +105,6 @@ mod tests {
             RuntimeErrorEnum,
         },
         execute::ExecuteOk,
-        print::Print,
         resolve::{
             ResolveError,
             ResolveErrorEnum,
@@ -129,7 +126,7 @@ mod tests {
             ("1 + 1;", "(+ 1 1);"),
         ];
         for (src, expect) in tests {
-            assert_eq!(parse_statement::<ExpressionStatement>(src).print(), expect);
+            assert_eq!(parse_statement::<ExpressionStatement>(src).to_string(), expect);
         }
     }
 
@@ -153,9 +150,9 @@ mod tests {
                 RuntimeError::wrap(
                     RuntimeError::new(
                         RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                        new_code_span(0, 0, 0, 8),
+                        CodeSpan::new(0, 0, 0, 8),
                     ),
-                    new_code_span(0, 0, 0, 9),
+                    CodeSpan::new(0, 0, 0, 9),
                 )
             )
         );
@@ -185,7 +182,7 @@ mod tests {
                 .unwrap_err(),
             ResolveError::new(
                 ResolveErrorEnum::VariableNotDeclared,
-                new_code_span(0, 0, 0, 3)
+                CodeSpan::new(0, 0, 0, 3)
             )
         );
     }
