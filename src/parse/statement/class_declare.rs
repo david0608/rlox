@@ -8,7 +8,10 @@ use crate::{
         Code,
         CodeSpan,
     },
-    parse::statement::Statement,
+    parse::statement::{
+        Statement,
+        ExecuteOk,
+    },
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
@@ -18,11 +21,7 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    execute::{
-        Execute,
-        ExecuteResult,
-        ExecuteOk,
-    },
+    error::RuntimeError,
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -152,25 +151,6 @@ impl Code for ClassDeclareStatement {
     }
 }
 
-impl Execute for ClassDeclareStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> ExecuteResult {
-        env.declare(
-            self.name().name(),
-            Value::Class(
-                Rc::new(
-                    Class::new(
-                        self.name.clone(),
-                        env.clone(),
-                        self.method_definitions.clone(),
-                    )
-                )
-            )
-        )
-            .expect("Variable name have been declared. This may not happen if the class declaration statement have been successfully resolved.");
-        return Ok(ExecuteOk::KeepGoing);
-    }
-}
-
 impl Statement for ClassDeclareStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         if context.declare(self.name.name()).is_err() {
@@ -194,6 +174,23 @@ impl Statement for ClassDeclareStatement {
                 )
             )
         );
+    }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        env.declare(
+            self.name().name(),
+            Value::Class(
+                Rc::new(
+                    Class::new(
+                        self.name.clone(),
+                        env.clone(),
+                        self.method_definitions.clone(),
+                    )
+                )
+            )
+        )
+            .expect("Variable name have been declared. This may not happen if the class declaration statement have been successfully resolved.");
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
@@ -221,16 +218,14 @@ mod tests {
             expression::
                 variable::VariableExpression,
             statement::{
+                Statement,
+                ExecuteOk,
                 class_declare::ClassDeclareStatement,
                 print::PrintStatement,
             },
         },
         value::Value,
         environment::EnvironmentT,
-        execute::{
-            Execute,
-            ExecuteOk,
-        },
         resolve::{
             ResolveError,
             ResolveErrorEnum,

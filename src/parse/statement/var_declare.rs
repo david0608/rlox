@@ -9,7 +9,10 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     scan::token::{
         identifier::IdentifierToken,
@@ -21,10 +24,6 @@ use crate::{
         EnvironmentT,
     },
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -77,23 +76,6 @@ impl Code for VarDeclareStatement {
     }
 }
 
-impl Execute for VarDeclareStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        let mut value = Value::Nil;
-        if let Some(i) = self.initializer() {
-            match i.evaluate(env) {
-                Ok(v) => value = v,
-                Err(e) => {
-                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
-                }
-            }
-        };
-        env.declare(self.name().name(), value)
-            .expect("Variable name have been declared. This may not happen if the variable declaration statement have been successfully resolved.");
-        return Ok(ExecuteOk::KeepGoing);
-    }
-}
-
 impl Statement for VarDeclareStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         let initializer = if let Some(e) = self.initializer.as_ref() {
@@ -119,6 +101,21 @@ impl Statement for VarDeclareStatement {
                 )
             )
         );
+    }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        let mut value = Value::Nil;
+        if let Some(i) = self.initializer() {
+            match i.evaluate(env) {
+                Ok(v) => value = v,
+                Err(e) => {
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
+                }
+            }
+        };
+        env.declare(self.name().name(), value)
+            .expect("Variable name have been declared. This may not happen if the variable declaration statement have been successfully resolved.");
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 

@@ -5,7 +5,10 @@ use std::{
     cell::RefCell,
 };
 use crate::{
-    parse::statement::Statement,
+    parse::statement::{
+        Statement,
+        ExecuteOk,
+    },
     scan::token::identifier::IdentifierToken,
     value::Value,
     call::{
@@ -16,7 +19,6 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    execute::ExecuteOk,
 };
 
 static FUNCTION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);

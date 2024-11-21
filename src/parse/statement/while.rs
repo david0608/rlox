@@ -9,14 +9,13 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     environment::Environment,
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -68,7 +67,25 @@ impl Code for WhileStatement {
     }
 }
 
-impl Execute for WhileStatement {
+impl Statement for WhileStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+        let condition = if let Some(e) = self.condition.as_ref() {
+            Some(e.resolve(context)?)
+        }
+        else {
+            None
+        };
+        return Ok(
+            Rc::new(
+                WhileStatement::new(
+                    condition,
+                    self.body.resolve(context)?,
+                    self.code_span.clone(),
+                )
+            )
+        );
+    }
+
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         loop {
             if let Some(condition) = self.condition() {
@@ -99,26 +116,6 @@ impl Execute for WhileStatement {
                 }
             }
         }
-    }
-}
-
-impl Statement for WhileStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
-        let condition = if let Some(e) = self.condition.as_ref() {
-            Some(e.resolve(context)?)
-        }
-        else {
-            None
-        };
-        return Ok(
-            Rc::new(
-                WhileStatement::new(
-                    condition,
-                    self.body.resolve(context)?,
-                    self.code_span.clone(),
-                )
-            )
-        );
     }
 }
 
@@ -155,6 +152,7 @@ mod tests {
         parse::{
             expression::variable::VariableExpression,
             statement::{
+                ExecuteOk,
                 block::BlockStatement,
                 print::PrintStatement,
                 r#while::WhileStatement,
@@ -162,7 +160,6 @@ mod tests {
         },
         value::Value,
         environment::EnvironmentT,
-        execute::ExecuteOk,
         resolve::{
             ResolveError,
             ResolveErrorEnum,

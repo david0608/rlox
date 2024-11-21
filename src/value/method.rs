@@ -4,7 +4,10 @@ use std::{
     iter::zip,
 };
 use crate::{
-    parse::statement::class_declare::MethodDefinition,
+    parse::statement::{
+        ExecuteOk,
+        class_declare::MethodDefinition,
+    },
     value::{
         Value,
         object::Object,
@@ -14,7 +17,6 @@ use crate::{
         CallError,
     },
     environment::EnvironmentT,
-    execute::ExecuteOk,
 };
 
 #[derive(Debug)]

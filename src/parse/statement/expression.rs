@@ -9,14 +9,13 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     environment::Environment,
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -52,17 +51,6 @@ impl Code for ExpressionStatement {
     }
 }
 
-impl Execute for ExpressionStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        if let Err(e) = self.expression().evaluate(env) {
-            return Err(RuntimeError::wrap(e, self.code_span().clone()));
-        }
-        else {
-            return Ok(ExecuteOk::KeepGoing);
-        }
-    }
-}
-
 impl Statement for ExpressionStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
@@ -73,6 +61,15 @@ impl Statement for ExpressionStatement {
                 )
             )
         )
+    }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        if let Err(e) = self.expression().evaluate(env) {
+            return Err(RuntimeError::wrap(e, self.code_span().clone()));
+        }
+        else {
+            return Ok(ExecuteOk::KeepGoing);
+        }
     }
 }
 
@@ -97,14 +94,16 @@ mod tests {
         },
         parse::{
             expression::variable::VariableExpression,
-            statement::expression::ExpressionStatement,
+            statement::{
+                ExecuteOk,
+                expression::ExpressionStatement,
+            }
         },
         value::Value,
         error::{
             RuntimeError,
             RuntimeErrorEnum,
         },
-        execute::ExecuteOk,
         resolve::{
             ResolveError,
             ResolveErrorEnum,

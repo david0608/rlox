@@ -1,11 +1,14 @@
 use std::{
     any::Any,
     rc::Rc,
+    cell::RefCell,
     fmt::Debug,
 };
 use crate::{
     code::Code,
-    execute::Execute,
+    value::Value,
+    environment::Environment,
+    error::RuntimeError,
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -28,11 +31,12 @@ pub mod r#while;
 pub trait Statement
     where
     Self: Code
-        + Execute
         + Debug
         + Any
 {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError>;
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError>;
 }
 
 impl Downcast for Rc<dyn Statement> {
@@ -43,4 +47,11 @@ impl Downcast for Rc<dyn Statement> {
     fn downcast_ref<T: 'static>(&self) -> Option<&T> {
         (self.as_ref() as &dyn Any).downcast_ref::<T>()
     }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum ExecuteOk {
+    KeepGoing,
+    Break,
+    Return(Value),
 }

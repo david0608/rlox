@@ -7,7 +7,10 @@ use crate::{
         Code,
         CodeSpan,
     },
-    parse::statement::Statement,
+    parse::statement::{
+        Statement,
+        ExecuteOk,
+    },
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
@@ -21,10 +24,6 @@ use crate::{
         EnvironmentT,
     },
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -84,25 +83,6 @@ impl Code for FunDeclareStatement {
     }
 }
 
-impl Execute for FunDeclareStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        env.declare(
-            self.name().name(),
-            Value::Function(
-                Function::new(
-                    function_id(),
-                    self.name().clone(),
-                    self.parameters().clone(),
-                    self.body().clone(),
-                    env.clone(),
-                )
-            )
-        )
-            .expect("Variable name have been declared. This may not happen if the function declaration statement have been successfully resolved.");
-        return Ok(ExecuteOk::KeepGoing);
-    }
-}
-
 impl Statement for FunDeclareStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         if context.declare(self.name.name()).is_err() {
@@ -145,6 +125,23 @@ impl Statement for FunDeclareStatement {
             }
         }
     }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        env.declare(
+            self.name().name(),
+            Value::Function(
+                Function::new(
+                    function_id(),
+                    self.name().clone(),
+                    self.parameters().clone(),
+                    self.body().clone(),
+                    env.clone(),
+                )
+            )
+        )
+            .expect("Variable name have been declared. This may not happen if the function declaration statement have been successfully resolved.");
+        return Ok(ExecuteOk::KeepGoing);
+    }
 }
 
 #[macro_export]
@@ -171,16 +168,14 @@ mod tests {
         parse::{
             expression::variable::VariableExpression,
             statement::{
+                Statement,
+                ExecuteOk,
                 fun_declare::FunDeclareStatement,
                 print::PrintStatement,
             },
         },
         value::Value,
         environment::EnvironmentT,
-        execute::{
-            Execute,
-            ExecuteOk,
-        },
         resolve::{
             ResolveError,
             ResolveErrorEnum,

@@ -9,14 +9,13 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     environment::Environment,
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -84,7 +83,28 @@ impl Code for IfStatement {
     }
 }
 
-impl Execute for IfStatement {
+impl Statement for IfStatement {
+    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+        let condition = self.condition.resolve(context)?;
+        let then = self.then_statement.resolve(context)?;
+        let r#else = if let Some(stmt) = self.else_statement.as_ref() {
+            Some(stmt.resolve(context)?)
+        }
+        else {
+            None
+        };
+        return Ok(
+            Rc::new(
+                IfStatement::new(
+                    condition,
+                    then,
+                    r#else,
+                    self.code_span.clone(),
+                )
+            )
+        );
+    }
+
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
         let condition = match self.condition().evaluate(env) {
             Ok(val) => val.is_truthy(),
@@ -109,29 +129,6 @@ impl Execute for IfStatement {
             }
         }
         return Ok(ExecuteOk::KeepGoing);
-    }
-}
-
-impl Statement for IfStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
-        let condition = self.condition.resolve(context)?;
-        let then = self.then_statement.resolve(context)?;
-        let r#else = if let Some(stmt) = self.else_statement.as_ref() {
-            Some(stmt.resolve(context)?)
-        }
-        else {
-            None
-        };
-        return Ok(
-            Rc::new(
-                IfStatement::new(
-                    condition,
-                    then,
-                    r#else,
-                    self.code_span.clone(),
-                )
-            )
-        );
     }
 }
 
@@ -170,6 +167,7 @@ mod tests {
         parse::{
             expression::variable::VariableExpression,
             statement::{
+                ExecuteOk,
                 block::BlockStatement,
                 ifelse::IfStatement,
                 print::PrintStatement,
@@ -177,7 +175,6 @@ mod tests {
         },
         value::Value,
         environment::EnvironmentT,
-        execute::ExecuteOk,
         resolve::{
             ResolveError,
             ResolveErrorEnum,

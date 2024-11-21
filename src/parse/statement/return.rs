@@ -9,16 +9,15 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     scan::token::simple::RETURN_LEXEME,
     value::Value,
     environment::Environment,
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -63,24 +62,6 @@ impl Code for ReturnStatement {
     }
 }
 
-impl Execute for ReturnStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        if let Some(e) = self.expression() {
-            match e.evaluate(env) {
-                Ok(v) => {
-                    return Ok(ExecuteOk::Return(v));
-                }
-                Err(e) => {
-                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
-                }
-            }
-        }
-        else {
-            return Ok(ExecuteOk::Return(Value::Nil));
-        }
-    }
-}
-
 impl Statement for ReturnStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         let expr = if let Some(e) = self.expression.as_ref() {
@@ -97,6 +78,22 @@ impl Statement for ReturnStatement {
                 )
             )
         );
+    }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        if let Some(e) = self.expression() {
+            match e.evaluate(env) {
+                Ok(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+                Err(e) => {
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
+                }
+            }
+        }
+        else {
+            return Ok(ExecuteOk::Return(Value::Nil));
+        }
     }
 }
 
@@ -121,14 +118,16 @@ mod tests {
         },
         parse::{
             expression::variable::VariableExpression,
-            statement::r#return::ReturnStatement,
+            statement::{
+                ExecuteOk,
+                r#return::ReturnStatement,
+            }
         },
         value::Value,
         error::{
             RuntimeError,
             RuntimeErrorEnum,
         },
-        execute::ExecuteOk,
         resolve::{
             ResolveError,
             ResolveErrorEnum,

@@ -9,15 +9,14 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     scan::token::simple::PRINT_LEXEME,
     environment::Environment,
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -53,20 +52,6 @@ impl Code for PrintStatement {
     }
 }
 
-impl Execute for PrintStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        match self.value().evaluate(env) {
-            Ok(v) => {
-                println!("{}", v);
-                return Ok(ExecuteOk::KeepGoing);
-            }
-            Err(e) => {
-                return Err(RuntimeError::wrap(e, self.code_span().clone()));
-            }
-        }
-    }
-}
-
 impl Statement for PrintStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
@@ -77,6 +62,18 @@ impl Statement for PrintStatement {
                 )
             )
         )
+    }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        match self.value().evaluate(env) {
+            Ok(v) => {
+                println!("{}", v);
+                return Ok(ExecuteOk::KeepGoing);
+            }
+            Err(e) => {
+                return Err(RuntimeError::wrap(e, self.code_span().clone()));
+            }
+        }
     }
 }
 

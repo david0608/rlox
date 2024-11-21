@@ -9,17 +9,16 @@ use crate::{
     },
     parse::{
         expression::Expression,
-        statement::Statement,
+        statement::{
+            Statement,
+            ExecuteOk,
+        },
     },
     environment::{
         Environment,
         EnvironmentT,
     },
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -100,54 +99,6 @@ impl Code for ForStatement {
     }
 }
 
-impl Execute for ForStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        let env = env.new_child();
-
-        if let Some(initializer) = self.initializer() {
-            if let Err(e) = initializer.execute(&env) {
-                return Err(RuntimeError::wrap(e, self.code_span().clone()));
-            }
-        }
-
-        loop {
-            if let Some(condition) = self.condition() {
-                match condition.evaluate(&env) {
-                    Ok(v) => {
-                        if !v.is_truthy() {
-                            return Ok(ExecuteOk::KeepGoing);
-                        }
-                    }
-                    Err(e) => {
-                        return Err(RuntimeError::wrap(e, self.code_span().clone()));
-                    }
-                }
-            }
-
-            match self.body().execute(&env) {
-                Ok(ExecuteOk::KeepGoing) => {
-                    // donothing.
-                }
-                Ok(ExecuteOk::Break) => {
-                    return Ok(ExecuteOk::KeepGoing);
-                }
-                Ok(ExecuteOk::Return(v)) => {
-                    return Ok(ExecuteOk::Return(v));
-                }
-                Err(e) => {
-                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
-                }
-            }
-
-            if let Some(increment) = self.increment() {
-                if let Err(e) = increment.evaluate(&env) {
-                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
-                }
-            }
-        }
-    }
-}
-
 impl Statement for ForStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         context.begin();
@@ -207,6 +158,52 @@ impl Statement for ForStatement {
             )
         )
     }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        let env = env.new_child();
+
+        if let Some(initializer) = self.initializer() {
+            if let Err(e) = initializer.execute(&env) {
+                return Err(RuntimeError::wrap(e, self.code_span().clone()));
+            }
+        }
+
+        loop {
+            if let Some(condition) = self.condition() {
+                match condition.evaluate(&env) {
+                    Ok(v) => {
+                        if !v.is_truthy() {
+                            return Ok(ExecuteOk::KeepGoing);
+                        }
+                    }
+                    Err(e) => {
+                        return Err(RuntimeError::wrap(e, self.code_span().clone()));
+                    }
+                }
+            }
+
+            match self.body().execute(&env) {
+                Ok(ExecuteOk::KeepGoing) => {
+                    // donothing.
+                }
+                Ok(ExecuteOk::Break) => {
+                    return Ok(ExecuteOk::KeepGoing);
+                }
+                Ok(ExecuteOk::Return(v)) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+                Err(e) => {
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
+                }
+            }
+
+            if let Some(increment) = self.increment() {
+                if let Err(e) = increment.evaluate(&env) {
+                    return Err(RuntimeError::wrap(e, self.code_span().clone()));
+                }
+            }
+        }
+    }
 }
 
 #[macro_export]
@@ -244,6 +241,7 @@ mod tests {
                 variable::VariableExpression
             },
             statement::{
+                ExecuteOk,
                 block::BlockStatement,
                 expression::ExpressionStatement,
                 r#for::ForStatement,
@@ -256,7 +254,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        execute::ExecuteOk,
         resolve::{
             ResolveError,
             ResolveErrorEnum,

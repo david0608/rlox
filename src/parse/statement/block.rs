@@ -7,16 +7,15 @@ use crate::{
         Code,
         CodeSpan,
     },
-    parse::statement::Statement,
+    parse::statement::{
+        Statement,
+        ExecuteOk,
+    },
     environment::{
         Environment,
         EnvironmentT,
     },
     error::RuntimeError,
-    execute::{
-        Execute,
-        ExecuteOk,
-    },
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -53,27 +52,6 @@ impl Code for BlockStatement {
     }
 }
 
-impl Execute for BlockStatement {
-    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        let env = env.new_child();
-        for statement in self.statements() {
-            let ok = statement.execute(&env)?;
-            match ok {
-                ExecuteOk::KeepGoing => {
-                    // do nothing.
-                }
-                ExecuteOk::Break => {
-                    return Ok(ExecuteOk::Break);
-                }
-                ExecuteOk::Return(v) => {
-                    return Ok(ExecuteOk::Return(v));
-                }
-            }
-        }
-        return Ok(ExecuteOk::KeepGoing);
-    }
-}
-
 impl Statement for BlockStatement {
     fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         context.begin();
@@ -94,6 +72,25 @@ impl Statement for BlockStatement {
                 return Err(e);
             }
         }
+    }
+
+    fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        let env = env.new_child();
+        for statement in self.statements() {
+            let ok = statement.execute(&env)?;
+            match ok {
+                ExecuteOk::KeepGoing => {
+                    // do nothing.
+                }
+                ExecuteOk::Break => {
+                    return Ok(ExecuteOk::Break);
+                }
+                ExecuteOk::Return(v) => {
+                    return Ok(ExecuteOk::Return(v));
+                }
+            }
+        }
+        return Ok(ExecuteOk::KeepGoing);
     }
 }
 
@@ -119,6 +116,7 @@ mod tests {
         parse::{
             expression::variable::VariableExpression,
             statement::{
+                ExecuteOk,
                 block::BlockStatement,
                 expression::ExpressionStatement,
                 var_declare::VarDeclareStatement,
@@ -130,7 +128,6 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        execute::ExecuteOk,
         resolve::{
             ResolveError,
             ResolveErrorEnum,

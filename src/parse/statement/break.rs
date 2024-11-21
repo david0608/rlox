@@ -7,13 +7,12 @@ use crate::{
         Code,
         CodeSpan,
     },
-    parse::statement::Statement,
-    environment::Environment,
-    error::RuntimeError,
-    execute::{
-        Execute,
+    parse::statement::{
+        Statement,
         ExecuteOk,
     },
+    environment::Environment,
+    error::RuntimeError,
     resolve::{
         ResolveCtx,
         ResolveError,
@@ -46,12 +45,6 @@ impl Code for BreakStatement {
     }
 }
 
-impl Execute for BreakStatement {
-    fn execute(&self, _: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
-        return Ok(ExecuteOk::Break);
-    }
-}
-
 impl Statement for BreakStatement {
     fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
@@ -61,6 +54,10 @@ impl Statement for BreakStatement {
                 )
             )
         )
+    }
+
+    fn execute(&self, _: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError> {
+        return Ok(ExecuteOk::Break);
     }
 }
 
@@ -83,8 +80,10 @@ mod tests {
             Code,
             CodeSpan,
         },
-        parse::statement::r#break::BreakStatement,
-        execute::ExecuteOk,
+        parse::statement::{
+            ExecuteOk,
+            r#break::BreakStatement,
+        },
         utils::test_utils::{
             TestContext,
             parse_statement,

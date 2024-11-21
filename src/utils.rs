@@ -18,7 +18,10 @@ pub mod test_utils {
     use crate::{
         parse::{
             expression::Expression,
-            statement::Statement,
+            statement::{
+                Statement,
+                ExecuteOk,
+            },
             parser::{
                 Parser,
                 ParserError,
@@ -31,7 +34,6 @@ pub mod test_utils {
             EnvironmentT,
         },
         error::RuntimeError,
-        execute::ExecuteResult,
         resolve::{
             ResolveCtx,
             ResolveError,
@@ -133,7 +135,7 @@ pub mod test_utils {
             expr.evaluate(&self.environment)
         }
 
-        pub fn execute(&mut self, stmt: &dyn Statement) -> ExecuteResult {
+        pub fn execute(&mut self, stmt: &dyn Statement) -> Result<ExecuteOk, RuntimeError> {
             let stmt = self.resolve_statement_unknown(stmt).unwrap();
             stmt.execute(&self.environment)
         }
