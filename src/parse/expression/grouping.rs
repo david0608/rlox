@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -10,9 +11,8 @@ use crate::{
     parse::expression::Expression,
     value::Value,
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -47,7 +47,7 @@ impl Code for GroupingExpression {
 }
 
 impl Expression for GroupingExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 GroupingExpression::new(
@@ -90,8 +90,6 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },

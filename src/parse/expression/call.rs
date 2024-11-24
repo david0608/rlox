@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -8,18 +9,13 @@ use crate::{
         CodeSpan,
     },
     parse::expression::Expression,
-    value::Value,
-    call::{
-        Call,
-        CallError,
+    value::{
+        Value,
+        Call
     },
     environment::Environment,
     error::{
         RuntimeError,
-        RuntimeErrorEnum,
-    },
-    resolve::{
-        ResolveCtx,
         ResolveError,
     },
 };
@@ -69,7 +65,7 @@ impl Code for CallExpression {
 }
 
 impl Expression for CallExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 CallExpression::new(
@@ -110,27 +106,7 @@ impl Expression for CallExpression {
                 return Ok(v);
             }
             Err(err) => {
-                match err {
-                    CallError::ArgumentNumberMismatch(ec, pc) => {
-                        return Err(
-                            RuntimeError::new(
-                                RuntimeErrorEnum::ArgumentNumberMismatch(ec, pc),
-                                self.code_span().clone(),
-                            )
-                        );
-                    }
-                    CallError::NotCallable => {
-                        return Err(
-                            RuntimeError::new(
-                                RuntimeErrorEnum::NotCallable(callee),
-                                self.code_span().clone(),
-                            )
-                        );
-                    }
-                    CallError::RuntimeError(err) => {
-                        return Err(RuntimeError::wrap(err, self.code_span().clone()));
-                    }
-                }
+                return Err(RuntimeError::new(err, self.code_span().clone()));
             }
         }
     }
@@ -164,11 +140,10 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::{
             Downcast,
             test_utils::{

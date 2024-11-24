@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -15,10 +16,9 @@ use crate::{
         },
     },
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
         ResolveError,
+        RuntimeError,
     },
 };
 
@@ -68,7 +68,7 @@ impl Code for WhileStatement {
 }
 
 impl Statement for WhileStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         let condition = if let Some(e) = self.condition.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -160,7 +160,7 @@ mod tests {
         },
         value::Value,
         environment::EnvironmentT,
-        resolve::{
+        error::{
             ResolveError,
             ResolveErrorEnum,
         },

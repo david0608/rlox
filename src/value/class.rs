@@ -9,13 +9,11 @@ use crate::{
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
+        Call,
         object::Object,
     },
-    call::{
-        Call,
-        CallError,
-    },
     environment::Environment,
+    error::RuntimeErrorEnum,
 };
 
 static CLASS_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
@@ -63,17 +61,16 @@ impl Class {
     pub fn method_definitions(&self) -> &HashMap<String, Rc<MethodDefinition>> {
         &self.method_definitions
     }
+}
 
+impl Call for Rc<Class> {
+    fn call(&self, _: Vec<Value>) -> Result<Value, RuntimeErrorEnum> {
+        Ok(Value::Object(Rc::new(RefCell::new(Object::new(self.clone())))))
+    }
 }
 
 impl std::cmp::PartialEq for Class {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
-    }
-}
-
-impl Call for Rc<Class> {
-    fn call(&self, _: Vec<Value>) -> Result<Value, CallError> {
-        Ok(Value::Object(Rc::new(RefCell::new(Object::new(self.clone())))))
     }
 }

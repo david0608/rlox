@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -10,9 +11,8 @@ use crate::{
     parse::expression::Expression,
     value::Value,
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -78,7 +78,7 @@ impl Code for LogicalExpression {
 }
 
 impl Expression for LogicalExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 LogicalExpression::new(
@@ -152,11 +152,10 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::{
             Downcast,
             test_utils::{

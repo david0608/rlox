@@ -14,6 +14,7 @@ pub mod test_utils {
     use std::{
         rc::Rc,
         cell::RefCell,
+        collections::HashSet,
     };
     use crate::{
         parse::{
@@ -22,10 +23,7 @@ pub mod test_utils {
                 Statement,
                 ExecuteOk,
             },
-            parser::{
-                Parser,
-                ParserError,
-            },
+            parser::Parser,
         },
         scan::Scan,
         value::Value,
@@ -33,11 +31,12 @@ pub mod test_utils {
             Environment,
             EnvironmentT,
         },
-        error::RuntimeError,
-        resolve::{
-            ResolveCtx,
+        error::{
+            ParserError,
             ResolveError,
+            RuntimeError
         },
+        resolve_context::ResolveContext,
         utils::Downcast,
     };
 
@@ -77,14 +76,14 @@ pub mod test_utils {
 
     pub struct TestContext {
         pub environment: Rc<RefCell<Environment>>,
-        pub resolve_context: ResolveCtx,
+        pub resolve_context: Vec<HashSet<String>>,
     }
 
     impl TestContext {
         pub fn new() -> TestContext {
             TestContext {
                 environment: <Rc<RefCell<Environment>> as EnvironmentT>::new(),
-                resolve_context: ResolveCtx::new(),
+                resolve_context: <Vec<HashSet<String>> as ResolveContext>::new(),
             }
         }
 

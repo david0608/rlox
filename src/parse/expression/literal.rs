@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -19,9 +20,8 @@ use crate::{
     },
     value::Value,
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -71,7 +71,7 @@ impl Code for LiteralExpression {
 }
 
 impl Expression for LiteralExpression {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, _: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 LiteralExpression::new(

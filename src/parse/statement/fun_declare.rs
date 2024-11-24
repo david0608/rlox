@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -23,12 +24,12 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
         ResolveErrorEnum,
     },
+    resolve_context::ResolveContext,
 };
 
 #[derive(Debug)]
@@ -84,7 +85,7 @@ impl Code for FunDeclareStatement {
 }
 
 impl Statement for FunDeclareStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         if context.declare(self.name.name()).is_err() {
             return Err(
                 ResolveError::new(
@@ -176,7 +177,7 @@ mod tests {
         },
         value::Value,
         environment::EnvironmentT,
-        resolve::{
+        error::{
             ResolveError,
             ResolveErrorEnum,
         },

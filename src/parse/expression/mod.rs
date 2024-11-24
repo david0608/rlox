@@ -3,15 +3,15 @@ use std::{
     rc::Rc,
     cell::RefCell,
     fmt::Debug,
+    collections::HashSet,
 };
 use crate::{
     code::Code,
     value::Value,
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
         ResolveError,
+        RuntimeError,
     },
     utils::Downcast,
 };
@@ -33,7 +33,7 @@ pub trait Expression
         + Debug
         + Any
 {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError>;
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError>;
 
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError>;
 }

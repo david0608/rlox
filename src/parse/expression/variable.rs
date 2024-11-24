@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -14,12 +15,12 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
         ResolveErrorEnum,
     },
+    resolve_context::ResolveContext,
 };
 
 #[derive(Debug)]
@@ -53,7 +54,7 @@ impl Code for VariableExpressionNotResolved {
 }
 
 impl Expression for VariableExpressionNotResolved {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         let binding = if let Some(d) = context.find(self.from.name()) {
             d
         }
@@ -130,7 +131,7 @@ impl Code for VariableExpression {
 }
 
 impl Expression for VariableExpression {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, _: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 VariableExpression::new(
@@ -167,10 +168,11 @@ mod tests {
             VariableExpression,
         },
         value::Value,
-        resolve::{
+        error::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::test_utils::{
             TestContext,
             parse_expression,

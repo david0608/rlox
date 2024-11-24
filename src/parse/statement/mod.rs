@@ -3,14 +3,14 @@ use std::{
     rc::Rc,
     cell::RefCell,
     fmt::Debug,
+    collections::HashSet,
 };
 use crate::{
     code::Code,
     value::Value,
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
     utils::Downcast,
@@ -34,7 +34,7 @@ pub trait Statement
         + Debug
         + Any
 {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError>;
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError>;
 
     fn execute(&self, env: &Rc<RefCell<Environment>>) -> Result<ExecuteOk, RuntimeError>;
 }

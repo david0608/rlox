@@ -10,15 +10,15 @@ use crate::{
         ExecuteOk,
     },
     scan::token::identifier::IdentifierToken,
-    value::Value,
-    call::{
+    value::{
+        Value,
         Call,
-        CallError,
     },
     environment::{
         Environment,
         EnvironmentT,
     },
+    error::RuntimeErrorEnum,
 };
 
 static FUNCTION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
@@ -81,18 +81,12 @@ impl Function {
     }
 }
 
-impl std::cmp::PartialEq for Function {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
 impl Call for Function {
-    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, RuntimeErrorEnum> {
         let argn_expect = self.parameters.len();
         let argn_found = arguments.len();
         if argn_expect != argn_found {
-            return Err(CallError::ArgumentNumberMismatch(argn_expect, argn_found));
+            return Err(RuntimeErrorEnum::ArgumentNumberMismatch(argn_expect, argn_found));
         }
         let env = self.environment.new_child();
         for (p, v) in zip(&self.parameters, arguments) {
@@ -113,7 +107,7 @@ impl Call for Function {
                     return Ok(v);
                 }
                 Err(err) => {
-                    return Err(CallError::RuntimeError(err));
+                    return Err(RuntimeErrorEnum::RuntimeError(Box::new(err)));
                 }
             }
         }
@@ -122,14 +116,19 @@ impl Call for Function {
     }
 }
 
+impl std::cmp::PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         code::CodeSpan,
-        value::Value,
-        call::{
+        value::{
+            Value,
             Call,
-            CallError,
         },
         environment::EnvironmentT,
         error::{
@@ -169,7 +168,7 @@ mod tests {
         let f = ctx.environment.get("foo", 0).unwrap();
         assert_eq!(
             f.call(vec![Value::Number(1.0)]),
-            Err(CallError::ArgumentNumberMismatch(2, 1)),
+            Err(RuntimeErrorEnum::ArgumentNumberMismatch(2, 1)),
         );
     }
 
@@ -187,13 +186,15 @@ mod tests {
         assert_eq!(
             f.call(vec![]),
             Err(
-                CallError::RuntimeError(
-                    RuntimeError::wrap(
-                        RuntimeError::new(
-                            RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
-                            CodeSpan::new(2, 7, 2, 15),
-                        ),
-                        CodeSpan::new(2, 0, 2, 16),
+                RuntimeErrorEnum::RuntimeError(
+                    Box::new(
+                        RuntimeError::wrap(
+                            RuntimeError::new(
+                                RuntimeErrorEnum::InvalidArithmetic(Value::Bool(true), Value::Number(1.0)),
+                                CodeSpan::new(2, 7, 2, 15),
+                            ),
+                            CodeSpan::new(2, 0, 2, 16),
+                        )
                     )
                 )
             )

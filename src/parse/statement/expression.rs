@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -15,9 +16,8 @@ use crate::{
         },
     },
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -52,7 +52,7 @@ impl Code for ExpressionStatement {
 }
 
 impl Statement for ExpressionStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
             Rc::new(
                 ExpressionStatement::new(
@@ -104,10 +104,11 @@ mod tests {
             RuntimeError,
             RuntimeErrorEnum,
         },
-        resolve::{
+        error::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::{
             Downcast,
             test_utils::{

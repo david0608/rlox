@@ -1,7 +1,10 @@
 use std::{
     rc::Rc,
     cell::RefCell,
-    collections::HashMap,
+    collections::{
+        HashSet,
+        HashMap,
+    },
 };
 use crate::{
     code::{
@@ -21,12 +24,12 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
         ResolveErrorEnum,
     },
+    resolve_context::ResolveContext,
 };
 
 #[derive(Debug)]
@@ -70,7 +73,7 @@ impl MethodDefinition {
         self.code_span
     }
 
-    pub fn resolve(&self, context: &mut ResolveCtx) -> Result<MethodDefinition, ResolveError> {
+    pub fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<MethodDefinition, ResolveError> {
         context.begin();
         context.declare("this").expect("declare this");
         for p in self.parameters.iter() {
@@ -152,7 +155,7 @@ impl Code for ClassDeclareStatement {
 }
 
 impl Statement for ClassDeclareStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         if context.declare(self.name.name()).is_err() {
             return Err(
                 ResolveError::new(
@@ -226,10 +229,11 @@ mod tests {
         },
         value::Value,
         environment::EnvironmentT,
-        resolve::{
+        error::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::{
             Downcast,
             test_utils::{

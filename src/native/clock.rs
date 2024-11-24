@@ -5,22 +5,23 @@ use std::{
     },
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     value::{
         Value,
         native_function::NativeFunction,
     },
-    call::CallError,
     environment::{
         Environment,
         EnvironmentT,
     },
-    resolve::ResolveCtx,
+    error::RuntimeErrorEnum,
+    resolve_context::ResolveContext,
 };
 
 pub fn add_native_clock(
-    resolve_context: &mut ResolveCtx,
+    resolve_context: &mut Vec<HashSet<String>>,
     environment: &Rc<RefCell<Environment>>,
 ) {
     resolve_context.declare("clock")
@@ -34,10 +35,10 @@ pub fn add_native_clock(
         .expect("Declare native function clock.");
 }
 
-fn native_function_clock_handler(arguments: Vec<Value>) -> Result<Value, CallError> {
+fn native_function_clock_handler(arguments: Vec<Value>) -> Result<Value, RuntimeErrorEnum> {
     let argn = arguments.len();
     if argn != 0 {
-        return Err(CallError::ArgumentNumberMismatch(0, argn));
+        return Err(RuntimeErrorEnum::ArgumentNumberMismatch(0, argn));
     }
 
     return Ok(
@@ -57,27 +58,28 @@ mod tests {
         cell::RefCell,
         thread::sleep,
         time::Duration,
+        collections::HashSet,
     };
     use crate::{
         native::{
             add_native_clock,
             clock::native_function_clock_handler,
         },
-        value::Value,
-        call::{
+        value::{
+            Value,
             Call,
-            CallError,
         },
         environment::{
             Environment,
             EnvironmentT,
         },
-        resolve::ResolveCtx
+        error::RuntimeErrorEnum,
+        resolve_context::ResolveContext,
     };
 
     #[test]
     fn test_native_function_clock() {
-        let mut ctx = ResolveCtx::new();
+        let mut ctx = <Vec<HashSet<String>> as ResolveContext>::new();
         let env = <Rc<RefCell<Environment>> as EnvironmentT>::new();
         add_native_clock(&mut ctx, &env);
 
@@ -110,7 +112,7 @@ mod tests {
         assert_eq!(
             native_function_clock_handler(vec![Value::Bool(true)]),
             Err(
-                CallError::ArgumentNumberMismatch(0, 1)
+                RuntimeErrorEnum::ArgumentNumberMismatch(0, 1)
             )
         );
     }

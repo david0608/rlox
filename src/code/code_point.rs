@@ -1,3 +1,5 @@
+use crate::code::SourceCode;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CodePoint {
     line: usize,
@@ -20,18 +22,21 @@ impl CodePoint {
         self.char
     }
 
-    pub fn str<'a, 'b, 'c>(&'a self, lines: &'b Vec<&'c str>) -> &'c str {
-        return lines.get(self.line)
-            .and_then(|l| l.trim().get(self.char..(self.char + 1)))
-            .unwrap_or("");
+    pub fn code_string<T: SourceCode>(&self, source_code: &T) -> String {
+        source_code.get_line(self.line())
+            .and_then(
+                |l| l.trim().get(self.char()..(self.char() + 1))
+            )
+            .unwrap_or("")
+            .to_string()
     }
 
-    pub fn debug_string(&self, lines: &Vec<&str>) -> String {
+    pub fn debug_string<T: SourceCode>(&self, source_code: &T) -> String {
         let prepend = format!("{}: ", self.line + 1);
         let mut s = format!(
             "{}{}\r\n",
             prepend,
-            lines.get(self.line).map(|l| l.trim()).unwrap_or(""),
+            source_code.get_line(self.line).map(|l| l.trim()).unwrap_or(""),
         );
         s += format!("{}^\r\n", " ".repeat(prepend.len() + self.char)).as_ref();
         return s;
@@ -40,24 +45,24 @@ impl CodePoint {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::code::CodePoint;
 
     #[test]
     fn test_codepoint_str() {
         let src = "hello\r\n    world!\r\n";
-        let lines = src.lines().collect();
-        assert_eq!(CodePoint::new(0, 0).str(&lines), "h");
-        assert_eq!(CodePoint::new(0, 5).str(&lines), "");
-        assert_eq!(CodePoint::new(1, 0).str(&lines), "w");
-        assert_eq!(CodePoint::new(1, 5).str(&lines), "!");
-        assert_eq!(CodePoint::new(2, 0).str(&lines), "");
-        assert_eq!(CodePoint::new(2, 5).str(&lines), "");
+        let lines: Vec<&str> = src.lines().collect();
+        assert_eq!(CodePoint::new(0, 0).code_string(&lines), "h");
+        assert_eq!(CodePoint::new(0, 5).code_string(&lines), "");
+        assert_eq!(CodePoint::new(1, 0).code_string(&lines), "w");
+        assert_eq!(CodePoint::new(1, 5).code_string(&lines), "!");
+        assert_eq!(CodePoint::new(2, 0).code_string(&lines), "");
+        assert_eq!(CodePoint::new(2, 5).code_string(&lines), "");
     }
 
     #[test]
     fn test_codepoint_debug_string() {
         let src = "hello\r\n    world!\r\n";
-        let lines = src.lines().collect();
+        let lines: Vec<&str> = src.lines().collect();
         assert_eq!(
             CodePoint::new(0, 4).debug_string(&lines),
             concat!(

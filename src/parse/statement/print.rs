@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -16,9 +17,8 @@ use crate::{
     },
     scan::token::simple::PRINT_LEXEME,
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -53,7 +53,7 @@ impl Code for PrintStatement {
 }
 
 impl Statement for PrintStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
             Rc::new(
                 PrintStatement::new(
@@ -104,8 +104,6 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },

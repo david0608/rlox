@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -12,9 +13,8 @@ use crate::{
         ExecuteOk,
     },
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -46,7 +46,7 @@ impl Code for BreakStatement {
 }
 
 impl Statement for BreakStatement {
-    fn resolve(&self, _: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, _: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         Ok(
             Rc::new(
                 BreakStatement::new(

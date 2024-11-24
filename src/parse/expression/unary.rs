@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -13,9 +14,6 @@ use crate::{
     error::{
         RuntimeError,
         RuntimeErrorEnum,
-    },
-    resolve::{
-        ResolveCtx,
         ResolveError,
     },
 };
@@ -70,7 +68,7 @@ impl Code for UnaryExpression {
 }
 
 impl Expression for UnaryExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 UnaryExpression::new(
@@ -149,8 +147,6 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },

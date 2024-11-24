@@ -2,10 +2,7 @@ use std::{
     rc::Rc,
     cell::RefCell,
 };
-use crate::call::{
-    Call,
-    CallError,
-};
+use crate::error::RuntimeErrorEnum;
 
 pub mod class;
 use class::Class;
@@ -95,8 +92,12 @@ impl std::fmt::Display for Value {
     }
 }
 
+pub trait Call {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, RuntimeErrorEnum>;
+}
+
 impl Call for Value {
-    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, RuntimeErrorEnum> {
         match self {
             Value::Function(f) => {
                 return f.call(arguments);
@@ -111,7 +112,7 @@ impl Call for Value {
                 return m.call(arguments);
             }
             _ => {
-                return Err(CallError::NotCallable);
+                return Err(RuntimeErrorEnum::NotCallable(self.clone()));
             }
         }
     }

@@ -1,4 +1,7 @@
-use super::code_point::CodePoint;
+use crate::code::{
+    CodePoint,
+    SourceCode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CodeSpan {
@@ -26,26 +29,24 @@ impl CodeSpan {
         self.end
     }
 
-    pub fn code_string(&self, lines: &Vec<&str>, max_len: usize) -> String {
+    pub fn code_string<T: SourceCode>(&self, source_code: &T, max_len: usize) -> String {
         let line_start = self.start.line();
         let char_start = self.start.char();
         let line_end = self.end.line();
         let char_end = self.end.char();
+        let mut s = "".to_owned();
 
-        if line_start >= lines.len() {
-            return "".to_owned();
-        }
-
-        if line_start > line_end {
-            return "".to_owned();
+        if line_start > line_end
+            || (line_start == line_end && char_start >= char_end)
+            || source_code.get_line(line_start).is_none()
+        {
+            return s;
         }
 
         let omit = |s: String| -> String { format!("{}...", &s[..(max_len - 3)]) };
 
-        let mut s = "".to_owned();
-
         for l in line_start..(line_end + 1) {
-            let line = lines.get(l).map(|line| line.trim()).unwrap_or("");
+            let line = source_code.get_line(l).map(|line| line.trim()).unwrap_or("");
 
             let start = if l == line_start {
                 char_start
@@ -75,29 +76,23 @@ impl CodeSpan {
         return s;
     }
 
-    pub fn debug_string(&self, lines: &Vec<&str>) -> String {
+    pub fn debug_string<T: SourceCode>(&self, source_code: &T) -> String {
         let line_start = self.start.line();
         let char_start = self.start.char();
         let line_end = self.end.line();
         let char_end = self.end.char();
-
-        if line_start >= lines.len() {
-            return "".to_owned();
-        }
-
-        if line_start > line_end {
-            return "".to_owned();
-        }
-
-        if line_start == line_end && char_start >= char_end {
-            return "".to_owned();
-        }
-
         let mut s = "".to_owned();
+
+        if line_start > line_end
+           || (line_start == line_end && char_start >= char_end)
+           || source_code.get_line(line_start).is_none()
+        {
+            return s;
+        }
 
         for l in line_start..(line_end + 1) {
             let prepend = format!("{}: ", l + 1);
-            let line = lines.get(l).map(|line| line.trim()).unwrap_or("");
+            let line = source_code.get_line(l).map(|line| line.trim()).unwrap_or("");
 
             s += format!("{}{}\r\n", prepend, line).as_ref();
 
@@ -124,12 +119,15 @@ impl CodeSpan {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::code::{
+        CodePoint,
+        CodeSpan,
+    };
 
     #[test]
     fn test_span_code_string() {
         let src = "hello\r\n    world!\r\n";
-        let lines = src.lines().collect();
+        let lines: Vec<&str> = src.lines().collect();
         assert_eq!(
             CodeSpan::new_from_point(
                 CodePoint::new(0, 0),
@@ -163,7 +161,7 @@ mod tests {
     #[test]
     fn test_span_debug_string() {
         let src = "print \"hello\r\n    world!\"\r\n";
-        let lines = src.lines().collect();
+        let lines: Vec<&str> = src.lines().collect();
         assert_eq!(
             CodeSpan::new_from_point(
                 CodePoint::new(0, 0),

@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -18,11 +19,11 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
+    resolve_context::ResolveContext,
 };
 
 #[derive(Debug)]
@@ -100,7 +101,7 @@ impl Code for ForStatement {
 }
 
 impl Statement for ForStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         context.begin();
         let initializer = if let Some(s) = self.initializer.as_ref() {
             match s.resolve(context) {
@@ -253,8 +254,6 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },

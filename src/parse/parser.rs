@@ -63,7 +63,7 @@ use crate::{
             SimpleTokenEnum,
         }
     },
-    error::LoxError,
+    error::ParserError,
     utils::Downcast,
     assign_expression_not_resolved,
     binary_expression,
@@ -87,69 +87,6 @@ use crate::{
     var_declare_statement,
     while_statement,
 };
-
-#[derive(Debug, PartialEq)]
-pub enum ParserError {
-    UnexpectedEnd(CodePoint),
-    UnexpectedToken(CodeSpan),
-    ExpectTokenMismatch(String, CodeSpan),
-    ExpectTokenNotFound(String, CodePoint),
-    ExpectIdentifier(CodeSpan),
-    DuplicatedFunctionParameter(CodeSpan),
-    ContextNotSupportBreak(CodeSpan),
-    DuplicatedMethodDefinition(CodeSpan),
-}
-
-impl LoxError for ParserError {
-    fn print(&self, src_lines: &Vec<&str>) -> String {
-        match self {
-            ParserError::UnexpectedEnd(cp) => {
-                let mut out = "ParserError: Unexpected end.\r\n".to_owned();
-                out += cp.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::UnexpectedToken(s) => {
-                let mut out = format!("ParserError: Unexpected token: {}\r\n", s.code_string(&src_lines, 10));
-                out += s.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::ExpectTokenMismatch(et, s) => {
-                let mut out = format!(
-                    "ParserError: Expect token: {} but found: {}\r\n",
-                    et,
-                    s.code_string(&src_lines, 10)
-                );
-                out += s.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::ExpectTokenNotFound(et, cp) => {
-                let mut out = format!("ParserError: Expect token: {} but not found.\r\n", et);
-                out += cp.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::ExpectIdentifier(s) => {
-                let mut out = "ParserError: Expect identifier.\r\n".to_owned();
-                out += s.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::DuplicatedFunctionParameter(s) => {
-                let mut out = "ParserError: Duplicated function parameter.\r\n".to_owned();
-                out += s.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::ContextNotSupportBreak(s) => {
-                let mut out = "ParserError: Break statement is not supported in this context.\r\n".to_owned();
-                out += s.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ParserError::DuplicatedMethodDefinition(s) => {
-                let mut out = "ParserError: Duplicated method definition.\r\n".to_owned();
-                out += s.debug_string(&src_lines).as_ref();
-                return out;
-            }
-        }
-    }
-}
 
 pub type ParserOutput = (Vec<Rc<dyn Statement>>, Vec<ParserError>);
 

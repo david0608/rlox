@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -23,12 +24,12 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
         ResolveError,
+        RuntimeError,
         ResolveErrorEnum,
     },
+    resolve_context::ResolveContext,
 };
 
 #[derive(Debug)]
@@ -77,7 +78,7 @@ impl Code for VarDeclareStatement {
 }
 
 impl Statement for VarDeclareStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         let initializer = if let Some(e) = self.initializer.as_ref() {
             Some(e.resolve(context)?)
         }
@@ -148,11 +149,10 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::{
             Downcast,
             test_utils::{

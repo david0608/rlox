@@ -10,13 +10,11 @@ use crate::{
     },
     value::{
         Value,
+        Call,
         object::Object,
     },
-    call::{
-        Call,
-        CallError,
-    },
     environment::EnvironmentT,
+    error::RuntimeErrorEnum,
 };
 
 #[derive(Debug)]
@@ -38,19 +36,12 @@ impl Method {
     }
 }
 
-impl std::cmp::PartialEq for Method {
-    fn eq(&self, other: &Self) -> bool {
-        self.this.borrow().class().id() == other.this.borrow().class().id()
-        && self.definition.name().name() == other.definition.name().name()
-    }
-}
-
 impl Call for Method {
-    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, RuntimeErrorEnum> {
         let argn_expect = self.definition.parameters().len();
         let argn_found = arguments.len();
         if argn_expect != argn_found {
-            return Err(CallError::ArgumentNumberMismatch(argn_expect, argn_found));
+            return Err(RuntimeErrorEnum::ArgumentNumberMismatch(argn_expect, argn_found));
         }
         let env = self.this.borrow().class().environment().new_child();
         if env.declare("this", Value::Object(self.this.clone())).is_err() {
@@ -73,10 +64,17 @@ impl Call for Method {
                     return Ok(v);
                 }
                 Err(err) => {
-                    return Err(CallError::RuntimeError(err));
+                    return Err(RuntimeErrorEnum::RuntimeError(Box::new(err)));
                 }
             }
         }
         return Ok(Value::Nil);
+    }
+}
+
+impl std::cmp::PartialEq for Method {
+    fn eq(&self, other: &Self) -> bool {
+        self.this.borrow().class().id() == other.this.borrow().class().id()
+        && self.definition.name().name() == other.definition.name().name()
     }
 }

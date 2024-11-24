@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -15,9 +16,8 @@ use crate::{
         },
     },
     environment::Environment,
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
     },
 };
@@ -84,7 +84,7 @@ impl Code for IfStatement {
 }
 
 impl Statement for IfStatement {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Statement>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         let condition = self.condition.resolve(context)?;
         let then = self.then_statement.resolve(context)?;
         let r#else = if let Some(stmt) = self.else_statement.as_ref() {
@@ -175,7 +175,7 @@ mod tests {
         },
         value::Value,
         environment::EnvironmentT,
-        resolve::{
+        error::{
             ResolveError,
             ResolveErrorEnum,
         },

@@ -1,6 +1,7 @@
 use std::{
     rc::Rc,
     cell::RefCell,
+    collections::HashSet,
 };
 use crate::{
     code::{
@@ -14,12 +15,12 @@ use crate::{
         Environment,
         EnvironmentT,
     },
-    error::RuntimeError,
-    resolve::{
-        ResolveCtx,
+    error::{
+        RuntimeError,
         ResolveError,
         ResolveErrorEnum,
     },
+    resolve_context::ResolveContext,
 };
 
 #[derive(Debug)]
@@ -63,7 +64,7 @@ impl Code for AssignExpressionNotResolved {
 }
 
 impl Expression for AssignExpressionNotResolved {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         if let Some(d) = context.find(self.to.name()) {
             return Ok(
                 Rc::new(
@@ -152,7 +153,7 @@ impl Code for AssignExpression {
 }
 
 impl Expression for AssignExpression {
-    fn resolve(&self, context: &mut ResolveCtx) -> Result<Rc<dyn Expression>, ResolveError> {
+    fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Expression>, ResolveError> {
         Ok(
             Rc::new(
                 AssignExpression::new(
@@ -220,11 +221,10 @@ mod tests {
         error::{
             RuntimeError,
             RuntimeErrorEnum,
-        },
-        resolve::{
             ResolveError,
             ResolveErrorEnum,
         },
+        resolve_context::ResolveContext,
         utils::{
             Downcast,
             test_utils::{

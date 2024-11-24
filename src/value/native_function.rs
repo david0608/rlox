@@ -1,15 +1,13 @@
 use crate::{
     value::{
         Value,
+        Call,
         function::function_id,
     },
-    call::{
-        Call,
-        CallError,
-    }
+    error::RuntimeErrorEnum,
 };
 
-pub type NativeFunctionHandler = fn(Vec<Value>) -> Result<Value, CallError>;
+pub type NativeFunctionHandler = fn(Vec<Value>) -> Result<Value, RuntimeErrorEnum>;
 
 #[derive(Clone)]
 pub struct NativeFunction {
@@ -28,6 +26,12 @@ impl NativeFunction {
     }
 }
 
+impl Call for NativeFunction {
+    fn call(&self, arguments: Vec<Value>) -> Result<Value, RuntimeErrorEnum> {
+        (self.handler)(arguments)
+    }
+}
+
 impl std::fmt::Debug for NativeFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "NativeFunction {}", self.name)
@@ -37,11 +41,5 @@ impl std::fmt::Debug for NativeFunction {
 impl std::cmp::PartialEq for NativeFunction {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
-    }
-}
-
-impl Call for NativeFunction {
-    fn call(&self, arguments: Vec<Value>) -> Result<Value, CallError> {
-        (self.handler)(arguments)
     }
 }

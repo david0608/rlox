@@ -11,30 +11,8 @@ use crate::{
         Token,
         simple::SimpleTokenEnum,
     },
-    error::LoxError,
+    error::ScannerError,
 };
-
-pub enum ScannerError {
-    UnexpectedCharacter(CodePoint),
-    ExpectCharacterNotFound(&'static str, CodePoint),
-}
-
-impl LoxError for ScannerError {
-    fn print(&self, src_lines: &Vec<&str>) -> String {
-        match self {
-            ScannerError::UnexpectedCharacter(cp) => {
-                let mut out = format!("ScannerError: Unexpected character: {}\r\n", cp.str(&src_lines));
-                out += cp.debug_string(&src_lines).as_ref();
-                return out;
-            }
-            ScannerError::ExpectCharacterNotFound(ec, cp) => {
-                let mut out = format!("ScannerError: Expect character: {} but not found.\r\n", ec);
-                out += cp.debug_string(&src_lines).as_ref();
-                return out;
-            }
-        }
-    }
-}
 
 pub type ScannerOutput = (Vec<Rc<Token>>, Vec<ScannerError>);
 
@@ -442,12 +420,12 @@ mod tests {
         code::{
             CodePoint,
             CodeSpan,
+            Annotation,
         },
         scan::token::{
             Token,
             simple::SimpleTokenEnum,
         },
-        error::LoxError,
     };
     use super::{
         Scanner,
@@ -899,7 +877,7 @@ mod tests {
 
         assert_eq!(errors.len(), 1);
         assert_eq!(
-            errors[0].print(&src_lines),
+            errors[0].string(&src_lines),
             concat!(
                 "ScannerError: Unexpected character: @\r\n",
                 "1: @\r\n",
@@ -934,7 +912,7 @@ mod tests {
 
         assert_eq!(errors.len(), 1);
         assert_eq!(
-            errors[0].print(&src_lines),
+            errors[0].string(&src_lines),
             concat!(
                 "ScannerError: Expect character: \" but not found.\r\n",
                 "3: \r\n",
