@@ -764,6 +764,11 @@ impl<'tokens> Parser<'tokens> {
 
         let name = self.consume_identifier()?;
 
+        let mut super_class: Option<Rc<dyn Expression>> = None;
+        if self.consume(SimpleTokenEnum::LeftBrace).is_ok() {
+            super_class = Some(variable_expression_not_resolved!(self.consume_identifier()?.clone()));
+        }
+
         self.consume(SimpleTokenEnum::LeftBrace)?;
         let mut method_definitions = HashMap::new();
         loop {
@@ -787,6 +792,7 @@ impl<'tokens> Parser<'tokens> {
 
         return Ok(class_declare_statement!(
             name.clone(),
+            super_class,
             Rc::new(method_definitions),
             CodeSpan::new_from_point(cp_start, cp_end)
         ));

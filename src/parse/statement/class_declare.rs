@@ -11,9 +11,12 @@ use crate::{
         Code,
         CodeSpan,
     },
-    parse::statement::{
-        Statement,
-        ExecuteOk,
+    parse::{
+        expression::Expression,
+        statement::{
+            Statement,
+            ExecuteOk,
+        }
     },
     scan::token::identifier::IdentifierToken,
     value::{
@@ -115,6 +118,7 @@ impl std::fmt::Display for MethodDefinition {
 #[derive(Debug)]
 pub struct ClassDeclareStatement {
     name: Rc<IdentifierToken>,
+    super_class: Option<Rc<dyn Expression>>,
     method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
     code_span: CodeSpan,
 }
@@ -122,12 +126,14 @@ pub struct ClassDeclareStatement {
 impl ClassDeclareStatement {
     pub fn new(
         name: Rc<IdentifierToken>,
+        super_class: Option<Rc<dyn Expression>>,
         method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
         code_span: CodeSpan,
     ) -> ClassDeclareStatement
     {
         ClassDeclareStatement {
             name,
+            super_class,
             method_definitions,
             code_span,
         }
@@ -156,6 +162,10 @@ impl Code for ClassDeclareStatement {
 
 impl Statement for ClassDeclareStatement {
     fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
+        let mut super_class: Option<Rc<dyn Expression>> = None;
+        if let Some(super_class_expr) = super_class {
+            super_class = Some(super_class_expr.resolve(context)?);
+        }
         if context.declare(self.name.name()).is_err() {
             return Err(
                 ResolveError::new(
@@ -172,6 +182,7 @@ impl Statement for ClassDeclareStatement {
             Rc::new(
                 ClassDeclareStatement::new(
                     self.name.clone(),
+                    super_class,
                     Rc::new(method_defs),
                     self.code_span,
                 )
@@ -199,10 +210,11 @@ impl Statement for ClassDeclareStatement {
 
 #[macro_export]
 macro_rules! class_declare_statement {
-    ( $identifier:expr, $method_definitions:expr, $code_span:expr ) => {
+    ( $identifier:expr, $super_class:expr, $method_definitions:expr, $code_span:expr ) => {
         Rc::new(
             ClassDeclareStatement::new(
                 $identifier,
+                $super_class,
                 $method_definitions,
                 $code_span,
             )
