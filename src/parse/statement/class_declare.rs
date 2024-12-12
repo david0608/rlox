@@ -142,6 +142,10 @@ impl ClassDeclareStatement {
     pub fn name(&self) -> &IdentifierToken {
         &self.name
     }
+
+    pub fn super_class(&self) -> Option<Rc<dyn Expression>> {
+        self.super_class.clone()
+    }
 }
 
 impl Code for ClassDeclareStatement {
@@ -150,11 +154,16 @@ impl Code for ClassDeclareStatement {
     }
 
     fn to_string(&self) -> String {
+        let mut super_class = "".to_string();
+        if let Some(expr) = self.super_class() {
+            super_class = format!(" > {}", expr.to_string());
+        }
         let mut methods = self.method_definitions.iter().collect::<Vec<(&String, &Rc<MethodDefinition>)>>();
         methods.sort_by_key(|m| m.0);
         format!(
-            "class {} {{{}}}",
+            "class {}{} {{{}}}",
             self.name.name(),
+            super_class,
             methods.iter().map(|m| format!("{}", m.1)).collect::<Vec<String>>().join(" "),
         )
     }
@@ -197,6 +206,7 @@ impl Statement for ClassDeclareStatement {
                 Rc::new(
                     Class::new(
                         self.name.clone(),
+                        self.super_class(),
                         env.clone(),
                         self.method_definitions.clone(),
                     )
@@ -270,6 +280,19 @@ mod tests {
         assert_eq!(
             stmt.to_string(),
             "class Foo {foo(a, b) {return (+ a b);}}"
+        );
+        let stmt = parse_statement::<ClassDeclareStatement>(
+            "
+            class Foo > Bar {
+                foo() {
+                    print \"foo\";
+                }
+            }
+            "
+        );
+        assert_eq!(
+            stmt.to_string(),
+            "class Foo > Bar {foo() {print \"foo\";}}"
         );
     }
 

@@ -765,7 +765,7 @@ impl<'tokens> Parser<'tokens> {
         let name = self.consume_identifier()?;
 
         let mut super_class: Option<Rc<dyn Expression>> = None;
-        if self.consume(SimpleTokenEnum::LeftBrace).is_ok() {
+        if self.consume(SimpleTokenEnum::Greater).is_ok() {
             super_class = Some(variable_expression_not_resolved!(self.consume_identifier()?.clone()));
         }
 
@@ -1603,6 +1603,19 @@ mod tests {
         assert_eq!(
             stmt.to_string(),
             "class Foo {bar() {print \"hello\";} foo(a, b) {return (+ a b);}}"
+        );
+        let stmt = parse_statement::<ClassDeclareStatement>(
+            "
+            class Foo > Bar {
+                foo() {
+                    print \"hello\";
+                }
+            }
+            "
+        );
+        assert_eq!(
+            stmt.to_string(),
+            "class Foo > Bar {foo() {print \"hello\";}}"
         );
     }
 

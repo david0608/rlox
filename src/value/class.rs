@@ -5,7 +5,10 @@ use std::{
 };
 use core::sync::atomic;
 use crate::{
-    parse::statement::class_declare::MethodDefinition,
+    parse::{
+        expression::Expression,
+        statement::class_declare::MethodDefinition,
+    },
     scan::token::identifier::IdentifierToken,
     value::{
         Value,
@@ -26,6 +29,7 @@ pub fn class_id() -> usize {
 pub struct Class {
     id: usize,
     name: Rc<IdentifierToken>,
+    super_class: Option<Rc<dyn Expression>>,
     environment: Rc<RefCell<Environment>>,
     method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
 }
@@ -33,6 +37,7 @@ pub struct Class {
 impl Class {
     pub fn new(
         name: Rc<IdentifierToken>,
+        super_class: Option<Rc<dyn Expression>>,
         environment: Rc<RefCell<Environment>>,
         method_definitions: Rc<HashMap<String, Rc<MethodDefinition>>>,
     )
@@ -41,6 +46,7 @@ impl Class {
         Class {
             id: class_id(),
             name,
+            super_class,
             environment,
             method_definitions,
         }
