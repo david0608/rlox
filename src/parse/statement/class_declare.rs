@@ -331,7 +331,7 @@ mod tests {
             cls.name().name(),
             "Foo"
         );
-        let m  = cls.method_definitions().get("foo").unwrap();
+        let m = cls.method_definition("foo").unwrap();
         assert_eq!(
             m.name().name(),
             "foo"

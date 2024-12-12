@@ -58,12 +58,12 @@ impl Value {
         if let Some(v) = object.borrow().properties().get(name) {
             return Ok(v.clone());
         }
-        else if let Some(md) = object.borrow().class().method_definitions().get(name) {
+        else if let Some(md) = object.borrow().class().method_definition(name) {
             return Ok(
                 Value::Method(
                     Rc::new(
                         Method::new(
-                            md.clone(),
+                            md,
                             object.clone()
                         )
                     )

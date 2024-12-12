@@ -10,10 +10,7 @@ use crate::{
     },
     parse::expression::Expression,
     scan::token::identifier::IdentifierToken,
-    value::{
-        Value,
-        method::Method,
-    },
+    value::Value,
     environment::Environment,
     error::{
         RuntimeError,
@@ -77,43 +74,17 @@ impl Expression for GetExpression {
     }
 
     fn evaluate(&self, env: &Rc<RefCell<Environment>>) -> Result<Value, RuntimeError> {
-        let value = match self.object.evaluate(env) {
+        let object = match self.object.evaluate(env) {
             Ok(v) => v,
             Err(e) => {
                 return Err(RuntimeError::wrap(e, self.code_span))
             }
         };
 
-        let object = if let Value::Object(object) = value {
-            object
-        }
-        else {
-            return Err(
-                RuntimeError::new(
-                    RuntimeErrorEnum::CanNotGetProperty(value),
-                    self.code_span,
-                )
+        return object.get(self.name().name())
+            .map_err(
+                |_| RuntimeError::new(RuntimeErrorEnum::CanNotGetProperty(object), self.code_span)
             );
-        };
-
-        if let Some(v) = object.borrow().properties().get(self.name().name()) {
-            return Ok(v.clone());
-        }
-        else if let Some(md) = object.borrow().class().method_definitions().get(self.name().name()) {
-            return Ok(
-                Value::Method(
-                    Rc::new(
-                        Method::new(
-                            md.clone(),
-                            object.clone(),
-                        )
-                    )
-                )
-            );
-        }
-        else {
-            return Ok(Value::Nil);
-        };
     }
 }
 
@@ -182,6 +153,30 @@ mod tests {
         assert_eq!(
             ctx.evaluate(get_expr.as_ref()).unwrap(),
             Value::Bool(true)
+        );
+        let mut ctx = TestContext::new();
+        ctx.execute_src(
+            "
+            class Foo {
+                hello() {
+                    print \"hello!\";
+                }
+            }
+            "
+        );
+        ctx.execute_src(
+            "
+            class Bar > Foo {}
+            "
+        );
+        ctx.execute_src("var bar = Bar();");
+        let get_expr = ctx.resolve_expression_unknown(
+            parse_expression::<GetExpression>("bar.hello").as_ref()
+        )
+            .unwrap();
+        assert_eq!(
+            ctx.evaluate(get_expr.as_ref()).unwrap(),
+            Value::Nil
         );
     }
 

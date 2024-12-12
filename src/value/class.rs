@@ -68,8 +68,16 @@ impl Class {
         &self.environment
     }
 
-    pub fn method_definitions(&self) -> &HashMap<String, Rc<MethodDefinition>> {
-        &self.method_definitions
+    pub fn method_definition(&self, name: &str) -> Option<Rc<MethodDefinition>> {
+        if let Some(md) = self.method_definitions.get(name) {
+            return Some(md.clone());
+        }
+        else if let Some(expr) = &self.super_class {
+            if let Value::Class(sc) = expr.evaluate(&self.environment).expect("Can not fail if successfully resolved.") {
+                return sc.method_definition(name);
+            }
+        }
+        return None;
     }
 }
 
