@@ -60,6 +60,10 @@ impl Class {
         &self.name
     }
 
+    pub fn super_class(&self) -> &Option<Rc<dyn Expression>> {
+        &self.super_class
+    }
+
     pub fn environment(&self) -> &Rc<RefCell<Environment>> {
         &self.environment
     }

@@ -5,7 +5,6 @@ use std::{
 };
 use crate::value::Value;
 
-#[derive(Debug)]
 pub struct Environment {
     values: HashMap<String, Value>,
     parent: Option<Rc<RefCell<Environment>>>,
@@ -120,6 +119,12 @@ impl EnvironmentT for Rc<RefCell<Environment>> {
             self.borrow_mut().values.insert(name.to_owned(), value);
             return Ok(());
         }
+    }
+}
+
+impl std::fmt::Debug for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<Omitted struct Environment>")
     }
 }
 

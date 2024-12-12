@@ -172,7 +172,7 @@ impl Code for ClassDeclareStatement {
 impl Statement for ClassDeclareStatement {
     fn resolve(&self, context: &mut Vec<HashSet<String>>) -> Result<Rc<dyn Statement>, ResolveError> {
         let mut super_class: Option<Rc<dyn Expression>> = None;
-        if let Some(super_class_expr) = super_class {
+        if let Some(super_class_expr) = self.super_class() {
             super_class = Some(super_class_expr.resolve(context)?);
         }
         if context.declare(self.name.name()).is_err() {
@@ -299,11 +299,16 @@ mod tests {
     #[test]
     fn test_class_declare_statement_execute() {
         let mut ctx = TestContext::new();
+        ctx.execute_src(
+            "
+            class Bar {}
+            "
+        );
         assert_eq!(
             ctx.execute(
                 parse_statement::<ClassDeclareStatement>(
                     "
-                    class Foo {
+                    class Foo > Bar {
                         foo(a) {
                             print a;
                         }
@@ -318,6 +323,10 @@ mod tests {
             Value::Class(cls) => cls,
             _ => panic!("Expect Class value.")
         };
+        assert_eq!(
+            cls.super_class().as_ref().unwrap().evaluate(&ctx.environment).unwrap(),
+            ctx.environment.get("Bar", 0).unwrap(),
+        );
         assert_eq!(
             cls.name().name(),
             "Foo"
@@ -360,10 +369,15 @@ mod tests {
     fn test_class_declare_statement_resolve() {
         let mut ctx = TestContext::new();
         ctx.execute_src("var bar;");
+        ctx.execute_src(
+            "
+            class Bar {}
+            "
+        );
         let stmt = ctx.resolve_statement::<ClassDeclareStatement>(
             parse_statement_unknown(
                 "
-                class Foo {
+                class Foo > Bar {
                     foo(a) {
                         print this;
                         print a;
@@ -376,6 +390,13 @@ mod tests {
         )
             .unwrap();
         assert_eq!(ctx.resolve_context.find("bar"), Some(0));
+        assert_eq!(ctx.resolve_context.find("Bar"), Some(0));
+        assert_eq!(
+            stmt.super_class().unwrap()
+                .downcast_ref::<VariableExpression>().unwrap()
+                .binding(),
+            0
+        );
         assert_eq!(
             stmt.method_definitions.get("foo").unwrap()
                 .body().get(0).unwrap()
@@ -399,6 +420,23 @@ mod tests {
                 .value().downcast_ref::<VariableExpression>().unwrap()
                 .binding(),
             1
+        );
+    }
+
+    #[test]
+    fn test_class_declare_statement_resolve_super_class_resolve_error() {
+        let mut ctx = TestContext::new();
+        let stmt = parse_statement::<ClassDeclareStatement>(
+            "
+            class Foo > Bar {}
+            "
+        );
+        assert_eq!(
+            ctx.resolve_statement_unknown(stmt.as_ref()).unwrap_err(),
+            ResolveError::new(
+                ResolveErrorEnum::VariableNotDeclared,
+                CodeSpan::new(1, 12, 1, 15),
+            )
         );
     }
 
