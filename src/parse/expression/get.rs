@@ -110,7 +110,10 @@ mod tests {
         },
         parse::expression::{
             get::GetExpression,
-            variable::VariableExpression,
+            variable::{
+                VariableExpressionNotResolved,
+                VariableExpression,
+            },
         },
         value::Value,
         error::{
@@ -154,6 +157,7 @@ mod tests {
             ctx.evaluate(get_expr.as_ref()).unwrap(),
             Value::Bool(true)
         );
+
         let mut ctx = TestContext::new();
         ctx.execute_src(
             "
@@ -170,13 +174,43 @@ mod tests {
             "
         );
         ctx.execute_src("var bar = Bar();");
-        let get_expr = ctx.resolve_expression_unknown(
+        let hello_method = if let Value::Method(m) = ctx.evaluate(
             parse_expression::<GetExpression>("bar.hello").as_ref()
         )
-            .unwrap();
+            .unwrap()
+        {
+            m
+        }
+        else {
+            panic!("Expect method value.");
+        };
+        let bar_object = if let Value::Object(o) = ctx.evaluate(
+            parse_expression::<VariableExpressionNotResolved>("bar").as_ref()
+        )
+            .unwrap()
+        {
+            o
+        }
+        else {
+            panic!("Expect object value.");
+        };
         assert_eq!(
-            ctx.evaluate(get_expr.as_ref()).unwrap(),
-            Value::Nil
+            hello_method.this(),
+            &bar_object,
+        );
+        let foo_class = if let Value::Class(c) = ctx.evaluate(
+            parse_expression::<VariableExpressionNotResolved>("Foo").as_ref()
+        )
+            .unwrap()
+        {
+            c
+        }
+        else {
+            panic!("Expect class value.");
+        };
+        assert_eq!(
+            hello_method.definition(),
+            &foo_class.method_definition("hello").unwrap(),
         );
     }
 

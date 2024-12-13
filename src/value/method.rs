@@ -34,6 +34,14 @@ impl Method {
             this,
         }
     }
+
+    pub fn definition(&self) -> &Rc<MethodDefinition> {
+        &self.definition
+    }
+
+    pub fn this(&self) -> &Rc<RefCell<Object>> {
+        &self.this
+    }
 }
 
 impl Call for Method {

@@ -6,6 +6,7 @@ use std::{
         HashMap,
     },
 };
+use core::sync::atomic;
 use crate::{
     code::{
         Code,
@@ -35,8 +36,15 @@ use crate::{
     resolve_context::ResolveContext,
 };
 
+static METHOD_DEFINITION_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
+
+fn method_definition_id() -> usize {
+    METHOD_DEFINITION_COUNTER.fetch_add(1, atomic::Ordering::Relaxed)
+}
+
 #[derive(Debug)]
 pub struct MethodDefinition {
+    id: usize,
     name: Rc<IdentifierToken>,
     parameters: Vec<Rc<IdentifierToken>>,
     body: Vec<Rc<dyn Statement>>,
@@ -53,6 +61,7 @@ impl MethodDefinition {
         -> MethodDefinition
     {
         MethodDefinition {
+            id: method_definition_id(),
             name,
             parameters,
             body,
@@ -112,6 +121,12 @@ impl std::fmt::Display for MethodDefinition {
             self.parameters.iter().map(|p| p.name().to_owned()).collect::<Vec<String>>().join(", "),
             self.body.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(" "),
         )
+    }
+}
+
+impl std::cmp::PartialEq for MethodDefinition {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
